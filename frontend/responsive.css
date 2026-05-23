@@ -1,0 +1,68 @@
+/* Responsive refinements */
+
+/* Tablet */
+@media (max-width: 992px) {
+  .hero-content,
+  .tariff-layout,
+  .booking-container,
+  .features-terms,
+  .fleet-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  .nav-right .call-btn {
+    display: none;
+  }
+
+  .nav-links {
+    display: none;
+  }
+
+  .menu-btn {
+    display: inline-flex;
+  }
+
+  .mobile-menu {
+    display: block;
+  }
+
+  .hero-right {
+    margin-top: 22px;
+  }
+
+  .section-title {
+    font-size: 30px;
+  }
+}
+
+/* Mobile */
+@media (max-width: 640px) {
+  .container {
+    width: 92%;
+  }
+
+  .hero-left h1 {
+    font-size: 40px;
+  }
+
+  .hero-left h4 {
+    font-size: 14px;
+  }
+
+  .grid-4 {
+    grid-template-columns: 1fr !important;
+  }
+
+  .tariff-two {
+    grid-template-columns: 1fr !important;
+  }
+
+  .booking-form-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .footer-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
