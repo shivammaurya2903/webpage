@@ -30,6 +30,18 @@
     margin-top: 22px;
   }
 
+  .booking-right {
+    order: -1;
+  }
+
+  .booking-form {
+    padding: 18px;
+  }
+
+  .booking-image img {
+    min-height: 340px;
+  }
+
   .section-title {
     font-size: 30px;
   }
@@ -59,6 +71,33 @@
 
   .booking-form-grid {
     grid-template-columns: 1fr !important;
+  }
+
+  .booking-block {
+    padding: 20px !important;
+    border-radius: 26px;
+  }
+
+  .booking-form {
+    padding: 16px;
+  }
+
+  .booking-features {
+    grid-template-columns: 1fr;
+  }
+
+  .booking-image img {
+    min-height: 260px;
+  }
+
+  .booking-image {
+    padding: 12px;
+    border-radius: 28px;
+  }
+
+  .booking-title,
+  .booking-sub {
+    text-align: left;
   }
 
   .footer-grid {
