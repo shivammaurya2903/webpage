@@ -353,7 +353,7 @@ img {
 
 .wave {
   position: absolute;
-  width: 1500px;
+  width: min(1500px, 220vw);
   height: 260px;
   left: 50%;
   transform: translateX(-50%);

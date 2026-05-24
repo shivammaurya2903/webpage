@@ -1,7 +1,22 @@
 /* Luxury Tour & Travels - Vanilla JS */
 
 (() => {
-  const API_BASE = (window.__API_BASE__ || document.documentElement.dataset.apiBase || '').replace(/\/$/, '');
+  const API_BASE = (() => {
+    const override = window.__API_BASE__ || document.documentElement.dataset.apiBase;
+    if (override) return String(override).replace(/\/$/, '');
+
+    if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
+      const { hostname, port, protocol } = window.location;
+
+      if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '5000') {
+        return `${protocol}//${hostname}:5000`;
+      }
+
+      return window.location.origin.replace(/\/$/, '');
+    }
+
+    return 'http://localhost:5000';
+  })();
 
   function apiUrl(path) {
     if (/^https?:\/\//i.test(path)) return path;
@@ -9,17 +24,13 @@
     return `${API_BASE}${normalizedPath}`;
   }
   async function safeJson(response) {
-    const contentType = response.headers.get('content-type') || '';
-    if (!contentType.includes('application/json')) {
-      // no JSON body
-      return null;
-    }
     const text = await response.text();
     if (!text) return null;
+
     try {
       return JSON.parse(text);
     } catch (e) {
-      return null;
+      return { message: text };
     }
   }
 
@@ -102,9 +113,30 @@
     opts.headers = opts.headers ? { ...opts.headers } : {};
     const token = getToken();
     if (token) opts.headers.Authorization = `Bearer ${token}`;
+    if (!opts.headers.Accept) opts.headers.Accept = 'application/json';
     // include credentials in case backend relies on cookies
     opts.credentials = opts.credentials || 'include';
     return fetch(url, opts);
+  }
+
+  function setFormSubmitting(form, isSubmitting, label) {
+    if (!form) return null;
+    const submitButton = form.querySelector('button[type="submit"]');
+    if (!submitButton) return null;
+
+    if (isSubmitting) {
+      if (!submitButton.dataset.originalText) {
+        submitButton.dataset.originalText = submitButton.textContent || '';
+      }
+      submitButton.disabled = true;
+      submitButton.textContent = label;
+    } else {
+      submitButton.disabled = false;
+      submitButton.textContent = submitButton.dataset.originalText || submitButton.textContent || '';
+      delete submitButton.dataset.originalText;
+    }
+
+    return submitButton;
   }
 
   // Render bookings into a modal
@@ -584,6 +616,7 @@
     const form = e.currentTarget;
     const email = form.querySelector('[name="email"]').value.trim();
     const password = form.querySelector('[name="password"]').value;
+    setFormSubmitting(form, true, 'Logging in...');
     try {
       const res = await fetch(apiUrl('/api/auth/login'), {
         method: 'POST',
@@ -591,14 +624,16 @@
         body: JSON.stringify({ email, password })
       });
       const body = await safeJson(res);
-      if (!res.ok || !body || !body.token) throw new Error(body?.message || 'Login failed');
+      if (!res.ok || !body || !body.token) throw new Error((body && body.message) || 'Login failed');
       setToken(body.token);
       setUser(body.user || null);
       closeAuth();
       showGlobalNotification('Logged in successfully', false);
     } catch (err) {
-      showGlobalNotification(err.message || 'Login failed');
+      showGlobalNotification((err && err.message) || 'Login failed');
       console.error(err);
+    } finally {
+      setFormSubmitting(form, false);
     }
   });
 
@@ -609,6 +644,7 @@
     const email = form.querySelector('[name="email"]').value.trim();
     const phone = form.querySelector('[name="phone"]').value.trim();
     const password = form.querySelector('[name="password"]').value;
+    setFormSubmitting(form, true, 'Creating account...');
     try {
       const res = await fetch(apiUrl('/api/auth/register'), {
         method: 'POST',
@@ -616,14 +652,16 @@
         body: JSON.stringify({ name, email, phone, password })
       });
       const body = await safeJson(res);
-      if (!res.ok || !body || !body.token) throw new Error(body?.message || 'Registration failed');
+      if (!res.ok || !body || !body.token) throw new Error((body && body.message) || 'Registration failed');
       setToken(body.token);
       setUser(body.user || null);
       closeAuth();
       showGlobalNotification('Registered and logged in', false);
     } catch (err) {
-      showGlobalNotification(err.message || 'Registration failed');
+      showGlobalNotification((err && err.message) || 'Registration failed');
       console.error(err);
+    } finally {
+      setFormSubmitting(form, false);
     }
   });
 

@@ -7,6 +7,9 @@ async function connectDB() {
   await mongoose.connect(uri, {
     autoIndex: process.env.NODE_ENV !== 'production'
   });
+
+  // eslint-disable-next-line no-console
+  console.log('MongoDB Connected');
 }
 
 module.exports = { connectDB };

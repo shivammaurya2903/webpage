@@ -196,5 +196,9 @@
     font-size: 12px;
     line-height: 1.65;
   }
+  
+  .reviews-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
