@@ -1,10 +1,250 @@
 /* Luxury Tour & Travels - Vanilla JS */
 
 (() => {
+  const API_BASE = window.location.origin;
+  async function safeJson(response) {
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      // no JSON body
+      return null;
+    }
+    const text = await response.text();
+    if (!text) return null;
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Global error handlers to capture unhandled rejections and uncaught errors
+  // These help avoid noisy console errors and provide a user-visible message.
+  function showGlobalNotification(message, isError = true) {
+    try {
+      let el = document.querySelector('[data-global-notice]');
+      if (!el) {
+        el = document.createElement('div');
+        el.dataset.globalNotice = '';
+        el.style.position = 'fixed';
+        el.style.right = '16px';
+        el.style.top = '16px';
+        el.style.zIndex = 9999;
+        el.style.maxWidth = '320px';
+        el.style.boxShadow = '0 6px 18px rgba(0,0,0,0.12)';
+        el.style.borderRadius = '8px';
+        el.style.padding = '10px 14px';
+        el.style.fontFamily = 'inherit';
+        el.style.fontSize = '14px';
+        el.style.color = '#fff';
+        document.body.appendChild(el);
+      }
+      el.style.background = isError ? '#c0392b' : '#27ae60';
+      el.textContent = message;
+      // auto-dismiss
+      window.setTimeout(() => { if (el) el.remove(); }, 6000);
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  window.addEventListener('unhandledrejection', (ev) => {
+    console.error('Unhandled Promise Rejection:', ev.reason);
+    showGlobalNotification('An unexpected error occurred. See console for details.');
+  });
+
+  window.addEventListener('error', (ev) => {
+    console.error('Uncaught Error:', ev.error || ev.message, ev);
+    showGlobalNotification('An unexpected error occurred. See console for details.');
+  });
   const navbar = document.querySelector('[data-navbar]');
   const menuBtn = document.querySelector('[data-menu-button]');
   const menu = document.querySelector('[data-menu]');
   const navLinks = Array.from(document.querySelectorAll('.nav-links a, .mobile-menu a[href^="#"]'));
+
+  // --- Simple frontend auth helpers (store JWT in localStorage) ---
+  const AUTH_TOKEN_KEY = 'auth_token';
+  const AUTH_USER_KEY = 'auth_user';
+
+  function getToken() {
+    return localStorage.getItem(AUTH_TOKEN_KEY);
+  }
+
+  function setToken(token) {
+    if (token) localStorage.setItem(AUTH_TOKEN_KEY, token);
+    else localStorage.removeItem(AUTH_TOKEN_KEY);
+    if (!token) setUser(null);
+    renderAuthButtons();
+  }
+
+  function setUser(user) {
+    if (user) sessionStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+    else sessionStorage.removeItem(AUTH_USER_KEY);
+    renderAuthButtons();
+  }
+
+  function getUser() {
+    try {
+      const raw = sessionStorage.getItem(AUTH_USER_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function authFetch(url, opts = {}) {
+    opts = { ...opts };
+    opts.headers = opts.headers ? { ...opts.headers } : {};
+    const token = getToken();
+    if (token) opts.headers.Authorization = `Bearer ${token}`;
+    // include credentials in case backend relies on cookies
+    opts.credentials = opts.credentials || 'include';
+    return fetch(url, opts);
+  }
+
+  // Render bookings into a modal
+  function showBookingsModal(bookings) {
+    try {
+      const modal = document.getElementById('bookingsModal');
+      const list = document.getElementById('bookingsList');
+      const closeBtn = document.getElementById('bookingsCloseBtn');
+      if (!modal || !list) return;
+      list.innerHTML = '';
+      if (!bookings || !bookings.length) {
+        list.innerHTML = '<div class="card" style="padding:12px">No bookings found.</div>';
+      } else {
+        bookings.forEach((b) => {
+          const card = document.createElement('div');
+          card.className = 'card';
+          card.style.padding = '12px';
+          card.style.marginBottom = '8px';
+          card.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+              <div style="flex:1">
+                <div style="font-weight:600">${b.bookingId} — ${b.customerName}</div>
+                <div style="color:#666;margin-top:6px">${b.pickupLocation} → ${b.dropLocation}</div>
+                <div style="color:#666;margin-top:6px;font-size:13px">Pickup: ${new Date(b.pickupDate).toLocaleDateString()} ${b.pickupTime || ''}</div>
+              </div>
+              <div style="text-align:right;margin-left:12px">
+                <div style="font-weight:700">₹${b.estimatedFare || b.amount || 0}</div>
+                <div style="font-size:13px;color:#333;margin-top:6px">${b.bookingStatus || b.paymentStatus || ''}</div>
+              </div>
+            </div>
+          `;
+          list.appendChild(card);
+        });
+      }
+      modal.style.display = 'flex';
+      modal.setAttribute('aria-hidden', 'false');
+      if (closeBtn && !closeBtn._bookingsHandler) {
+        closeBtn.addEventListener('click', () => {
+          modal.style.display = 'none';
+          modal.setAttribute('aria-hidden', 'true');
+        });
+        closeBtn._bookingsHandler = true;
+      }
+    } catch (e) {
+      console.error('showBookingsModal error', e);
+    }
+  }
+
+  function renderAuthButtons() {
+    const loginBtn = document.getElementById('loginOpenBtn');
+    const registerBtn = document.getElementById('registerOpenBtn');
+    const navRight = document.querySelector('.nav-right');
+    if (!navRight) return;
+
+    const existingLogout = document.getElementById('logoutBtn');
+    const existingMyBookings = document.getElementById('myBookingsBtn');
+
+    const user = getUser();
+    if (getToken()) {
+      if (loginBtn) loginBtn.style.display = 'none';
+      if (registerBtn) registerBtn.style.display = 'none';
+
+      if (!existingMyBookings) {
+        const mb = document.createElement('button');
+        mb.id = 'myBookingsBtn';
+        mb.className = 'btn btn-ghost';
+        mb.type = 'button';
+        mb.textContent = 'My Bookings';
+        mb.addEventListener('click', async () => {
+          try {
+            const res = await authFetch(`${API_BASE}/api/bookings`);
+            const body = await safeJson(res);
+            if (!res.ok) throw new Error(body?.message || 'Failed to fetch bookings');
+            showBookingsModal(body.bookings || []);
+          } catch (e) {
+            showGlobalNotification(e.message || 'Failed to fetch bookings');
+          }
+        });
+        navRight.insertBefore(mb, menuBtn);
+      }
+
+      if (!existingLogout) {
+        const lb = document.createElement('button');
+        lb.id = 'logoutBtn';
+        lb.className = 'btn btn-ghost';
+        lb.type = 'button';
+        lb.textContent = 'Logout';
+        lb.addEventListener('click', () => {
+          setToken(null);
+          setUser(null);
+          showGlobalNotification('Logged out', false);
+        });
+        navRight.insertBefore(lb, menuBtn);
+      }
+
+      // show user label
+      let userLabel = document.getElementById('userLabel');
+      if (!userLabel && user) {
+        userLabel = document.createElement('button');
+        userLabel.id = 'userLabel';
+        userLabel.className = 'btn btn-ghost';
+        userLabel.type = 'button';
+        userLabel.textContent = user.name || user.email || 'Me';
+        navRight.insertBefore(userLabel, menuBtn);
+      } else if (userLabel && user) {
+        userLabel.textContent = user.name || user.email || 'Me';
+      } else if (userLabel && !user) {
+        userLabel.remove();
+      }
+    } else {
+      if (loginBtn) loginBtn.style.display = '';
+      if (registerBtn) registerBtn.style.display = '';
+      if (existingMyBookings) existingMyBookings.remove();
+      if (existingLogout) existingLogout.remove();
+      const userLabel = document.getElementById('userLabel');
+      if (userLabel) userLabel.remove();
+    }
+  }
+
+  // Initialize auth UI state
+  renderAuthButtons();
+
+  // Try to auto-login by fetching profile if token exists and no cached user
+  async function fetchProfileOnLoad() {
+    const token = getToken();
+    if (!token) return;
+    const cached = getUser();
+    if (cached) return; // already have user info
+    try {
+      const res = await authFetch(`${API_BASE}/api/auth/profile`);
+      const body = await safeJson(res);
+      if (!res.ok || !body || !body.user) {
+        // token likely invalid or expired
+        setToken(null);
+        setUser(null);
+        return;
+      }
+      setUser(body.user);
+    } catch (e) {
+      console.error('Profile fetch failed', e);
+      setToken(null);
+      setUser(null);
+    }
+  }
+
+  fetchProfileOnLoad();
 
   const setActiveLink = (id) => {
     if (!id) return;
@@ -199,6 +439,90 @@
     startAutoplay();
   }
 
+  // --- Auth modal behavior and form handlers ---
+  const authModal = document.getElementById('authModal');
+  const authCloseBtn = document.getElementById('authCloseBtn');
+  const loginOpenBtn = document.getElementById('loginOpenBtn');
+  const registerOpenBtn = document.getElementById('registerOpenBtn');
+  const loginForm = document.getElementById('loginForm');
+  const registerForm = document.getElementById('registerForm');
+  const showRegister = document.getElementById('showRegister');
+  const showLogin = document.getElementById('showLogin');
+  const authTitle = document.getElementById('authTitle');
+
+  function openAuth(mode = 'login') {
+    if (!authModal) return;
+    authModal.style.display = 'flex';
+    authModal.setAttribute('aria-hidden', 'false');
+    if (mode === 'login') {
+      loginForm.style.display = 'block';
+      registerForm.style.display = 'none';
+      authTitle.textContent = 'Login';
+    } else {
+      loginForm.style.display = 'none';
+      registerForm.style.display = 'block';
+      authTitle.textContent = 'Register';
+    }
+  }
+
+  function closeAuth() {
+    if (!authModal) return;
+    authModal.style.display = 'none';
+    authModal.setAttribute('aria-hidden', 'true');
+  }
+
+  authCloseBtn?.addEventListener('click', closeAuth);
+  loginOpenBtn?.addEventListener('click', () => openAuth('login'));
+  registerOpenBtn?.addEventListener('click', () => openAuth('register'));
+  showRegister?.addEventListener('click', () => openAuth('register'));
+  showLogin?.addEventListener('click', () => openAuth('login'));
+
+  loginForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const email = form.querySelector('[name="email"]').value.trim();
+    const password = form.querySelector('[name="password"]').value;
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const body = await safeJson(res);
+      if (!res.ok || !body || !body.token) throw new Error(body?.message || 'Login failed');
+      setToken(body.token);
+      closeAuth();
+      showGlobalNotification('Logged in successfully', false);
+    } catch (err) {
+      showGlobalNotification(err.message || 'Login failed');
+      console.error(err);
+    }
+  });
+
+  registerForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const name = form.querySelector('[name="name"]').value.trim();
+    const email = form.querySelector('[name="email"]').value.trim();
+    const phone = form.querySelector('[name="phone"]').value.trim();
+    const password = form.querySelector('[name="password"]').value;
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, phone, password })
+      });
+      const body = await safeJson(res);
+      if (!res.ok || !body || !body.token) throw new Error(body?.message || 'Registration failed');
+      setToken(body.token);
+      closeAuth();
+      showGlobalNotification('Registered and logged in', false);
+    } catch (err) {
+      showGlobalNotification(err.message || 'Registration failed');
+      console.error(err);
+    }
+  });
+
   const supportForm = document.querySelector('[data-support-form]');
   if (supportForm) {
     const submitBtn = supportForm.querySelector('button[type="submit"]');
@@ -240,6 +564,7 @@
     const validate = () => {
       let ok = true;
       const name = supportForm.querySelector('[name="name"]');
+      const email = supportForm.querySelector('[name="email"]');
       const phone = supportForm.querySelector('[name="phone"]');
       const message = supportForm.querySelector('[name="message"]');
 
@@ -247,6 +572,11 @@
         showError(name, 'Please enter your name.');
         ok = false;
       } else clearError(name);
+
+      if (!email?.value.trim() || !/^\S+@\S+\.\S+$/.test(email.value.trim())) {
+        showError(email, 'Please enter a valid email address.');
+        ok = false;
+      } else clearError(email);
 
       if (!isPhoneValid(phone?.value || '')) {
         showError(phone, 'Enter a valid 10-digit phone number.');
@@ -261,12 +591,31 @@
       return ok;
     };
 
-    supportForm.addEventListener('submit', (event) => {
+    supportForm.addEventListener('submit', async (event) => {
       event.preventDefault();
       if (!validate()) return;
 
       setSupportLoading(true);
-      window.setTimeout(() => {
+      try {
+        const payload = {
+          name: supportForm.querySelector('[name="name"]').value.trim(),
+          email: supportForm.querySelector('[name="email"]').value.trim(),
+          phone: supportForm.querySelector('[name="phone"]').value.trim(),
+          message: supportForm.querySelector('[name="message"]').value.trim(),
+          subject: 'Support Request'
+        };
+
+        const response = await fetch(`${API_BASE}/api/contact`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const result = await safeJson(response);
+        if (!response.ok || !result || !result.success) {
+          throw new Error((result && result.message) || 'Failed to submit support request');
+        }
+
         supportForm.querySelector('[data-support-status]')?.remove();
         const status = document.createElement('div');
         status.dataset.supportStatus = '';
@@ -274,10 +623,17 @@
         status.className = 'submit-status';
         supportForm.appendChild(status);
         supportForm.reset();
-        setSupportLoading(false);
-
         document.querySelector('#support')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 700);
+      } catch (error) {
+        supportForm.querySelector('[data-support-status]')?.remove();
+        const status = document.createElement('div');
+        status.dataset.supportStatus = '';
+        status.textContent = error.message || 'Failed to send request. Please try again.';
+        status.className = 'submit-status';
+        supportForm.appendChild(status);
+      } finally {
+        setSupportLoading(false);
+      }
     });
 
     supportForm.querySelectorAll('input, textarea').forEach((el) => {
@@ -291,12 +647,16 @@
   if (form) {
     const submitBtn = form.querySelector('.submit-btn');
     const passengers = form.querySelector('[name="passengers"]');
+    const email = form.querySelector('[name="email"]');
     const phone = form.querySelector('[name="phone"]');
     const fullName = form.querySelector('[name="fullName"]');
     const pickupLoc = form.querySelector('[name="pickupLocation"]');
     const dropLoc = form.querySelector('[name="dropLocation"]');
     const pickupDate = form.querySelector('[name="pickupDate"]');
     const dropDate = form.querySelector('[name="dropDate"]');
+    const pickupTime = form.querySelector('[name="pickupTime"]');
+    const selectedCar = form.querySelector('[name="selectedCar"]');
+    const selectedPackage = form.querySelector('[name="selectedPackage"]');
 
     const originalSubmitLabel = submitBtn?.innerHTML || 'Submit Booking';
 
@@ -346,10 +706,20 @@
         ok = false;
       } else clearError(fullName);
 
+      if (!email?.value.trim() || !/^\S+@\S+\.\S+$/.test(email.value.trim())) {
+        showError(email, 'Please enter a valid email address.');
+        ok = false;
+      } else clearError(email);
+
       if (!isPhoneValid(phone?.value.trim())) {
         showError(phone, 'Enter a valid 10-digit phone number.');
         ok = false;
       } else clearError(phone);
+
+      if (!pickupTime?.value) {
+        showError(pickupTime, 'Pickup time is required.');
+        ok = false;
+      } else clearError(pickupTime);
 
       if (!pickupLoc?.value.trim()) {
         showError(pickupLoc, 'Pickup location is required.');
@@ -376,6 +746,16 @@
         ok = false;
       } else clearError(dropDate);
 
+      if (!selectedCar?.value) {
+        showError(selectedCar, 'Please select a car.');
+        ok = false;
+      } else clearError(selectedCar);
+
+      if (!selectedPackage?.value) {
+        showError(selectedPackage, 'Please select a package.');
+        ok = false;
+      } else clearError(selectedPackage);
+
       const pickup = toDate(pickupDate?.value);
       const drop = toDate(dropDate?.value);
       if (pickup && drop && drop < pickup) {
@@ -386,24 +766,70 @@
       return ok;
     };
 
-    form.addEventListener('submit', (event) => {
+    form.addEventListener('submit', async (event) => {
       event.preventDefault();
       if (!validate()) return;
 
       const section = document.querySelector('#booking');
       setSubmitLoading(true);
 
-      window.setTimeout(() => {
+      try {
+        const payload = {
+          customerName: fullName.value.trim(),
+          email: email.value.trim(),
+          phone: phone.value.trim(),
+          pickupLocation: pickupLoc.value.trim(),
+          dropLocation: dropLoc.value.trim(),
+          pickupDate: pickupDate.value,
+          pickupTime: pickupTime.value,
+          passengers: passengers.value,
+          selectedCar: selectedCar.value,
+          selectedPackage: selectedPackage.value,
+          specialRequirements: form.querySelector('[name="requirements"]')?.value.trim() || ''
+        };
+
+        const bookingResponse = await fetch(`${API_BASE}/api/bookings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const bookingResult = await safeJson(bookingResponse);
+        if (!bookingResponse.ok || !bookingResult || !bookingResult.success) {
+          throw new Error((bookingResult && bookingResult.message) || 'Failed to create booking');
+        }
+
+        const booking = bookingResult.booking;
+        const paymentResponse = await fetch(`${API_BASE}/api/payment/create-order`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bookingId: booking.bookingId, paymentType: 'advance' })
+        });
+
+        const paymentResult = await safeJson(paymentResponse);
+        if (paymentResult && paymentResult.checkoutUrl) {
+          window.location.href = paymentResult.checkoutUrl;
+          return;
+        }
+
         form.querySelector('[data-submit-status]')?.remove();
         const status = document.createElement('div');
         status.dataset.submitStatus = '';
-        status.textContent = 'Booking request sent! Our team will contact you shortly.';
+        status.textContent = `Booking created. Advance amount: ₹${booking.bookingAdvance}. Please contact support to complete payment.`;
         status.className = 'submit-status';
         form.appendChild(status);
         form.reset();
-        setSubmitLoading(false);
         section?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 700);
+      } catch (error) {
+        form.querySelector('[data-submit-status]')?.remove();
+        const status = document.createElement('div');
+        status.dataset.submitStatus = '';
+        status.textContent = error.message || 'Failed to submit booking. Please try again.';
+        status.className = 'submit-status';
+        form.appendChild(status);
+      } finally {
+        setSubmitLoading(false);
+      }
     });
 
     form.querySelectorAll('input, select, textarea').forEach((element) => {
@@ -429,5 +855,31 @@
       window.setTimeout(() => span.remove(), 650);
     });
   });
+
+  const paymentStatus = new URLSearchParams(window.location.search).get('payment');
+  const paymentSessionId = new URLSearchParams(window.location.search).get('session_id');
+
+  if (paymentStatus === 'success' && paymentSessionId) {
+    const bookingSection = document.querySelector('#booking .container');
+    const notice = document.createElement('div');
+    notice.className = 'submit-status';
+    notice.textContent = 'Verifying your payment...';
+    bookingSection?.prepend(notice);
+
+    (async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/payment/verify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: paymentSessionId })
+        });
+        const body = await safeJson(response);
+        if (!response.ok || !body || !body.success) throw new Error((body && body.message) || 'Payment verification failed');
+        notice.textContent = 'Payment verified. Your booking is confirmed and our team has been notified.';
+      } catch (error) {
+        notice.textContent = error.message || 'Payment verification failed. Please contact support.';
+      }
+    })();
+  }
 })();
 

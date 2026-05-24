@@ -1,0 +1,37 @@
+{
+  "name": "luxury-travel-booking-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Production-ready backend for a luxury tour, travel, and car rental booking platform",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "compression": "^1.7.4",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "express-mongo-sanitize": "^2.2.0",
+    "express-rate-limit": "^7.4.1",
+    "express-validator": "^7.2.1",
+    "helmet": "^8.0.0",
+    "hpp": "^0.2.3",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.8.3",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^6.9.16",
+    "socket.io": "^4.8.1",
+    "stripe": "^17.5.0",
+    "twilio": "^5.3.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.7"
+  },
+  "author": "Shivam Maurya",
+  "license": "ISC"
+}

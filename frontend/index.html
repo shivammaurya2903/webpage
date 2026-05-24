@@ -43,6 +43,8 @@
           <i class="fa-solid fa-phone"></i>
           8081181368
         </a>
+        <button id="loginOpenBtn" class="btn btn-ghost" type="button">Login</button>
+        <button id="registerOpenBtn" class="btn btn-ghost" type="button">Register</button>
 
         <button class="menu-btn" data-menu-button aria-label="Open menu" aria-controls="mobile-menu" aria-expanded="false" type="button">
           <i class="fa-solid fa-bars"></i>
@@ -132,6 +134,39 @@
       </div>
     </div>
   </section>
+
+  <!-- AUTH MODAL -->
+  <div id="authModal" class="auth-modal" aria-hidden="true" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;z-index:10000;">
+    <div style="background:#fff;padding:20px;border-radius:8px;max-width:420px;width:100%;box-shadow:0 8px 24px rgba(0,0,0,0.2);">
+      <button id="authCloseBtn" style="float:right;background:transparent;border:none;font-size:18px;">&times;</button>
+      <h3 id="authTitle">Login</h3>
+
+      <form id="loginForm" style="display:block;margin-top:12px;">
+        <div class="field"><input name="email" type="email" placeholder="Email" required /></div>
+        <div class="field"><input name="password" type="password" placeholder="Password" required /></div>
+        <div style="margin-top:8px;"><button type="submit" class="btn btn-primary">Login</button> <button id="showRegister" type="button" class="btn btn-ghost">Register instead</button></div>
+      </form>
+
+      <form id="registerForm" style="display:none;margin-top:12px;">
+        <div class="field"><input name="name" type="text" placeholder="Full name" required /></div>
+        <div class="field"><input name="email" type="email" placeholder="Email" required /></div>
+        <div class="field"><input name="phone" type="tel" placeholder="Phone (+919xxxxxxxxx)" required /></div>
+        <div class="field"><input name="password" type="password" placeholder="Password (min 8 chars)" required /></div>
+        <div style="margin-top:8px;"><button type="submit" class="btn btn-primary">Register</button> <button id="showLogin" type="button" class="btn btn-ghost">Login instead</button></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- BOOKINGS MODAL -->
+  <div id="bookingsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;z-index:10000;">
+    <div style="background:#fff;padding:18px;border-radius:8px;max-width:820px;width:100%;box-shadow:0 8px 24px rgba(0,0,0,0.2);">
+      <button id="bookingsCloseBtn" style="float:right;background:transparent;border:none;font-size:18px;">&times;</button>
+      <h3>My Bookings</h3>
+      <div id="bookingsList" style="margin-top:12px;max-height:60vh;overflow:auto;">
+        <!-- Bookings will be rendered here -->
+      </div>
+    </div>
+  </div>
 
   <!-- SERVICES -->
   <section id="services" class="section">
@@ -366,7 +401,16 @@
               </div>
 
               <div class="field">
+                <input name="email" type="email" placeholder="Email Address" autocomplete="email" required />
+              </div>
+
+              <div class="field">
                 <input name="phone" type="tel" placeholder="Phone Number" autocomplete="tel" required inputmode="numeric" />
+              </div>
+
+              <div class="field">
+                <label class="sr-only" for="pickupTime">Pickup Time</label>
+                <input id="pickupTime" name="pickupTime" type="time" required />
               </div>
 
               <div class="field">
@@ -385,6 +429,26 @@
               <div class="field">
                 <label class="sr-only" for="dropDate">Drop Date</label>
                 <input id="dropDate" name="dropDate" type="date" required />
+              </div>
+
+              <div class="field">
+                <label class="sr-only" for="selectedCar">Select Car</label>
+                <select id="selectedCar" name="selectedCar" required>
+                  <option value="" selected disabled>Select Car</option>
+                  <option>Mercedes V-Class</option>
+                  <option>Toyota Vellfire</option>
+                  <option>Toyota Fortuner</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label class="sr-only" for="selectedPackage">Select Package</label>
+                <select id="selectedPackage" name="selectedPackage" required>
+                  <option value="" selected disabled>Select Package</option>
+                  <option>Airport Transfer</option>
+                  <option>Luxury Outstation Tour</option>
+                  <option>Wedding & VIP Event</option>
+                </select>
               </div>
 
               <div class="field">
@@ -689,6 +753,9 @@
               <div class="form-grid support-form-grid">
                 <div class="field">
                   <input name="name" type="text" placeholder="Your Name" autocomplete="name" required />
+                </div>
+                <div class="field">
+                  <input name="email" type="email" placeholder="Email Address" autocomplete="email" required />
                 </div>
                 <div class="field">
                   <input name="phone" type="tel" placeholder="Phone Number" autocomplete="tel" required inputmode="numeric" />
