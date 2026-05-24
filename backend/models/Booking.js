@@ -14,26 +14,37 @@ const bookingSchema = new mongoose.Schema(
     selectedCar: { type: String, required: true },
     selectedPackage: { type: String, required: true },
     estimatedFare: { type: Number, required: true },
-    bookingAdvance: { type: Number, required: true },
-    remainingPayment: { type: Number, required: true },
+    totalFare: { type: Number, default: 0 },
+    finalBill: { type: Object, default: {} },
+    invoiceId: { type: String, default: '' },
+    invoiceGenerated: { type: Boolean, default: false },
+    invoice: { type: mongoose.Schema.Types.ObjectId, ref: 'Invoice', default: null },
+    paymentMethod: {
+      type: String,
+      enum: ['Cash', 'UPI', 'Card', 'Online payment link', 'Bank transfer', ''],
+      default: ''
+    },
     paymentStatus: {
       type: String,
-      enum: ['Pending', 'Advance Paid', 'Fully Paid', 'Failed', 'Refunded'],
-      default: 'Pending'
+      enum: ['Unpaid', 'Pending', 'Paid Online', 'Paid Offline', 'Partially Paid', 'Advance Paid', 'Fully Paid', 'Failed', 'Refunded'],
+      default: 'Unpaid'
     },
     bookingStatus: {
       type: String,
-      enum: ['Pending', 'Accepted', 'Driver Assigned', 'Ride Started', 'Ride Completed', 'Payment Pending', 'Fully Paid', 'Cancelled'],
+      enum: ['Pending', 'Approved', 'Rejected', 'Driver Assigned', 'Ride Started', 'Ride Completed', 'Invoice Generated', 'Paid', 'Cancelled', 'Accepted', 'Payment Pending', 'Fully Paid'],
       default: 'Pending'
     },
+    approvedAt: { type: Date, default: null },
+    rejectedAt: { type: Date, default: null },
+    rideStartedAt: { type: Date, default: null },
+    rideCompletedAt: { type: Date, default: null },
+    paidAt: { type: Date, default: null },
     rejectionReason: { type: String, default: '' },
     adminNotes: { type: String, default: '' },
     assignedDriver: { type: mongoose.Schema.Types.ObjectId, ref: 'Driver', default: null },
     specialRequirements: { type: String, default: '' },
-    paymentId: { type: String, default: '' },
-    transactionId: { type: String, default: '' },
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
-    paymentSessionId: { type: String, default: '' }
+    customerInvoiceEmailSentAt: { type: Date, default: null }
   },
   { timestamps: true }
 );

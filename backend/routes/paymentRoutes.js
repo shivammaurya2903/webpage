@@ -7,7 +7,7 @@ const { validateRequest } = require('../middleware/validate');
 router.post(
   '/create-order',
   optionalProtect,
-  [body('bookingId').notEmpty().withMessage('bookingId is required'), body('paymentType').optional().isIn(['advance', 'remaining'])],
+  [body('bookingId').notEmpty().withMessage('bookingId is required')],
   validateRequest,
   createOrder
 );

@@ -1306,6 +1306,28 @@ td:last-child {
 
 .booking-right {
   display: flex;
+
+.booking-notice {
+  margin: 18px 0 20px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(212, 175, 55, .14), rgba(255, 255, 255, .88));
+  border: 1px solid rgba(212, 175, 55, .28);
+  box-shadow: 0 14px 28px rgba(48, 16, 84, .08);
+}
+
+.booking-notice strong {
+  display: block;
+  font-weight: 800;
+  color: #2f073f;
+  margin-bottom: 4px;
+}
+
+.booking-notice span {
+  display: block;
+  color: #5a4b3a;
+  line-height: 1.6;
+}
   align-items: center;
   justify-content: center;
   position: relative;

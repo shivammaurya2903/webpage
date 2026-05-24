@@ -4,6 +4,7 @@ const { protect, authorize } = require('../middleware/auth');
 const { validateRequest } = require('../middleware/validate');
 const { uploadSingleImage } = require('../middleware/upload');
 const adminController = require('../controllers/adminController');
+const invoiceController = require('../controllers/invoiceController');
 
 router.post(
 	'/auth/login',
@@ -22,11 +23,14 @@ router.get('/dashboard', adminController.getDashboard);
 router.get('/bookings', adminController.listBookings);
 router.patch(
 	'/bookings/:id/status',
-	[body('status').isIn(['Pending', 'Accepted', 'Driver Assigned', 'Ride Started', 'Ride Completed', 'Payment Pending', 'Fully Paid', 'Cancelled'])],
+	[body('status').isIn(['Pending', 'Approved', 'Rejected', 'Driver Assigned', 'Ride Started', 'Ride Completed', 'Invoice Generated', 'Paid', 'Cancelled', 'Accepted', 'Payment Pending', 'Fully Paid'])],
 	validateRequest,
 	adminController.setBookingStatus
 );
 router.patch('/bookings/:id/assign-driver', [body('driverId').notEmpty().withMessage('driverId is required')], validateRequest, adminController.assignDriverToBooking);
+router.post('/bookings/:id/generate-invoice', invoiceController.generateBookingInvoice);
+router.post('/bookings/:id/mark-paid', [body('paymentMethod').notEmpty().withMessage('paymentMethod is required')], validateRequest, invoiceController.markBookingPaid);
+router.get('/bookings/:id/invoice', invoiceController.downloadBookingInvoice);
 router.delete('/bookings/:id', adminController.deleteBooking);
 
 router.get('/drivers', adminController.listDrivers);

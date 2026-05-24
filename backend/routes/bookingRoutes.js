@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const { body } = require('express-validator');
-const { createBooking, getBookings, getBookingById, updateBookingStatus, assignDriver } = require('../controllers/bookingController');
+const { createBooking, getBookings, getBookingById, updateBookingStatus, assignDriver, downloadBookingInvoice } = require('../controllers/bookingController');
 const { protect, optionalProtect, authorize } = require('../middleware/auth');
 const { validateRequest } = require('../middleware/validate');
 
@@ -22,7 +22,8 @@ const bookingValidators = [
 router.post('/', optionalProtect, bookingValidators, validateRequest, createBooking);
 router.get('/', protect, getBookings);
 router.get('/:id', protect, getBookingById);
-router.put('/:id/status', protect, authorize('admin'), [body('status').isIn(['Pending', 'Accepted', 'Driver Assigned', 'Ride Started', 'Ride Completed', 'Payment Pending', 'Fully Paid', 'Cancelled'])], validateRequest, updateBookingStatus);
+router.get('/:id/invoice/download', protect, downloadBookingInvoice);
+router.put('/:id/status', protect, authorize('admin'), [body('status').isIn(['Pending', 'Approved', 'Rejected', 'Driver Assigned', 'Ride Started', 'Ride Completed', 'Invoice Generated', 'Paid', 'Cancelled', 'Accepted', 'Payment Pending', 'Fully Paid'])], validateRequest, updateBookingStatus);
 router.put('/:id/assign-driver', protect, authorize('admin'), [body('driverId').notEmpty().withMessage('driverId is required')], validateRequest, assignDriver);
 
 module.exports = router;

@@ -6,8 +6,8 @@ const asyncHandler = require('../utils/asyncHandler');
 const getDashboard = asyncHandler(async (req, res) => {
   const [totalBookings, pendingRides, completedRides, availableDrivers, paymentSummary] = await Promise.all([
     Booking.countDocuments(),
-    Booking.countDocuments({ bookingStatus: { $in: ['Pending', 'Accepted', 'Driver Assigned'] } }),
-    Booking.countDocuments({ bookingStatus: { $in: ['Ride Completed', 'Fully Paid'] } }),
+    Booking.countDocuments({ bookingStatus: { $in: ['Pending', 'Approved', 'Driver Assigned'] } }),
+    Booking.countDocuments({ bookingStatus: { $in: ['Ride Completed', 'Invoice Generated', 'Paid', 'Fully Paid'] } }),
     Driver.countDocuments({ availability: true }),
     Payment.aggregate([
       { $match: { status: 'Completed' } },

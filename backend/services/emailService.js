@@ -15,7 +15,7 @@ function getTransporter() {
   });
 }
 
-async function sendEmail({ to, subject, html }) {
+async function sendEmail({ to, subject, html, attachments = [] }) {
   const transporter = getTransporter();
   if (!transporter) return { skipped: true };
 
@@ -23,7 +23,8 @@ async function sendEmail({ to, subject, html }) {
     from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
     to,
     subject,
-    html
+    html,
+    attachments
   });
 }
 

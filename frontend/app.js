@@ -311,9 +311,11 @@
         ['Car', b.selectedCar || ''],
         ['Package', b.selectedPackage || ''],
         ['Estimated Fare', `₹${b.estimatedFare || ''}`],
-        ['Advance', `₹${b.bookingAdvance || ''}`],
-        ['Remaining', `₹${b.remainingPayment || ''}`],
-        ['Status', b.bookingStatus || b.paymentStatus || '']
+        ['Booking Status', b.bookingStatus || 'Pending'],
+        ['Payment Status', b.paymentStatus || 'Unpaid'],
+        ['Invoice ID', b.invoiceId || b.invoice?.invoiceId || 'Pending'],
+        ['Final Bill', b.finalBill?.totalAmount ? `₹${b.finalBill.totalAmount}` : `₹${b.totalFare || b.estimatedFare || ''}`],
+        ['Payment Note', 'Payment after ride completion']
       ];
 
       const content = document.createElement('div');
@@ -350,6 +352,30 @@
       });
 
       actions.appendChild(backBtn);
+      if (b.invoiceId || b.invoice?.invoiceId || b.invoiceGenerated) {
+        const downloadInvoiceBtn = document.createElement('button');
+        downloadInvoiceBtn.className = 'btn btn-primary';
+        downloadInvoiceBtn.style.marginLeft = '8px';
+        downloadInvoiceBtn.textContent = 'Download invoice';
+        downloadInvoiceBtn.addEventListener('click', async () => {
+          try {
+            const response = await authFetch(apiUrl(`/api/bookings/${b._id}/invoice/download`), { method: 'GET' });
+            if (!response.ok) throw new Error('Invoice download failed');
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${b.invoiceId || b.invoice?.invoiceId || b.bookingId}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+          } catch (error) {
+            alert(error.message || 'Invoice download failed');
+          }
+        });
+        actions.appendChild(downloadInvoiceBtn);
+      }
       actions.appendChild(closeLocal);
 
       wrapper.appendChild(content);
@@ -1038,21 +1064,7 @@
         }
 
         const booking = bookingResult.booking;
-        const paymentResponse = await authFetch(apiUrl('/api/payment/create-order'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ bookingId: booking.bookingId, paymentType: 'advance' })
-        });
-
-        const paymentResult = await safeJson(paymentResponse);
-        if (paymentResult && paymentResult.checkoutUrl) {
-          window.location.href = paymentResult.checkoutUrl;
-          return;
-        }
-
-        const paymentNote = paymentResult?.message
-          ? `${paymentResult.message} Advance amount: INR ${booking.bookingAdvance}.`
-          : `Booking created. Advance amount: INR ${booking.bookingAdvance}. Please contact support to complete payment.`;
+        const paymentNote = `Booking request submitted. It is awaiting admin approval and no advance payment is required.`;
 
         form.querySelector('[data-submit-status]')?.remove();
         const status = document.createElement('div');
@@ -1099,30 +1111,8 @@
   });
 
   const paymentStatus = new URLSearchParams(window.location.search).get('payment');
-  const paymentSessionId = new URLSearchParams(window.location.search).get('session_id');
-
-  if (paymentStatus === 'success' && paymentSessionId) {
-    const bookingSection = document.querySelector('#booking .container');
-    const notice = document.createElement('div');
-    notice.className = 'submit-status';
-    notice.textContent = 'Verifying your payment...';
-    bookingSection?.prepend(notice);
-
-    (async () => {
-      try {
-        const response = await authFetch(apiUrl('/api/payment/verify'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: paymentSessionId })
-        });
-        const body = await safeJson(response);
-        if (!response.ok || !body || !body.success) throw new Error((body && body.message) || 'Payment verification failed');
-        notice.textContent = 'Payment verified. Your booking is confirmed and our team has been notified.';
-        window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.hash}`);
-      } catch (error) {
-        notice.textContent = error.message || 'Payment verification failed. Please contact support.';
-      }
-    })();
+  if (paymentStatus === 'success') {
+    window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.hash}`);
   }
 })();
 

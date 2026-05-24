@@ -482,14 +482,18 @@
         <td>${escapeHtml(booking.pickupLocation)} → ${escapeHtml(booking.dropLocation)}<div class="helper">${escapeHtml(booking.pickupDate ? fmtDate(booking.pickupDate) : '')} ${escapeHtml(booking.pickupTime || '')}</div></td>
         <td>${escapeHtml(booking.selectedCar || '')}<div class="helper">${escapeHtml(booking.selectedPackage || '')}</div></td>
         <td>${renderBadge(booking.bookingStatus)}<div class="helper">${renderBadge(booking.paymentStatus)}</div></td>
-        <td>${fmtMoney(booking.estimatedFare)}<div class="helper">Advance: ${fmtMoney(booking.bookingAdvance)}<br>Balance: ${fmtMoney(booking.remainingPayment)}</div></td>
+        <td>${fmtMoney(booking.totalFare || booking.estimatedFare)}<div class="helper">Invoice: ${escapeHtml(booking.invoiceId || booking.invoice?.invoiceId || '—')}<br>Payment: ${renderBadge(booking.paymentStatus)}</div></td>
         <td>${booking.assignedDriver?.driverName ? escapeHtml(booking.assignedDriver.driverName) : '—'}</td>
         <td>
           ${renderButtons([
-            `<button class="small-btn gold" data-action="booking-status" data-id="${booking._id}" data-status="Accepted">Accept</button>`,
+            `<button class="small-btn gold" data-action="booking-status" data-id="${booking._id}" data-status="Approved">Approve</button>`,
             `<button class="small-btn gold" data-action="booking-assign" data-id="${booking._id}">Assign</button>`,
+            `<button class="small-btn" data-action="booking-status" data-id="${booking._id}" data-status="Ride Started">Start</button>`,
             `<button class="small-btn" data-action="booking-status" data-id="${booking._id}" data-status="Ride Completed">Complete</button>`,
-            `<button class="small-btn danger" data-action="booking-cancel" data-id="${booking._id}">Reject</button>`,
+            `<button class="small-btn primary" data-action="booking-generate-invoice" data-id="${booking._id}">Generate invoice</button>`,
+            `<button class="small-btn gold" data-action="booking-mark-paid" data-id="${booking._id}">Mark paid</button>`,
+            `<button class="small-btn danger" data-action="booking-reject" data-id="${booking._id}">Reject</button>`,
+            `${booking.invoiceId || booking.invoice?.invoiceId ? `<button class="small-btn" data-action="booking-download-invoice" data-id="${booking._id}">Download invoice</button>` : ''}`,
             `<button class="small-btn danger" data-action="booking-delete" data-id="${booking._id}">Delete</button>`
           ])}
         </td>
@@ -509,9 +513,12 @@
           <div class="filter-row">
             <button class="secondary-btn" data-filter-status="">All</button>
             <button class="secondary-btn" data-filter-status="Pending">Pending</button>
-            <button class="secondary-btn" data-filter-status="Accepted">Accepted</button>
+            <button class="secondary-btn" data-filter-status="Approved">Approved</button>
+            <button class="secondary-btn" data-filter-status="Rejected">Rejected</button>
             <button class="secondary-btn" data-filter-status="Driver Assigned">Driver Assigned</button>
             <button class="secondary-btn" data-filter-status="Ride Completed">Completed</button>
+            <button class="secondary-btn" data-filter-status="Invoice Generated">Invoice Generated</button>
+            <button class="secondary-btn" data-filter-status="Paid">Paid</button>
             <button class="secondary-btn" data-filter-status="Cancelled">Cancelled</button>
           </div>
         </section>
@@ -1066,6 +1073,12 @@
         state.bookings = null;
         state.dashboard = null;
         await refreshView();
+      } else if (action === 'booking-reject') {
+        const reason = window.prompt('Rejection reason', 'Not available');
+        await apiFetch(`/api/admin/bookings/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'Rejected', rejectionReason: reason || '' }) });
+        toast('Booking rejected', 'Reason recorded');
+        state.bookings = null;
+        await refreshView();
       } else if (action === 'booking-assign') {
         const drivers = await loadDrivers();
         if (!drivers.length) throw new Error('No drivers available');
@@ -1076,12 +1089,51 @@
         toast('Driver assigned', 'Driver linked to booking');
         state.bookings = null;
         await refreshView();
-      } else if (action === 'booking-cancel') {
-        const reason = window.prompt('Rejection reason', 'Not available');
-        await apiFetch(`/api/admin/bookings/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'Cancelled', rejectionReason: reason || '' }) });
-        toast('Booking cancelled', 'Reason recorded');
+      } else if (action === 'booking-generate-invoice') {
+        await apiFetch(`/api/admin/bookings/${id}/generate-invoice`, { method: 'POST' });
+        toast('Invoice generated', 'Invoice is ready for download');
         state.bookings = null;
+        state.dashboard = null;
         await refreshView();
+      } else if (action === 'booking-mark-paid') {
+        const method = window.prompt('Payment method', 'Cash');
+        if (!method) return;
+        const amount = window.prompt('Payment amount', '');
+        const status = ['Card', 'Online payment link'].includes(method.trim()) ? 'Paid Online' : 'Paid Offline';
+        await apiFetch(`/api/admin/bookings/${id}/mark-paid`, {
+          method: 'POST',
+          body: JSON.stringify({ paymentMethod: method.trim(), paymentStatus: status, amount: amount ? Number(amount) : undefined })
+        });
+        toast('Payment recorded', `${status} captured for booking`);
+        state.bookings = null;
+        state.dashboard = null;
+        await refreshView();
+      } else if (action === 'booking-download-invoice') {
+        try {
+          const response = await fetch(`${API_BASE}/api/admin/bookings/${id}/invoice`, {
+            credentials: 'include',
+            headers: {
+              Accept: 'application/pdf',
+              ...(state.token ? { Authorization: `Bearer ${state.token}` } : {})
+            }
+          });
+
+          if (!response.ok) {
+            throw new Error('Invoice download failed');
+          }
+
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `${id}.pdf`;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          window.URL.revokeObjectURL(url);
+        } catch (error) {
+          toast('Download failed', error.message || 'Could not download invoice', 'error');
+        }
       } else if (action === 'booking-delete') {
         await deleteEntity('booking', id);
       } else if (entity === 'driver' || entity === 'car' || entity === 'package' || entity === 'route') {

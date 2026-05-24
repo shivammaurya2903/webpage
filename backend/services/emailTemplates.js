@@ -19,15 +19,15 @@ function bookingConfirmation(booking) {
     <p><strong>Booking ID:</strong> ${booking.bookingId}<br/>
     <strong>Pickup:</strong> ${booking.pickupLocation}<br/>
     <strong>Drop:</strong> ${booking.dropLocation}<br/>
-    <strong>Advance Amount:</strong> ₹${booking.bookingAdvance}</p>
-    <p>Our team will review it and update you shortly.</p>
+    <strong>Payment:</strong> Pay after ride completion</p>
+    <p>Your booking is subject to admin approval. Our team will review it and update you shortly.</p>
   `);
 }
 
 function bookingAccepted(booking) {
-  return layout('Booking Accepted', `
+  return layout('Booking Approved', `
     <p>Your booking <strong>${booking.bookingId}</strong> has been accepted.</p>
-    <p>The ride is confirmed and our team will coordinate the next steps.</p>
+    <p>The ride has been approved. We will coordinate the driver assignment and next steps.</p>
   `);
 }
 
@@ -45,14 +45,25 @@ function rideReminder(booking) {
 }
 
 function rideCompleted(booking) {
-  return layout('Ride Completed', `<p>Your ride for booking <strong>${booking.bookingId}</strong> has been completed.</p>`);
+  return layout('Ride Completed', `<p>Your ride for booking <strong>${booking.bookingId}</strong> has been completed.</p><p>Your invoice is being prepared and will be shared shortly.</p>`);
+}
+
+function invoiceGenerated(invoice, booking) {
+  return layout('Invoice Generated', `
+    <p>Your invoice for booking <strong>${booking.bookingId}</strong> is ready.</p>
+    <p><strong>Invoice ID:</strong> ${invoice.invoiceId}<br/>
+    <strong>Final Amount:</strong> ₹${invoice.totalFare}<br/>
+    <strong>Payment Status:</strong> ${invoice.paymentStatus}</p>
+    <p>You can review the invoice in your booking details and complete payment after ride completion.</p>
+  `);
 }
 
 function paymentReceipt(payment, booking) {
   return layout('Payment Receipt', `
-    <p>We received your ${payment.paymentType} payment for booking <strong>${booking.bookingId}</strong>.</p>
+    <p>We received your ${payment.paymentMethod || payment.paymentType} payment for booking <strong>${booking.bookingId}</strong>.</p>
     <p><strong>Amount:</strong> ₹${payment.amount}<br/>
-    <strong>Status:</strong> ${payment.status}</p>
+    <strong>Status:</strong> ${payment.status}<br/>
+    <strong>Invoice:</strong> ${booking.invoiceId || 'Pending'}</p>
   `);
 }
 
@@ -66,6 +77,7 @@ module.exports = {
   driverAssigned,
   rideReminder,
   rideCompleted,
+  invoiceGenerated,
   paymentReceipt,
   contactReceived
 };

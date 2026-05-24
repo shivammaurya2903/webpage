@@ -7,6 +7,7 @@ const Car = require('../models/Car');
 const Package = require('../models/Package');
 const Route = require('../models/Route');
 const Payment = require('../models/Payment');
+const Invoice = require('../models/Invoice');
 const Contact = require('../models/Contact');
 const Notification = require('../models/Notification');
 const SiteSettings = require('../models/SiteSettings');
@@ -145,8 +146,8 @@ const getDashboard = asyncHandler(async (req, res) => {
   ] = await Promise.all([
     Booking.countDocuments(),
     Booking.countDocuments({ bookingStatus: 'Pending' }),
-    Booking.countDocuments({ bookingStatus: { $in: ['Accepted', 'Driver Assigned', 'Ride Started'] } }),
-    Booking.countDocuments({ bookingStatus: { $in: ['Ride Completed', 'Fully Paid'] } }),
+    Booking.countDocuments({ bookingStatus: { $in: ['Approved', 'Driver Assigned', 'Ride Started'] } }),
+    Booking.countDocuments({ bookingStatus: { $in: ['Ride Completed', 'Invoice Generated', 'Paid', 'Fully Paid'] } }),
     User.countDocuments({ role: 'customer' }),
     User.countDocuments({ role: 'customer', isBlocked: true }),
     Driver.countDocuments({ availability: true }),
@@ -228,7 +229,7 @@ const listBookings = asyncHandler(async (req, res) => {
   const query = filters.length ? { $and: filters } : {};
 
   const [bookings, total] = await Promise.all([
-    Booking.find(query).sort(sort).skip(skip).limit(limit).populate('assignedDriver').lean(),
+    Booking.find(query).sort(sort).skip(skip).limit(limit).populate('assignedDriver').populate('invoice').lean(),
     Booking.countDocuments(query)
   ]);
 
@@ -237,28 +238,51 @@ const listBookings = asyncHandler(async (req, res) => {
 
 const setBookingStatus = asyncHandler(async (req, res) => {
   const { status, rejectionReason, adminNotes } = req.body;
-  const booking = await Booking.findById(req.params.id).populate('assignedDriver');
+  const booking = await Booking.findById(req.params.id).populate('assignedDriver').populate('invoice');
   if (!booking) throw new ApiError(404, 'Booking not found');
 
-  booking.bookingStatus = status;
+  const normalizedStatus = ({
+    Accepted: 'Approved',
+    'Payment Pending': 'Invoice Generated',
+    'Fully Paid': 'Paid'
+  })[status] || status;
+
+  booking.bookingStatus = normalizedStatus;
   booking.adminNotes = adminNotes || booking.adminNotes || '';
 
-  if (status === 'Cancelled') {
-    booking.rejectionReason = rejectionReason || booking.rejectionReason || 'Rejected by admin';
+  if (normalizedStatus === 'Approved') {
+    booking.approvedAt = booking.approvedAt || new Date();
+    if (booking.paymentStatus === 'Unpaid') booking.paymentStatus = 'Pending';
   }
 
-  if (status === 'Fully Paid') {
-    booking.paymentStatus = 'Fully Paid';
+  if (normalizedStatus === 'Rejected' || normalizedStatus === 'Cancelled') {
+    booking.rejectedAt = new Date();
+    booking.rejectionReason = rejectionReason || booking.rejectionReason || 'Rejected by admin';
+    booking.paymentStatus = 'Unpaid';
+  }
+
+  if (normalizedStatus === 'Ride Started') booking.rideStartedAt = new Date();
+  if (normalizedStatus === 'Ride Completed') booking.rideCompletedAt = new Date();
+
+  if (normalizedStatus === 'Invoice Generated') {
+    booking.invoiceGenerated = true;
+    booking.paymentStatus = 'Pending';
+  }
+
+  if (normalizedStatus === 'Paid') {
+    booking.paymentStatus = req.body.paymentStatus || booking.paymentStatus || 'Paid Offline';
+    booking.paymentMethod = req.body.paymentMethod || booking.paymentMethod || 'Cash';
+    booking.paidAt = new Date();
   }
 
   await booking.save();
 
-  if (booking.email && status === 'Accepted') {
-    await sendEmail({ to: booking.email, subject: `Booking accepted - ${booking.bookingId}`, html: bookingAccepted(booking) }).catch(() => undefined);
-    await sendWhatsApp({ to: booking.phone, message: `Your booking ${booking.bookingId} has been accepted.` }).catch(() => undefined);
+  if (booking.email && normalizedStatus === 'Approved') {
+    await sendEmail({ to: booking.email, subject: `Booking approved - ${booking.bookingId}`, html: bookingAccepted(booking) }).catch(() => undefined);
+    await sendWhatsApp({ to: booking.phone, message: `Your booking ${booking.bookingId} has been approved.` }).catch(() => undefined);
   }
 
-  if (booking.email && status === 'Cancelled') {
+  if (booking.email && (normalizedStatus === 'Rejected' || normalizedStatus === 'Cancelled')) {
     await sendEmail({
       to: booking.email,
       subject: `Booking rejected - ${booking.bookingId}`,
@@ -267,7 +291,7 @@ const setBookingStatus = asyncHandler(async (req, res) => {
     await sendWhatsApp({ to: booking.phone, message: `Booking ${booking.bookingId} was cancelled. ${booking.rejectionReason || ''}`.trim() }).catch(() => undefined);
   }
 
-  if (booking.email && status === 'Ride Completed') {
+  if (booking.email && normalizedStatus === 'Ride Completed') {
     await sendEmail({ to: booking.email, subject: `Ride completed - ${booking.bookingId}`, html: rideCompleted(booking) }).catch(() => undefined);
   }
 
