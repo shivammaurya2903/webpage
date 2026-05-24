@@ -12,6 +12,10 @@ const { bookingConfirmation, bookingAccepted, driverAssigned, rideCompleted } = 
 const { sendEmail } = require('../services/emailService');
 const { sendWhatsApp } = require('../services/whatsappService');
 
+function escapeRegExp(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 async function findBestRoute(pickupLocation, dropLocation) {
   const routes = await Route.find({});
   return routes.find((route) => {
@@ -38,8 +42,8 @@ const createBooking = asyncHandler(async (req, res) => {
   };
 
   const [car, tripPackage, route] = await Promise.all([
-    Car.findOne({ carName: new RegExp(`^${payload.selectedCar}$`, 'i') }),
-    Package.findOne({ packageName: new RegExp(`^${payload.selectedPackage}$`, 'i') }),
+    Car.findOne({ carName: new RegExp(`^${escapeRegExp(payload.selectedCar)}$`, 'i') }),
+    Package.findOne({ packageName: new RegExp(`^${escapeRegExp(payload.selectedPackage)}$`, 'i') }),
     findBestRoute(payload.pickupLocation, payload.dropLocation)
   ]);
 
@@ -94,12 +98,13 @@ const getBookings = asyncHandler(async (req, res) => {
   const queryParts = [];
   if (status) queryParts.push({ bookingStatus: status });
   if (search) {
+    const escapedSearch = escapeRegExp(search);
     queryParts.push({
       $or: [
-        { customerName: { $regex: search, $options: 'i' } },
-        { bookingId: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } }
+        { customerName: { $regex: escapedSearch, $options: 'i' } },
+        { bookingId: { $regex: escapedSearch, $options: 'i' } },
+        { phone: { $regex: escapedSearch, $options: 'i' } },
+        { email: { $regex: escapedSearch, $options: 'i' } }
       ]
     });
   }

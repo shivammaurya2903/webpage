@@ -3,20 +3,40 @@ const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const User = require('../models/User');
 
-const protect = asyncHandler(async (req, res, next) => {
-  let token;
-
+function getTokenFromRequest(req) {
   if (req.headers.authorization?.startsWith('Bearer ')) {
-    token = req.headers.authorization.split(' ')[1];
-  } else if (req.cookies?.token) {
-    token = req.cookies.token;
+    return req.headers.authorization.split(' ')[1];
   }
+
+  if (req.cookies?.token) {
+    return req.cookies.token;
+  }
+
+  return null;
+}
+
+const protect = asyncHandler(async (req, res, next) => {
+  const token = getTokenFromRequest(req);
 
   if (!token) {
     throw new ApiError(401, 'Authentication required');
   }
 
-  const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  if (!process.env.JWT_SECRET) {
+    throw new ApiError(500, 'JWT_SECRET is not configured');
+  }
+
+  let decoded;
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
+  } catch (error) {
+    if (error.name === 'TokenExpiredError') {
+      throw new ApiError(401, 'Authentication token has expired');
+    }
+
+    throw new ApiError(401, 'Invalid authentication token');
+  }
+
   const user = await User.findById(decoded.id);
 
   if (!user) {
@@ -27,6 +47,27 @@ const protect = asyncHandler(async (req, res, next) => {
   next();
 });
 
+const optionalProtect = asyncHandler(async (req, res, next) => {
+  const token = getTokenFromRequest(req);
+
+  if (!token || !process.env.JWT_SECRET) {
+    return next();
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id);
+
+    if (user) {
+      req.user = user;
+    }
+  } catch (error) {
+    req.user = undefined;
+  }
+
+  return next();
+});
+
 const authorize = (...roles) => (req, res, next) => {
   if (!req.user) return next(new ApiError(401, 'Authentication required'));
   if (!roles.includes(req.user.role)) {
@@ -35,4 +76,4 @@ const authorize = (...roles) => (req, res, next) => {
   return next();
 };
 
-module.exports = { protect, authorize };
+module.exports = { protect, optionalProtect, authorize };

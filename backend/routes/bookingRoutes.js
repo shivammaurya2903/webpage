@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const { body } = require('express-validator');
 const { createBooking, getBookings, getBookingById, updateBookingStatus, assignDriver } = require('../controllers/bookingController');
-const { protect, authorize } = require('../middleware/auth');
+const { protect, optionalProtect, authorize } = require('../middleware/auth');
 const { validateRequest } = require('../middleware/validate');
 
 const bookingValidators = [
@@ -19,7 +19,7 @@ const bookingValidators = [
   body('selectedPackage').notEmpty().withMessage('Selected package is required')
 ];
 
-router.post('/', bookingValidators, validateRequest, createBooking);
+router.post('/', optionalProtect, bookingValidators, validateRequest, createBooking);
 router.get('/', protect, getBookings);
 router.get('/:id', protect, getBookingById);
 router.put('/:id/status', protect, authorize('admin'), [body('status').isIn(['Pending', 'Accepted', 'Driver Assigned', 'Ride Started', 'Ride Completed', 'Payment Pending', 'Fully Paid', 'Cancelled'])], validateRequest, updateBookingStatus);

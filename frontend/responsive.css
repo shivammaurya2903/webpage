@@ -60,6 +60,13 @@
     grid-template-columns: 1fr;
   }
 
+  .submit-btn,
+  .btn-whatsapp {
+    grid-column: span 1;
+    width: 100%;
+    min-width: 0;
+  }
+
   .faq-wrap {
     gap: 16px;
   }

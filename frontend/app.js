@@ -1,7 +1,13 @@
 /* Luxury Tour & Travels - Vanilla JS */
 
 (() => {
-  const API_BASE = window.location.origin;
+  const API_BASE = (window.__API_BASE__ || document.documentElement.dataset.apiBase || '').replace(/\/$/, '');
+
+  function apiUrl(path) {
+    if (/^https?:\/\//i.test(path)) return path;
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    return `${API_BASE}${normalizedPath}`;
+  }
   async function safeJson(response) {
     const contentType = response.headers.get('content-type') || '';
     if (!contentType.includes('application/json')) {
@@ -102,8 +108,10 @@
   }
 
   // Render bookings into a modal
+  let __lastBookings = [];
   function showBookingsModal(bookings) {
     try {
+      __lastBookings = Array.isArray(bookings) ? bookings : [];
       const modal = document.getElementById('bookingsModal');
       const list = document.getElementById('bookingsList');
       const closeBtn = document.getElementById('bookingsCloseBtn');
@@ -112,25 +120,39 @@
       if (!bookings || !bookings.length) {
         list.innerHTML = '<div class="card" style="padding:12px">No bookings found.</div>';
       } else {
-        bookings.forEach((b) => {
+        bookings.forEach((b, idx) => {
           const card = document.createElement('div');
           card.className = 'card';
           card.style.padding = '12px';
           card.style.marginBottom = '8px';
+          const fare = b.estimatedFare || b.amount || 0;
+          const status = b.bookingStatus || b.paymentStatus || '';
           card.innerHTML = `
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
               <div style="flex:1">
-                <div style="font-weight:600">${b.bookingId} — ${b.customerName}</div>
-                <div style="color:#666;margin-top:6px">${b.pickupLocation} → ${b.dropLocation}</div>
-                <div style="color:#666;margin-top:6px;font-size:13px">Pickup: ${new Date(b.pickupDate).toLocaleDateString()} ${b.pickupTime || ''}</div>
+                <div style="font-weight:600">${escapeHtml(b.bookingId)} — ${escapeHtml(b.customerName || '')}</div>
+                <div style="color:#666;margin-top:6px">${escapeHtml(b.pickupLocation || '')} → ${escapeHtml(b.dropLocation || '')}</div>
+                <div style="color:#666;margin-top:6px;font-size:13px">Pickup: ${new Date(b.pickupDate).toLocaleDateString()} ${escapeHtml(b.pickupTime || '')}</div>
               </div>
-              <div style="text-align:right;margin-left:12px">
-                <div style="font-weight:700">₹${b.estimatedFare || b.amount || 0}</div>
-                <div style="font-size:13px;color:#333;margin-top:6px">${b.bookingStatus || b.paymentStatus || ''}</div>
+              <div style="text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+                <div style="font-weight:700">₹${fare}</div>
+                <div style="font-size:13px;color:#333">${escapeHtml(status)}</div>
+                <div>
+                  <button class="btn btn-sm btn-ghost" data-view-idx="${idx}">View</button>
+                </div>
               </div>
             </div>
           `;
           list.appendChild(card);
+        });
+
+        // attach handlers for view buttons
+        list.querySelectorAll('[data-view-idx]').forEach((btn) => {
+          btn.addEventListener('click', (ev) => {
+            const idx = Number(btn.getAttribute('data-view-idx'));
+            const booking = __lastBookings[idx];
+            if (booking) showBookingDetail(booking);
+          });
         });
       }
       modal.style.display = 'flex';
@@ -144,6 +166,86 @@
       }
     } catch (e) {
       console.error('showBookingsModal error', e);
+    }
+  }
+
+  function escapeHtml(s) {
+    if (!s) return '';
+    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  }
+
+  function showBookingDetail(b) {
+    try {
+      const modal = document.getElementById('bookingsModal');
+      const list = document.getElementById('bookingsList');
+      if (!modal || !list) return;
+      list.innerHTML = '';
+      const wrapper = document.createElement('div');
+      wrapper.className = 'card';
+      wrapper.style.padding = '14px';
+      wrapper.style.maxHeight = '60vh';
+      wrapper.style.overflow = 'auto';
+
+      const rows = [
+        ['Booking ID', b.bookingId],
+        ['Customer', b.customerName || b.fullName || ''],
+        ['Email', b.email || ''],
+        ['Phone', b.phone || ''],
+        ['From → To', `${b.pickupLocation || ''} → ${b.dropLocation || ''}`],
+        ['Pickup', `${new Date(b.pickupDate).toLocaleDateString()} ${b.pickupTime || ''}`],
+        ['Passengers', b.passengers || ''],
+        ['Car', b.selectedCar || ''],
+        ['Package', b.selectedPackage || ''],
+        ['Estimated Fare', `₹${b.estimatedFare || ''}`],
+        ['Advance', `₹${b.bookingAdvance || ''}`],
+        ['Remaining', `₹${b.remainingPayment || ''}`],
+        ['Status', b.bookingStatus || b.paymentStatus || '']
+      ];
+
+      const content = document.createElement('div');
+      rows.forEach(([k, v]) => {
+        const el = document.createElement('div');
+        el.style.marginBottom = '8px';
+        el.innerHTML = `<strong>${escapeHtml(k)}:</strong> ${escapeHtml(v)} `;
+        content.appendChild(el);
+      });
+
+      const rawPre = document.createElement('pre');
+      rawPre.style.background = '#f6f6f6';
+      rawPre.style.padding = '8px';
+      rawPre.style.borderRadius = '6px';
+      rawPre.style.overflow = 'auto';
+      rawPre.textContent = JSON.stringify(b, null, 2);
+
+      const actions = document.createElement('div');
+      actions.style.marginTop = '12px';
+      const backBtn = document.createElement('button');
+      backBtn.className = 'btn btn-ghost';
+      backBtn.textContent = 'Back to list';
+      backBtn.addEventListener('click', () => showBookingsModal(__lastBookings));
+
+      const closeBtn = document.getElementById('bookingsCloseBtn');
+      const closeLocal = document.createElement('button');
+      closeLocal.className = 'btn btn-ghost';
+      closeLocal.style.marginLeft = '8px';
+      closeLocal.textContent = 'Close';
+      closeLocal.addEventListener('click', () => {
+        const modalEl = document.getElementById('bookingsModal');
+        modalEl.style.display = 'none';
+        modalEl.setAttribute('aria-hidden', 'true');
+      });
+
+      actions.appendChild(backBtn);
+      actions.appendChild(closeLocal);
+
+      wrapper.appendChild(content);
+      wrapper.appendChild(rawPre);
+      wrapper.appendChild(actions);
+      list.appendChild(wrapper);
+      modal.style.display = 'flex';
+      modal.setAttribute('aria-hidden', 'false');
+    } catch (e) {
+      console.error('showBookingDetail error', e);
     }
   }
 
@@ -169,7 +271,7 @@
         mb.textContent = 'My Bookings';
         mb.addEventListener('click', async () => {
           try {
-            const res = await authFetch(`${API_BASE}/api/bookings`);
+            const res = await authFetch(apiUrl('/api/bookings'));
             const body = await safeJson(res);
             if (!res.ok) throw new Error(body?.message || 'Failed to fetch bookings');
             showBookingsModal(body.bookings || []);
@@ -228,7 +330,7 @@
     const cached = getUser();
     if (cached) return; // already have user info
     try {
-      const res = await authFetch(`${API_BASE}/api/auth/profile`);
+      const res = await authFetch(apiUrl('/api/auth/profile'));
       const body = await safeJson(res);
       if (!res.ok || !body || !body.user) {
         // token likely invalid or expired
@@ -483,7 +585,7 @@
     const email = form.querySelector('[name="email"]').value.trim();
     const password = form.querySelector('[name="password"]').value;
     try {
-      const res = await fetch(`${API_BASE}/api/auth/login`, {
+      const res = await fetch(apiUrl('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
@@ -491,6 +593,7 @@
       const body = await safeJson(res);
       if (!res.ok || !body || !body.token) throw new Error(body?.message || 'Login failed');
       setToken(body.token);
+      setUser(body.user || null);
       closeAuth();
       showGlobalNotification('Logged in successfully', false);
     } catch (err) {
@@ -507,7 +610,7 @@
     const phone = form.querySelector('[name="phone"]').value.trim();
     const password = form.querySelector('[name="password"]').value;
     try {
-      const res = await fetch(`${API_BASE}/api/auth/register`, {
+      const res = await fetch(apiUrl('/api/auth/register'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, phone, password })
@@ -515,6 +618,7 @@
       const body = await safeJson(res);
       if (!res.ok || !body || !body.token) throw new Error(body?.message || 'Registration failed');
       setToken(body.token);
+      setUser(body.user || null);
       closeAuth();
       showGlobalNotification('Registered and logged in', false);
     } catch (err) {
@@ -605,7 +709,7 @@
           subject: 'Support Request'
         };
 
-        const response = await fetch(`${API_BASE}/api/contact`, {
+        const response = await fetch(apiUrl('/api/contact'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -788,7 +892,7 @@
           specialRequirements: form.querySelector('[name="requirements"]')?.value.trim() || ''
         };
 
-        const bookingResponse = await fetch(`${API_BASE}/api/bookings`, {
+        const bookingResponse = await authFetch(apiUrl('/api/bookings'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -800,7 +904,7 @@
         }
 
         const booking = bookingResult.booking;
-        const paymentResponse = await fetch(`${API_BASE}/api/payment/create-order`, {
+        const paymentResponse = await authFetch(apiUrl('/api/payment/create-order'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ bookingId: booking.bookingId, paymentType: 'advance' })
@@ -868,7 +972,7 @@
 
     (async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/payment/verify`, {
+        const response = await authFetch(apiUrl('/api/payment/verify'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sessionId: paymentSessionId })
@@ -876,6 +980,7 @@
         const body = await safeJson(response);
         if (!response.ok || !body || !body.success) throw new Error((body && body.message) || 'Payment verification failed');
         notice.textContent = 'Payment verified. Your booking is confirmed and our team has been notified.';
+        window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.hash}`);
       } catch (error) {
         notice.textContent = error.message || 'Payment verification failed. Please contact support.';
       }
