@@ -1059,6 +1059,10 @@ td:last-child {
   position: relative;
 }
 
+.field-full {
+  grid-column: 1 / -1;
+}
+
 .field input,
 .field select {
   width: 100%;
@@ -1378,6 +1382,425 @@ td:last-child {
 /* Make sure there is room under sticky nav when clicking anchors */
 section[id] {
   scroll-margin-top: 92px;
+}
+
+/* =====================================================
+   NEW SECTIONS: DESTINATIONS / REVIEWS / FAQ / TRAVEL / SUPPORT
+   ===================================================== */
+
+.destinations-grid,
+.reviews-grid,
+.travel-grid {
+  align-items: stretch;
+}
+
+.destination-card,
+.review-card,
+.travel-card {
+  padding: 18px;
+  overflow: hidden;
+  transition: transform .25s ease, box-shadow .25s ease;
+}
+
+.destination-card:hover,
+.review-card:hover,
+.travel-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 40px 120px rgba(106, 27, 154, .16);
+}
+
+.destination-img {
+  width: 100%;
+  height: 210px;
+  object-fit: cover;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(106, 27, 154, .08), rgba(212, 175, 55, .12));
+  margin-bottom: 12px;
+}
+
+.destination-body {
+  padding: 6px 4px 2px;
+}
+
+.destination-title {
+  font-family: 'Cormorant Garamond', serif;
+  color: #2f073f;
+  font-size: 20px;
+  margin-bottom: 8px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.destination-title i {
+  color: var(--primary);
+}
+
+.destination-desc {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+  font-weight: 600;
+}
+
+/* Reviews */
+.reviews-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.review-card {
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 250px;
+}
+
+.review-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.review-stars {
+  color: var(--gold);
+  display: flex;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.review-badge {
+  font-weight: 900;
+  color: #5a2a00;
+  background: rgba(212, 175, 55, .16);
+  border: 1px solid rgba(212, 175, 55, .35);
+  padding: 7px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.review-name {
+  font-family: 'Cormorant Garamond', serif;
+  color: #2f073f;
+  font-size: 22px;
+}
+
+.review-text {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.7;
+  font-weight: 600;
+}
+
+.review-cta {
+  background: linear-gradient(180deg, rgba(239, 227, 255, .78), rgba(255, 255, 255, .55));
+  justify-content: center;
+}
+
+.review-cta-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.review-cta-inner i {
+  color: var(--primary);
+  font-size: 22px;
+}
+
+.review-cta-inner h3 {
+  font-family: 'Cormorant Garamond', serif;
+  color: #2f073f;
+  font-size: 24px;
+}
+
+.review-cta-inner p {
+  color: var(--muted);
+  font-weight: 600;
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+/* FAQ */
+.faq-wrap {
+  display: grid;
+  grid-template-columns: 1.2fr .8fr;
+  gap: 22px;
+  align-items: start;
+}
+
+.faq-card {
+  padding: 26px;
+}
+
+.faq-title {
+  font-family: 'Cormorant Garamond', serif;
+  color: #2f073f;
+  font-size: 26px;
+  margin-bottom: 12px;
+}
+
+.faq-list {
+  display: grid;
+  gap: 12px;
+}
+
+.faq-item {
+  border-radius: 18px;
+  border: 1px solid rgba(106, 27, 154, .14);
+  background: rgba(255, 255, 255, .72);
+  padding: 14px 16px;
+}
+
+.faq-item > summary {
+  cursor: pointer;
+  list-style: none;
+  font-weight: 900;
+  color: #2a2a2a;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.faq-item > summary::-webkit-details-marker {
+  display: none;
+}
+
+.faq-item > summary::after {
+  content: '+';
+  color: var(--primary);
+  font-weight: 900;
+  transition: transform .25s ease;
+}
+
+.faq-item[open] > summary::after {
+  content: '−';
+}
+
+.faq-item p {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.7;
+  font-weight: 600;
+}
+
+.faq-side {
+  display: flex;
+}
+
+.faq-side-card {
+  padding: 26px;
+  background: linear-gradient(180deg, rgba(212, 175, 55, .14), rgba(255, 255, 255, .55));
+}
+
+.faq-side-icon {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(239, 227, 255, .8);
+  border: 1px solid rgba(106, 27, 154, .14);
+  margin-bottom: 14px;
+}
+
+.faq-side-icon i {
+  color: var(--primary);
+  font-size: 22px;
+}
+
+.faq-side-card h3 {
+  font-family: 'Cormorant Garamond', serif;
+  color: #2f073f;
+  font-size: 26px;
+  margin-bottom: 10px;
+}
+
+.faq-side-card p {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.7;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.faq-side-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Travel */
+.travel-grid {
+  align-items: stretch;
+}
+
+.travel-card {
+  padding: 22px;
+  min-height: 250px;
+}
+
+.travel-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background: rgba(239, 227, 255, .85);
+  border: 1px solid rgba(106, 27, 154, .14);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+
+.travel-icon i {
+  color: var(--primary);
+  font-size: 22px;
+}
+
+.travel-card h3 {
+  font-family: 'Cormorant Garamond', serif;
+  color: #2f073f;
+  font-size: 22px;
+  margin-bottom: 10px;
+}
+
+.travel-card p {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.7;
+  font-weight: 600;
+}
+
+.travel-cta {
+  background: linear-gradient(180deg, rgba(239, 227, 255, .78), rgba(255, 255, 255, .55));
+}
+
+.travel-cta-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.travel-cta-inner i {
+  color: var(--gold);
+  font-size: 22px;
+}
+
+.travel-cta-inner h3 {
+  font-family: 'Cormorant Garamond', serif;
+  color: #2f073f;
+  font-size: 26px;
+  margin-bottom: 6px;
+}
+
+/* Support */
+.support-section {
+  padding-top: 60px;
+}
+
+.support-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 22px;
+  align-items: start;
+}
+
+.support-card {
+  padding: 26px;
+}
+
+.support-title {
+  font-family: 'Cormorant Garamond', serif;
+  color: #2f073f;
+  font-size: 26px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.support-title i {
+  color: var(--primary);
+}
+
+.support-lines {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.support-line {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  font-weight: 700;
+  color: #2a2a2a;
+}
+
+.support-line a {
+  color: #2a2a2a;
+  text-decoration: underline;
+  text-decoration-color: rgba(212, 175, 55, .75);
+  text-underline-offset: 3px;
+}
+
+.support-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 14px;
+  background: rgba(239, 227, 255, .85);
+  border: 1px solid rgba(106, 27, 154, .12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.support-icon i {
+  color: var(--primary);
+}
+
+.support-ctas {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.support-form-grid {
+  grid-template-columns: 1fr 1fr;
+}
+
+.support-note {
+  margin-top: 14px;
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.support-form textarea {
+  width: 100%;
+  padding: 15px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(106, 27, 154, .14);
+  background: rgba(255, 255, 255, .88);
+  outline: none;
+  font-weight: 600;
+  color: #2a2a2a;
+  box-shadow: 0 10px 26px rgba(48, 16, 84, .05);
+  transition: box-shadow .2s ease, border-color .2s ease, transform .2s ease, background .2s ease;
+  resize: vertical;
+}
+
+.support-form textarea:focus {
+  border-color: rgba(212, 175, 55, .55);
+  box-shadow: 0 0 0 5px rgba(212, 175, 55, .18);
+  background: #fff;
 }
 
 .card-img,

@@ -1,15 +1,6 @@
 /* Responsive refinements */
 
-/* Tablet */
 @media (max-width: 992px) {
-  .hero-content,
-  .tariff-layout,
-  .booking-container,
-  .features-terms,
-  .fleet-layout {
-    grid-template-columns: 1fr !important;
-  }
-
   .nav-right .call-btn {
     display: none;
   }
@@ -20,14 +11,96 @@
 
   .menu-btn {
     display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .mobile-menu {
     display: block;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    background: rgba(255, 255, 255, .96);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(106, 27, 154, .10);
+    max-height: 0;
+    opacity: 0;
+    transform: translateY(-10px);
+    overflow: hidden;
+    pointer-events: none;
+    transition: max-height .35s ease, opacity .25s ease, transform .35s ease;
   }
 
+  .mobile-menu.is-open {
+    max-height: 520px;
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  .hero-content {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 24px;
+  }
+
+  .hero-left,
   .hero-right {
-    margin-top: 22px;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .hero-features,
+  .booking-features,
+  .form-grid,
+  .support-form-grid,
+  .faq-wrap {
+    grid-template-columns: 1fr;
+  }
+
+  .faq-wrap {
+    gap: 16px;
+  }
+
+  .faq-card,
+  .faq-side-card {
+    padding: 22px;
+  }
+
+  .faq-side {
+    width: 100%;
+  }
+
+  .faq-side-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .faq-side-actions .btn {
+    width: 100%;
+  }
+
+  .faq-item {
+    padding: 13px 14px;
+  }
+
+  .faq-item > summary {
+    font-size: 15px;
+    line-height: 1.45;
+  }
+
+  .faq-item p {
+    font-size: 13px;
+  }
+
+  .tariff-layout,
+  .features-terms,
+  .booking-block,
+  .support-layout,
+  .footer-top {
+    grid-template-columns: 1fr !important;
   }
 
   .booking-right {
@@ -47,29 +120,16 @@
   }
 }
 
-/* Mobile */
 @media (max-width: 640px) {
   .container {
     width: 92%;
   }
 
-  .hero-left h1 {
-    font-size: 40px;
-  }
-
-  .hero-left h4 {
-    font-size: 14px;
+  .hero-title {
+    font-size: clamp(36px, 11vw, 44px);
   }
 
   .grid-4 {
-    grid-template-columns: 1fr !important;
-  }
-
-  .tariff-two {
-    grid-template-columns: 1fr !important;
-  }
-
-  .booking-form-grid {
     grid-template-columns: 1fr !important;
   }
 
@@ -86,13 +146,13 @@
     grid-template-columns: 1fr;
   }
 
-  .booking-image img {
-    min-height: 260px;
-  }
-
   .booking-image {
     padding: 12px;
     border-radius: 28px;
+  }
+
+  .booking-image img {
+    min-height: 260px;
   }
 
   .booking-title,
@@ -100,8 +160,34 @@
     text-align: left;
   }
 
-  .footer-grid {
-    grid-template-columns: 1fr !important;
+  .faq-card,
+  .faq-side-card {
+    padding: 20px;
+  }
+
+  .faq-title,
+  .faq-side-card h3 {
+    font-size: 22px;
+  }
+
+  .faq-side-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .faq-item {
+    padding: 12px 13px;
+    border-radius: 16px;
+  }
+
+  .faq-item > summary {
+    font-size: 14px;
+    gap: 10px;
+  }
+
+  .faq-item p {
+    margin-top: 8px;
+    font-size: 12px;
+    line-height: 1.65;
   }
 }
 

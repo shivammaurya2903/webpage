@@ -199,6 +199,94 @@
     startAutoplay();
   }
 
+  const supportForm = document.querySelector('[data-support-form]');
+  if (supportForm) {
+    const submitBtn = supportForm.querySelector('button[type="submit"]');
+    const originalSubmitLabel = submitBtn?.innerHTML || 'Submit';
+
+    const setSupportLoading = (loading) => {
+      if (!submitBtn) return;
+      submitBtn.disabled = loading;
+      if (loading) submitBtn.classList.add('is-loading');
+      else submitBtn.classList.remove('is-loading');
+      submitBtn.innerHTML = loading
+        ? '<span class="btn-spinner" aria-hidden="true"></span><span>Sending...</span>'
+        : originalSubmitLabel;
+    };
+
+    const clearError = (input) => {
+      const wrap = input?.closest('.field');
+      if (!wrap) return;
+      const error = wrap.querySelector('.error-msg');
+      if (error) error.textContent = '';
+      input.classList.remove('has-error');
+    };
+
+    const showError = (input, msg) => {
+      const wrap = input?.closest('.field');
+      if (!wrap) return;
+      let error = wrap.querySelector('.error-msg');
+      if (!error) {
+        error = document.createElement('div');
+        error.className = 'error-msg';
+        wrap.appendChild(error);
+      }
+      error.textContent = msg;
+      input.classList.add('has-error');
+    };
+
+    const isPhoneValid = (value) => /^\d{10}$/.test(String(value).replace(/\D/g, ''));
+
+    const validate = () => {
+      let ok = true;
+      const name = supportForm.querySelector('[name="name"]');
+      const phone = supportForm.querySelector('[name="phone"]');
+      const message = supportForm.querySelector('[name="message"]');
+
+      if (!name?.value || name.value.trim().length < 2) {
+        showError(name, 'Please enter your name.');
+        ok = false;
+      } else clearError(name);
+
+      if (!isPhoneValid(phone?.value || '')) {
+        showError(phone, 'Enter a valid 10-digit phone number.');
+        ok = false;
+      } else clearError(phone);
+
+      if (!message?.value || message.value.trim().length < 8) {
+        showError(message, 'Please write a short message (min 8 characters).');
+        ok = false;
+      } else clearError(message);
+
+      return ok;
+    };
+
+    supportForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      if (!validate()) return;
+
+      setSupportLoading(true);
+      window.setTimeout(() => {
+        supportForm.querySelector('[data-support-status]')?.remove();
+        const status = document.createElement('div');
+        status.dataset.supportStatus = '';
+        status.textContent = 'Request sent! Our team will contact you shortly.';
+        status.className = 'submit-status';
+        supportForm.appendChild(status);
+        supportForm.reset();
+        setSupportLoading(false);
+
+        document.querySelector('#support')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 700);
+    });
+
+    supportForm.querySelectorAll('input, textarea').forEach((el) => {
+      el.addEventListener('focus', () => clearError(el));
+      el.addEventListener('input', () => clearError(el));
+      el.addEventListener('change', () => clearError(el));
+    });
+  }
+
   const form = document.querySelector('[data-booking-form]');
   if (form) {
     const submitBtn = form.querySelector('.submit-btn');
