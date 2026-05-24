@@ -35,6 +35,15 @@
     refreshButton: document.getElementById('refreshButton'),
     adminName: document.getElementById('adminName'),
     adminChip: document.getElementById('adminChip'),
+    adminAvatar: document.getElementById('adminAvatar'),
+    sidebarAvatar: document.getElementById('sidebarAvatar'),
+    sidebarAdminName: document.getElementById('sidebarAdminName'),
+    sidebarAdminEmail: document.getElementById('sidebarAdminEmail'),
+    profileName: document.getElementById('profileName'),
+    profileAvatar: document.getElementById('profileAvatar'),
+    notificationCount: document.getElementById('notificationCount'),
+    notificationList: document.getElementById('notificationList'),
+    topbar: document.querySelector('.topbar'),
     modalBackdrop: document.getElementById('modalBackdrop'),
     modalTitle: document.getElementById('modalTitle'),
     modalEyebrow: document.getElementById('modalEyebrow'),
@@ -96,6 +105,22 @@
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return '—';
     return `${fmtDate(value)} ${date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`;
+  }
+
+  function getInitials(value) {
+    const text = String(value || 'SA').trim();
+    if (!text) return 'SA';
+    const parts = text.split(/\s+/).filter(Boolean).slice(0, 2);
+    const initials = parts.map((part) => part[0]).join('');
+    return (initials || text.slice(0, 2) || 'SA').toUpperCase();
+  }
+
+  function getAdminName() {
+    return state.admin?.name || state.admin?.email || 'Site Admin';
+  }
+
+  function getAdminEmail() {
+    return state.admin?.email || 'admin@example.com';
   }
 
   function escapeHtml(value) {
@@ -175,10 +200,69 @@
     updateHeaderIdentity();
   }
 
+  function renderShellNotifications() {
+    const items = (state.notifications || []).slice(0, 6);
+    const unreadCount = items.filter((item) => !item.readAt).length;
+
+    if (el.notificationCount) {
+      el.notificationCount.hidden = !items.length;
+      el.notificationCount.textContent = String(unreadCount || items.length || 0);
+    }
+
+    if (el.notificationList) {
+      el.notificationList.innerHTML = items.length
+        ? items.map((item) => `
+          <button type="button" class="notification-item" data-view="notifications">
+            <span class="notification-item__icon ${item.readAt ? 'is-read' : ''}"><i class="fa-solid fa-bell"></i></span>
+            <span class="notification-item__copy">
+              <strong>${escapeHtml(item.title || item.type || 'Notification')}</strong>
+              <span>${escapeHtml(item.message || 'Update available')}</span>
+              <small>${escapeHtml(fmtDateTime(item.createdAt))}</small>
+            </span>
+          </button>
+        `).join('')
+        : '<div class="empty-state empty-state--compact">No notifications yet.</div>';
+    }
+  }
+
   function updateHeaderIdentity() {
-    const name = state.admin?.name || state.admin?.email || 'Site Admin';
+    const name = getAdminName();
+    const email = getAdminEmail();
+    const initials = getInitials(name);
     el.adminName.textContent = name;
     el.adminChip.textContent = name;
+    if (el.adminAvatar) el.adminAvatar.textContent = initials;
+    if (el.sidebarAvatar) el.sidebarAvatar.textContent = initials;
+    if (el.sidebarAdminName) el.sidebarAdminName.textContent = name;
+    if (el.sidebarAdminEmail) el.sidebarAdminEmail.textContent = email;
+    if (el.profileName) el.profileName.textContent = name;
+    if (el.profileAvatar) el.profileAvatar.textContent = initials;
+    renderShellNotifications();
+  }
+
+  function syncTopbarSurface() {
+    if (!el.topbar) return;
+    el.topbar.classList.toggle('is-scrolled', window.scrollY > 8);
+  }
+
+  function syncSidebarMode() {
+    if (!el.appShell) return;
+    const isMobile = window.matchMedia('(max-width: 980px)').matches;
+    if (!isMobile) {
+      el.appShell.classList.remove('sidebar-open');
+      document.body.classList.remove('shell-open');
+    }
+  }
+
+  function toggleSidebarShell() {
+    if (!el.appShell) return;
+    const isMobile = window.matchMedia('(max-width: 980px)').matches;
+    if (isMobile) {
+      const isOpen = el.appShell.classList.toggle('sidebar-open');
+      document.body.classList.toggle('shell-open', isOpen);
+      return;
+    }
+    el.appShell.classList.toggle('sidebar-collapsed');
   }
 
   function showLogin() {
@@ -252,7 +336,12 @@
   function renderBadge(value) {
     const text = String(value || '—');
     const lower = text.toLowerCase();
-    const klass = lower.includes('cancel') || lower.includes('reject') || lower.includes('fail') ? 'danger' : lower.includes('pending') || lower.includes('open') ? 'warn' : lower.includes('paid') || lower.includes('completed') || lower.includes('resolved') ? 'ok' : 'info';
+    let klass = 'badge--info';
+    if (lower.includes('cancel') || lower.includes('reject') || lower.includes('fail')) klass = 'badge--danger';
+    else if (lower.includes('payment pending')) klass = 'badge--payment';
+    else if (lower.includes('pending') || lower.includes('open')) klass = 'badge--warning';
+    else if (lower.includes('approved') || lower.includes('accepted') || lower.includes('assigned')) klass = 'badge--approved';
+    else if (lower.includes('paid') || lower.includes('completed') || lower.includes('resolved') || lower.includes('available')) klass = 'badge--success';
     return `<span class="badge ${klass}">${escapeHtml(text)}</span>`;
   }
 
@@ -380,18 +469,18 @@
       type: 'line',
       data: {
         labels: chartLabels(dashboard.charts?.monthlyRevenue || []),
-        datasets: [{ label: 'Revenue', data: chartValues(dashboard.charts?.monthlyRevenue || []), borderColor: '#d4af37', backgroundColor: 'rgba(212,175,55,0.18)', tension: 0.36, fill: true }]
+        datasets: [{ label: 'Revenue', data: chartValues(dashboard.charts?.monthlyRevenue || []), borderColor: '#6A1B9A', backgroundColor: 'rgba(106,27,154,0.18)', tension: 0.36, fill: true, pointBackgroundColor: '#D4AF37', pointBorderColor: '#ffffff' }]
       },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { color: '#f6f1e7' }, grid: { color: 'rgba(255,255,255,0.08)' } }, x: { ticks: { color: '#f6f1e7' }, grid: { display: false } } } }
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { color: '#4a2a63' }, grid: { color: 'rgba(106,27,154,0.10)' } }, x: { ticks: { color: '#4a2a63' }, grid: { display: false } } } }
     });
 
     ensureChart('bookingChart', {
       type: 'bar',
       data: {
         labels: chartLabels(dashboard.charts?.monthlyBookings || []),
-        datasets: [{ label: 'Bookings', data: chartValues(dashboard.charts?.monthlyBookings || []), backgroundColor: 'rgba(139,92,246,0.7)' }]
+        datasets: [{ label: 'Bookings', data: chartValues(dashboard.charts?.monthlyBookings || []), backgroundColor: 'rgba(212,175,55,0.72)', borderRadius: 10, borderSkipped: false }]
       },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { color: '#f6f1e7' }, grid: { color: 'rgba(255,255,255,0.08)' } }, x: { ticks: { color: '#f6f1e7' }, grid: { display: false } } } }
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { color: '#4a2a63' }, grid: { color: 'rgba(106,27,154,0.10)' } }, x: { ticks: { color: '#4a2a63' }, grid: { display: false } } } }
     });
   }
 
@@ -470,6 +559,7 @@
     if (state.notifications && !force) return state.notifications;
     const body = await apiFetch('/api/admin/notifications');
     state.notifications = body.notifications || [];
+    renderShellNotifications();
     return state.notifications;
   }
 
@@ -792,17 +882,17 @@
       type: 'bar',
       data: {
         labels: chartLabels(dashboard.charts?.customerGrowth || []),
-        datasets: [{ label: 'Customers', data: chartValues(dashboard.charts?.customerGrowth || []), backgroundColor: 'rgba(212,175,55,0.75)' }]
+        datasets: [{ label: 'Customers', data: chartValues(dashboard.charts?.customerGrowth || []), backgroundColor: 'rgba(106,27,154,0.74)', borderRadius: 10, borderSkipped: false }]
       },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { color: '#f6f1e7' }, grid: { color: 'rgba(255,255,255,0.08)' } }, x: { ticks: { color: '#f6f1e7' }, grid: { display: false } } } }
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { color: '#4a2a63' }, grid: { color: 'rgba(106,27,154,0.10)' } }, x: { ticks: { color: '#4a2a63' }, grid: { display: false } } } }
     });
     ensureChart('analyticsRevenueChart', {
       type: 'line',
       data: {
         labels: chartLabels(dashboard.charts?.monthlyRevenue || []),
-        datasets: [{ label: 'Revenue', data: chartValues(dashboard.charts?.monthlyRevenue || []), borderColor: '#8b5cf6', backgroundColor: 'rgba(139,92,246,0.16)', tension: 0.36, fill: true }]
+        datasets: [{ label: 'Revenue', data: chartValues(dashboard.charts?.monthlyRevenue || []), borderColor: '#D4AF37', backgroundColor: 'rgba(212,175,55,0.16)', tension: 0.36, fill: true, pointBackgroundColor: '#6A1B9A', pointBorderColor: '#ffffff' }]
       },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { color: '#f6f1e7' }, grid: { color: 'rgba(255,255,255,0.08)' } }, x: { ticks: { color: '#f6f1e7' }, grid: { display: false } } } }
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { color: '#4a2a63' }, grid: { color: 'rgba(106,27,154,0.10)' } }, x: { ticks: { color: '#4a2a63' }, grid: { display: false } } } }
     });
   }
 
@@ -1215,6 +1305,8 @@
       writeJSON(STORAGE_ADMIN, state.admin);
       showApp();
       updateHeaderIdentity();
+      syncTopbarSurface();
+      syncSidebarMode();
       await Promise.all([loadDashboard(), loadNotifications(true)]);
       if (window.io) {
         state.socket = window.io(API_BASE, { withCredentials: true, transports: ['websocket', 'polling'] });
@@ -1283,6 +1375,8 @@
     state.settings = null;
     state.notifications = null;
     if (state.socket) state.socket.disconnect();
+    if (el.appShell) el.appShell.classList.remove('sidebar-open', 'sidebar-collapsed');
+    document.body.classList.remove('shell-open');
     showLogin();
   }
 
@@ -1295,12 +1389,30 @@
       el.togglePassword.innerHTML = isPassword ? '<i class="fa-solid fa-eye-slash"></i>' : '<i class="fa-solid fa-eye"></i>';
     });
     el.logoutButton.addEventListener('click', logout);
-    el.sidebarToggle.addEventListener('click', () => el.appShell.classList.toggle('sidebar-open'));
+    el.sidebarToggle.addEventListener('click', toggleSidebarShell);
+    window.addEventListener('resize', syncSidebarMode);
+    window.addEventListener('scroll', syncTopbarSurface, { passive: true });
+    document.addEventListener('click', (event) => {
+      const notificationItem = event.target.closest('.notification-item[data-view="notifications"]');
+      if (notificationItem) {
+        setView('notifications');
+        if (window.matchMedia('(max-width: 980px)').matches) {
+          el.appShell.classList.remove('sidebar-open');
+          document.body.classList.remove('shell-open');
+        }
+        return;
+      }
+      const shellAction = event.target.closest('[data-shell-action="logout"]');
+      if (shellAction) {
+        logout();
+      }
+    });
     el.sideNav.addEventListener('click', async (event) => {
       const button = event.target.closest('[data-view]');
       if (!button) return;
       setView(button.dataset.view);
       el.appShell.classList.remove('sidebar-open');
+      document.body.classList.remove('shell-open');
       try {
         if (button.dataset.view === 'dashboard' || button.dataset.view === 'analytics') {
           await loadDashboard(true);
@@ -1395,6 +1507,7 @@
 
   async function init() {
     wireEvents();
+    syncTopbarSurface();
     if (state.token) {
       await bootstrap();
     } else {

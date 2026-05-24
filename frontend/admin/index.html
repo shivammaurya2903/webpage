@@ -6,7 +6,7 @@
   <title>Luxury Admin Console</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Cinzel:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&family=Cormorant+Garamond:wght@500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
   <link rel="stylesheet" href="admin.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
@@ -16,6 +16,7 @@
 <body>
   <div class="ambient ambient-1"></div>
   <div class="ambient ambient-2"></div>
+  <div class="ambient ambient-3"></div>
 
   <section id="loginView" class="login-screen">
     <div class="login-panel glass">
@@ -23,11 +24,11 @@
         <div class="brand-mark">RK</div>
         <div>
           <p class="eyebrow">Luxury Tour &amp; Travel Admin</p>
-          <h1>Commercial-grade control center</h1>
+          <h1>Luxury operations command center</h1>
         </div>
       </div>
 
-      <p class="login-copy">Manage bookings, drivers, cars, payments, inquiries, analytics, and website content from one secure console.</p>
+      <p class="login-copy">Manage bookings, drivers, cars, payments, inquiries, analytics, and website content from a premium branded console that mirrors the main website.</p>
 
       <form id="adminLoginForm" class="auth-form">
         <label class="field">
@@ -70,30 +71,45 @@
         <div class="brand-row">
           <div class="brand-mark small">RK</div>
           <div>
-            <p class="eyebrow">Admin Console</p>
-            <strong id="adminName">Site Admin</strong>
+            <p class="eyebrow">Luxury Control Center</p>
+            <strong class="sidebar-title">Admin Console</strong>
           </div>
         </div>
-        <button type="button" id="sidebarToggle" class="icon-button sidebar-toggle" aria-label="Toggle sidebar">
-          <i class="fa-solid fa-bars"></i>
+        <button type="button" id="sidebarToggle" class="icon-button sidebar-toggle" aria-label="Collapse sidebar">
+          <i class="fa-solid fa-bars-staggered"></i>
         </button>
       </div>
 
-      <nav class="nav" id="sideNav">
+      <div class="sidebar-profile">
+        <div class="sidebar-avatar" id="sidebarAvatar">SA</div>
+        <div>
+          <span class="sidebar-label">Signed in as</span>
+          <strong id="adminName">Site Admin</strong>
+          <p class="sidebar-note">Luxury Tour &amp; Travel operations</p>
+        </div>
+      </div>
+
+      <nav class="nav nav-primary" id="sideNav">
         <button class="nav-item is-active" data-view="dashboard"><i class="fa-solid fa-chart-line"></i><span>Dashboard</span></button>
         <button class="nav-item" data-view="bookings"><i class="fa-solid fa-book-open"></i><span>Bookings</span></button>
         <button class="nav-item" data-view="drivers"><i class="fa-solid fa-id-card"></i><span>Drivers</span></button>
         <button class="nav-item" data-view="cars"><i class="fa-solid fa-car-side"></i><span>Cars</span></button>
         <button class="nav-item" data-view="packages"><i class="fa-solid fa-route"></i><span>Packages</span></button>
-        <button class="nav-item" data-view="routes"><i class="fa-solid fa-location-dot"></i><span>Routes</span></button>
-        <button class="nav-item" data-view="customers"><i class="fa-solid fa-users"></i><span>Customers</span></button>
         <button class="nav-item" data-view="payments"><i class="fa-solid fa-indian-rupee-sign"></i><span>Payments</span></button>
+        <button class="nav-item" data-view="customers"><i class="fa-solid fa-users"></i><span>Customers</span></button>
+        <button class="nav-item" data-view="analytics"><i class="fa-solid fa-wave-square"></i><span>Analytics</span></button>
         <button class="nav-item" data-view="messages"><i class="fa-solid fa-message"></i><span>Messages</span></button>
         <button class="nav-item" data-view="content"><i class="fa-solid fa-swatchbook"></i><span>Website Content</span></button>
-        <button class="nav-item" data-view="analytics"><i class="fa-solid fa-wave-square"></i><span>Analytics</span></button>
         <button class="nav-item" data-view="settings"><i class="fa-solid fa-gear"></i><span>Settings</span></button>
-        <button class="nav-item" data-view="notifications"><i class="fa-solid fa-bell"></i><span>Notifications</span></button>
       </nav>
+
+      <div class="sidebar-section">
+        <p class="sidebar-section-label">Operational tools</p>
+        <nav class="nav nav-secondary">
+          <button class="nav-item" data-view="routes"><i class="fa-solid fa-location-dot"></i><span>Routes</span></button>
+          <button class="nav-item" data-view="notifications"><i class="fa-solid fa-bell"></i><span>Notifications</span></button>
+        </nav>
+      </div>
 
       <div class="sidebar-footer">
         <button type="button" id="logoutButton" class="secondary-btn full-width"><i class="fa-solid fa-right-from-bracket"></i><span>Logout</span></button>
@@ -102,21 +118,59 @@
 
     <div class="app-content">
       <header class="topbar glass">
-        <div>
+        <div class="topbar-copy">
           <p class="eyebrow" id="viewLabel">Dashboard</p>
           <h2 id="viewTitle">Luxury Operations Overview</h2>
         </div>
 
         <div class="topbar-actions">
-          <div class="search-pill">
+          <label class="search-pill" aria-label="Search current view">
             <i class="fa-solid fa-magnifying-glass"></i>
             <input id="globalSearch" type="search" placeholder="Search current view" />
-          </div>
+          </label>
           <div class="status-chip" id="socketStatus"><span></span>Live</div>
-          <button type="button" id="refreshButton" class="icon-button" aria-label="Refresh current view">
+          <details class="topbar-dropdown" id="notificationDropdown">
+            <summary class="icon-button icon-button--soft" aria-label="Notifications">
+              <i class="fa-solid fa-bell"></i>
+              <span class="badge-dot" id="notificationCount">0</span>
+            </summary>
+            <div class="dropdown-panel dropdown-panel--notifications">
+              <div class="dropdown-header">
+                <div>
+                  <p class="eyebrow">Notifications</p>
+                  <strong>Recent activity</strong>
+                </div>
+                <span class="dropdown-chip">Live</span>
+              </div>
+              <div class="dropdown-list" id="notificationList"></div>
+            </div>
+          </details>
+          <button type="button" id="refreshButton" class="icon-button icon-button--soft" aria-label="Refresh current view">
             <i class="fa-solid fa-rotate-right"></i>
           </button>
-          <div class="profile-chip" id="adminChip">Admin</div>
+          <details class="topbar-dropdown" id="profileDropdown">
+            <summary class="profile-chip" aria-label="Admin profile menu">
+              <span class="profile-avatar" id="adminAvatar">SA</span>
+              <span class="profile-copy">
+                <small>Signed in</small>
+                <strong id="adminChip">Admin</strong>
+              </span>
+            </summary>
+            <div class="dropdown-panel dropdown-panel--profile">
+              <div class="profile-summary">
+                <span class="profile-avatar profile-avatar--large" id="profileAvatar">SA</span>
+                <div>
+                  <p class="eyebrow">Luxury Admin</p>
+                  <strong id="profileName">Site Admin</strong>
+                  <div class="helper">Premium travel operations dashboard</div>
+                </div>
+              </div>
+              <button type="button" class="secondary-btn full-width" data-shell-action="logout">
+                <i class="fa-solid fa-right-from-bracket"></i>
+                <span>Logout</span>
+              </button>
+            </div>
+          </details>
         </div>
       </header>
 
