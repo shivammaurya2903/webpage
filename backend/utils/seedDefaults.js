@@ -2,6 +2,8 @@ const Car = require('../models/Car');
 const Package = require('../models/Package');
 const Route = require('../models/Route');
 const Driver = require('../models/Driver');
+const Admin = require('../models/Admin');
+const SiteSettings = require('../models/SiteSettings');
 
 async function seedCollection(Model, seedRows, uniqueKey) {
   const count = await Model.countDocuments();
@@ -20,6 +22,42 @@ async function seedCollection(Model, seedRows, uniqueKey) {
 }
 
 async function seedDefaults() {
+  const adminSeed = {
+    name: process.env.ADMIN_NAME || 'Site Admin',
+    email: process.env.ADMIN_EMAIL || 'admin@example.com',
+    password: process.env.ADMIN_PASSWORD || 'Admin@12345',
+    phone: process.env.ADMIN_PHONE || '9000000000',
+    role: 'admin',
+    isActive: true
+  };
+
+  const existingAdmin = await Admin.findOne({ email: adminSeed.email }).select('+password');
+  if (!existingAdmin) {
+    await Admin.create(adminSeed);
+  } else {
+    let shouldRepair = false;
+    if (!existingAdmin.name) {
+      existingAdmin.name = adminSeed.name;
+      shouldRepair = true;
+    }
+    if (!existingAdmin.phone) {
+      existingAdmin.phone = adminSeed.phone;
+      shouldRepair = true;
+    }
+    if (!existingAdmin.password || !/^\$2[aby]\$/.test(existingAdmin.password)) {
+      existingAdmin.set('password', adminSeed.password);
+      existingAdmin.markModified('password');
+      shouldRepair = true;
+    }
+    if (!existingAdmin.isActive) {
+      existingAdmin.isActive = true;
+      shouldRepair = true;
+    }
+    if (shouldRepair) {
+      await existingAdmin.save();
+    }
+  }
+
   await seedCollection(Car, [
     {
       carName: 'Mercedes V-Class',
@@ -100,6 +138,29 @@ async function seedDefaults() {
     { driverName: 'Amit Kumar', phone: '9000000001', vehicleAssigned: 'Mercedes V-Class', licenseNumber: 'DL-2026-0001', availability: true, currentLocation: 'Lucknow' },
     { driverName: 'Rohit Verma', phone: '9000000002', vehicleAssigned: 'Toyota Fortuner', licenseNumber: 'DL-2026-0002', availability: true, currentLocation: 'Lucknow' }
   ], 'licenseNumber');
+
+  await seedCollection(SiteSettings, [{
+    businessName: 'RAM KRISHNA TOUR & TRAVELS',
+    contactEmail: 'support@example.com',
+    contactPhone: '8081181368',
+    address: 'Lucknow, Uttar Pradesh',
+    logoText: 'RK',
+    homepage: {
+      heroTitle: 'Travel in luxury, arrive in style',
+      heroSubtitle: 'Premium rides. Trusted drivers. Memorable journeys.',
+      bannerImage: '',
+      testimonials: [
+        { name: 'Aman', quote: 'Excellent service and on-time pickup.' },
+        { name: 'Priya', quote: 'Premium vehicles and professional drivers.' }
+      ],
+      fleetHighlights: [
+        { title: 'Premium Comfort', description: 'Luxury seats and smooth travel.' },
+        { title: 'Trusted Drivers', description: 'Verified drivers with route expertise.' }
+      ],
+      seoTitle: 'Luxury Tour & Travels',
+      seoDescription: 'Luxury car rental and tour booking platform'
+    }
+  }]);
 }
 
 module.exports = { seedDefaults };

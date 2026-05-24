@@ -26,6 +26,8 @@ const bookingSchema = new mongoose.Schema(
       enum: ['Pending', 'Accepted', 'Driver Assigned', 'Ride Started', 'Ride Completed', 'Payment Pending', 'Fully Paid', 'Cancelled'],
       default: 'Pending'
     },
+    rejectionReason: { type: String, default: '' },
+    adminNotes: { type: String, default: '' },
     assignedDriver: { type: mongoose.Schema.Types.ObjectId, ref: 'Driver', default: null },
     specialRequirements: { type: String, default: '' },
     paymentId: { type: String, default: '' },

@@ -1,8 +1,18 @@
 const { emitToAdmins, emitToUser } = require('../config/socket');
 const { sendEmail } = require('./emailService');
 const { sendWhatsApp } = require('./whatsappService');
+const Notification = require('../models/Notification');
 
 async function notifyAdmins(event, payload) {
+  const title = String(payload?.title || event.replace(/[:_]/g, ' ')).replace(/\b\w/g, (match) => match.toUpperCase());
+  const message = String(payload?.message || payload?.bookingId || payload?.subject || 'New admin notification');
+  await Notification.create({
+    type: event,
+    title,
+    message,
+    recipientRole: 'admin',
+    metadata: payload || {}
+  }).catch(() => undefined);
   emitToAdmins(event, payload);
   return payload;
 }

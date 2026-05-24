@@ -57,6 +57,13 @@ const login = asyncHandler(async (req, res) => {
     throw new ApiError(401, 'Invalid email or password');
   }
 
+  if (user.isBlocked) {
+    throw new ApiError(403, 'This account has been blocked');
+  }
+
+  user.lastLoginAt = new Date();
+  await user.save();
+
   return attachToken(res, user, 200);
 });
 

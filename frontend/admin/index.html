@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en" data-api-port="5000" data-api-timeout="12000">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Luxury Admin Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Cinzel:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <link rel="stylesheet" href="admin.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" defer></script>
+  <script src="admin.js" defer></script>
+</head>
+<body>
+  <div class="ambient ambient-1"></div>
+  <div class="ambient ambient-2"></div>
+
+  <section id="loginView" class="login-screen">
+    <div class="login-panel glass">
+      <div class="login-brand">
+        <div class="brand-mark">RK</div>
+        <div>
+          <p class="eyebrow">Luxury Tour &amp; Travel Admin</p>
+          <h1>Commercial-grade control center</h1>
+        </div>
+      </div>
+
+      <p class="login-copy">Manage bookings, drivers, cars, payments, inquiries, analytics, and website content from one secure console.</p>
+
+      <form id="adminLoginForm" class="auth-form">
+        <label class="field">
+          <span>Email</span>
+          <input type="email" name="email" placeholder="admin@example.com" autocomplete="username" required />
+        </label>
+
+        <label class="field password-field">
+          <span>Password</span>
+          <div class="password-wrap">
+            <input type="password" name="password" placeholder="••••••••" autocomplete="current-password" required />
+            <button type="button" id="togglePassword" class="icon-button" aria-label="Show password">
+              <i class="fa-solid fa-eye"></i>
+            </button>
+          </div>
+        </label>
+
+        <label class="inline-toggle">
+          <input type="checkbox" name="remember" checked />
+          <span>Keep me signed in on this device</span>
+        </label>
+
+        <button type="submit" class="primary-btn full-width" id="loginButton">
+          <span class="btn-text">Sign in</span>
+          <span class="btn-spinner" aria-hidden="true"></span>
+        </button>
+      </form>
+
+      <p id="loginError" class="form-error" role="alert" hidden></p>
+      <div class="login-footnote">
+        <i class="fa-solid fa-shield-halved"></i>
+        <span>JWT protected · Role based access · Session persistence</span>
+      </div>
+    </div>
+  </section>
+
+  <section id="appView" class="app-shell" hidden>
+    <aside class="sidebar glass">
+      <div class="sidebar-top">
+        <div class="brand-row">
+          <div class="brand-mark small">RK</div>
+          <div>
+            <p class="eyebrow">Admin Console</p>
+            <strong id="adminName">Site Admin</strong>
+          </div>
+        </div>
+        <button type="button" id="sidebarToggle" class="icon-button sidebar-toggle" aria-label="Toggle sidebar">
+          <i class="fa-solid fa-bars"></i>
+        </button>
+      </div>
+
+      <nav class="nav" id="sideNav">
+        <button class="nav-item is-active" data-view="dashboard"><i class="fa-solid fa-chart-line"></i><span>Dashboard</span></button>
+        <button class="nav-item" data-view="bookings"><i class="fa-solid fa-book-open"></i><span>Bookings</span></button>
+        <button class="nav-item" data-view="drivers"><i class="fa-solid fa-id-card"></i><span>Drivers</span></button>
+        <button class="nav-item" data-view="cars"><i class="fa-solid fa-car-side"></i><span>Cars</span></button>
+        <button class="nav-item" data-view="packages"><i class="fa-solid fa-route"></i><span>Packages</span></button>
+        <button class="nav-item" data-view="routes"><i class="fa-solid fa-location-dot"></i><span>Routes</span></button>
+        <button class="nav-item" data-view="customers"><i class="fa-solid fa-users"></i><span>Customers</span></button>
+        <button class="nav-item" data-view="payments"><i class="fa-solid fa-indian-rupee-sign"></i><span>Payments</span></button>
+        <button class="nav-item" data-view="messages"><i class="fa-solid fa-message"></i><span>Messages</span></button>
+        <button class="nav-item" data-view="content"><i class="fa-solid fa-swatchbook"></i><span>Website Content</span></button>
+        <button class="nav-item" data-view="analytics"><i class="fa-solid fa-wave-square"></i><span>Analytics</span></button>
+        <button class="nav-item" data-view="settings"><i class="fa-solid fa-gear"></i><span>Settings</span></button>
+        <button class="nav-item" data-view="notifications"><i class="fa-solid fa-bell"></i><span>Notifications</span></button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button type="button" id="logoutButton" class="secondary-btn full-width"><i class="fa-solid fa-right-from-bracket"></i><span>Logout</span></button>
+      </div>
+    </aside>
+
+    <div class="app-content">
+      <header class="topbar glass">
+        <div>
+          <p class="eyebrow" id="viewLabel">Dashboard</p>
+          <h2 id="viewTitle">Luxury Operations Overview</h2>
+        </div>
+
+        <div class="topbar-actions">
+          <div class="search-pill">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input id="globalSearch" type="search" placeholder="Search current view" />
+          </div>
+          <div class="status-chip" id="socketStatus"><span></span>Live</div>
+          <button type="button" id="refreshButton" class="icon-button" aria-label="Refresh current view">
+            <i class="fa-solid fa-rotate-right"></i>
+          </button>
+          <div class="profile-chip" id="adminChip">Admin</div>
+        </div>
+      </header>
+
+      <main id="viewRoot" class="view-root"></main>
+    </div>
+  </section>
+
+  <div id="modalBackdrop" class="modal-backdrop" hidden>
+    <div class="modal glass">
+      <div class="modal-header">
+        <div>
+          <p class="eyebrow" id="modalEyebrow">Form</p>
+          <h3 id="modalTitle">Edit</h3>
+        </div>
+        <button type="button" id="closeModal" class="icon-button" aria-label="Close modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div id="modalBody" class="modal-body"></div>
+    </div>
+  </div>
+
+  <div id="toastHost" class="toast-host" aria-live="polite" aria-atomic="true"></div>
+</body>
+</html>

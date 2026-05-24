@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const User = require('../models/User');
+const Admin = require('../models/Admin');
 
 function getTokenFromRequest(req) {
   if (req.headers.authorization?.startsWith('Bearer ')) {
@@ -37,10 +38,15 @@ const protect = asyncHandler(async (req, res, next) => {
     throw new ApiError(401, 'Invalid authentication token');
   }
 
-  const user = await User.findById(decoded.id);
+  const model = decoded.type === 'admin' ? Admin : User;
+  const user = await model.findById(decoded.id);
 
   if (!user) {
     throw new ApiError(401, 'User no longer exists');
+  }
+
+  if (user.isBlocked) {
+    throw new ApiError(403, 'This account has been blocked');
   }
 
   req.user = user;
@@ -56,7 +62,8 @@ const optionalProtect = asyncHandler(async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id);
+    const model = decoded.type === 'admin' ? Admin : User;
+    const user = await model.findById(decoded.id);
 
     if (user) {
       req.user = user;
