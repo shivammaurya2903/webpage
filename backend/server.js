@@ -31,7 +31,7 @@ const server = http.createServer(app);
 initSocket(server);
 
 const frontendPath = path.resolve(__dirname, '../frontend');
-const corsOrigins = (process.env.CORS_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:5000')
+const corsOrigins = (process.env.CORS_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:5000,http://127.0.0.1:5000')
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
@@ -65,7 +65,7 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", 'https:'],
       fontSrc: ["'self'", 'data:', 'https:'],
       scriptSrc: ["'self'", "'unsafe-inline'", 'https:'],
-      connectSrc: ["'self'", 'https:', 'ws:', 'wss:']
+      connectSrc: ["'self'", 'http:', 'https:', 'ws:', 'wss:']
     }
   }
 }));
@@ -105,11 +105,23 @@ app.get('*', (req, res, next) => {
 app.use(notFound);
 app.use(errorHandler);
 
-const port = process.env.PORT || 5000;
+const port = process.env.PORT || 5000 ;
 
 async function start() {
   await connectDB();
   await seedDefaults();
+  server.on('error', (error) => {
+    if (error && error.code === 'EADDRINUSE') {
+      // eslint-disable-next-line no-console
+      console.error(`Port ${port} is already in use. Update PORT in backend/.env or stop the conflicting process.`);
+      process.exit(1);
+    }
+
+    // eslint-disable-next-line no-console
+    console.error('Server listen error:', error);
+    process.exit(1);
+  });
+
   server.listen(port, () => {
     // eslint-disable-next-line no-console
     console.log(`Server running on port ${port}`);

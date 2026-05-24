@@ -1,21 +1,26 @@
 /* Luxury Tour & Travels - Vanilla JS */
 
 (() => {
+  const DEFAULT_API_PORT = '5000';
+  const DEFAULT_TIMEOUT_MS = 12000;
+  const API_RETRY_DELAY_MS = 500;
+
   const API_BASE = (() => {
     const override = window.__API_BASE__ || document.documentElement.dataset.apiBase;
     if (override) return String(override).replace(/\/$/, '');
 
     if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
-      const { hostname, port, protocol } = window.location;
+      const { hostname, protocol } = window.location;
 
-      if ((hostname === 'localhost' || hostname === '127.0.0.1') && port && port !== '5000') {
-        return `${protocol}//${hostname}:5000`;
+      if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        const forcedPort = String(window.__API_PORT__ || document.documentElement.dataset.apiPort || DEFAULT_API_PORT).trim();
+        if (forcedPort) return `${protocol}//${hostname}:${forcedPort}`;
       }
 
       return window.location.origin.replace(/\/$/, '');
     }
 
-    return 'http://localhost:5000';
+    return `http://localhost:${DEFAULT_API_PORT}`;
   })();
 
   function apiUrl(path) {
@@ -32,6 +37,73 @@
     } catch (e) {
       return { message: text };
     }
+  }
+
+  function delay(ms) {
+    return new Promise((resolve) => {
+      window.setTimeout(resolve, ms);
+    });
+  }
+
+  function isNetworkFailure(error) {
+    if (!error) return false;
+    if (error.name === 'AbortError') return false;
+    if (error instanceof TypeError) return true;
+    const message = String(error.message || '').toLowerCase();
+    return message.includes('failed to fetch') || message.includes('networkerror') || message.includes('load failed');
+  }
+
+  function isBrowserExtensionNoise(reason) {
+    const text = String(reason?.message || reason || '').toLowerCase();
+    return (
+      text.includes('listener indicated an asynchronous response')
+      && text.includes('message channel closed before a response was received')
+    );
+  }
+
+  function normalizeRequestError(error, url) {
+    if (error?.name === 'AbortError') {
+      return new Error(`Request timed out. Please try again. (${url})`);
+    }
+
+    if (isNetworkFailure(error)) {
+      return new Error(`Unable to connect to server. Check backend status and API URL. (${url})`);
+    }
+
+    return error instanceof Error ? error : new Error('Unexpected request error');
+  }
+
+  async function performRequest(url, options = {}, requestOptions = {}) {
+    const {
+      timeoutMs = Number(document.documentElement.dataset.apiTimeout || window.__API_TIMEOUT__ || DEFAULT_TIMEOUT_MS),
+      retries,
+      retryDelayMs = API_RETRY_DELAY_MS
+    } = requestOptions;
+
+    const method = String(options.method || 'GET').toUpperCase();
+    const maxRetries = Number.isInteger(retries) ? retries : (method === 'GET' ? 1 : 0);
+
+    let attempt = 0;
+    while (attempt <= maxRetries) {
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+
+      try {
+        const response = await fetch(url, { ...options, signal: controller.signal });
+        window.clearTimeout(timer);
+        return response;
+      } catch (error) {
+        window.clearTimeout(timer);
+        const normalizedError = normalizeRequestError(error, url);
+        const canRetry = attempt < maxRetries && isNetworkFailure(error);
+        if (!canRetry) throw normalizedError;
+        await delay(retryDelayMs * (attempt + 1));
+      }
+
+      attempt += 1;
+    }
+
+    throw new Error(`Request failed after retries. (${url})`);
   }
 
   // Global error handlers to capture unhandled rejections and uncaught errors
@@ -65,11 +137,21 @@
   }
 
   window.addEventListener('unhandledrejection', (ev) => {
+    if (isBrowserExtensionNoise(ev?.reason)) {
+      if (typeof ev.preventDefault === 'function') ev.preventDefault();
+      console.info('Ignored browser extension async listener warning:', ev.reason);
+      return;
+    }
     console.error('Unhandled Promise Rejection:', ev.reason);
     showGlobalNotification('An unexpected error occurred. See console for details.');
   });
 
   window.addEventListener('error', (ev) => {
+    if (isBrowserExtensionNoise(ev?.message || ev?.error?.message || '')) {
+      if (typeof ev.preventDefault === 'function') ev.preventDefault();
+      console.info('Ignored browser extension async listener warning:', ev.message || ev.error?.message);
+      return;
+    }
     console.error('Uncaught Error:', ev.error || ev.message, ev);
     showGlobalNotification('An unexpected error occurred. See console for details.');
   });
@@ -108,7 +190,7 @@
     }
   }
 
-  function authFetch(url, opts = {}) {
+  function authFetch(url, opts = {}, requestOptions = {}) {
     opts = { ...opts };
     opts.headers = opts.headers ? { ...opts.headers } : {};
     const token = getToken();
@@ -116,7 +198,7 @@
     if (!opts.headers.Accept) opts.headers.Accept = 'application/json';
     // include credentials in case backend relies on cookies
     opts.credentials = opts.credentials || 'include';
-    return fetch(url, opts);
+    return performRequest(url, opts, requestOptions);
   }
 
   function setFormSubmitting(form, isSubmitting, label) {
@@ -303,7 +385,7 @@
         mb.textContent = 'My Bookings';
         mb.addEventListener('click', async () => {
           try {
-            const res = await authFetch(apiUrl('/api/bookings'));
+            const res = await authFetch(apiUrl('/api/bookings'), {}, { retries: 1 });
             const body = await safeJson(res);
             if (!res.ok) throw new Error(body?.message || 'Failed to fetch bookings');
             showBookingsModal(body.bookings || []);
@@ -632,7 +714,7 @@
     const password = form.querySelector('[name="password"]').value;
     setFormSubmitting(form, true, 'Logging in...');
     try {
-      const res = await fetch(apiUrl('/api/auth/login'), {
+      const res = await performRequest(apiUrl('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
@@ -660,7 +742,7 @@
     const password = form.querySelector('[name="password"]').value;
     setFormSubmitting(form, true, 'Creating account...');
     try {
-      const res = await fetch(apiUrl('/api/auth/register'), {
+      const res = await performRequest(apiUrl('/api/auth/register'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, phone, password })
@@ -761,7 +843,7 @@
           subject: 'Support Request'
         };
 
-        const response = await fetch(apiUrl('/api/contact'), {
+        const response = await performRequest(apiUrl('/api/contact'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -968,10 +1050,14 @@
           return;
         }
 
+        const paymentNote = paymentResult?.message
+          ? `${paymentResult.message} Advance amount: INR ${booking.bookingAdvance}.`
+          : `Booking created. Advance amount: INR ${booking.bookingAdvance}. Please contact support to complete payment.`;
+
         form.querySelector('[data-submit-status]')?.remove();
         const status = document.createElement('div');
         status.dataset.submitStatus = '';
-        status.textContent = `Booking created. Advance amount: ₹${booking.bookingAdvance}. Please contact support to complete payment.`;
+        status.textContent = paymentNote;
         status.className = 'submit-status';
         form.appendChild(status);
         form.reset();

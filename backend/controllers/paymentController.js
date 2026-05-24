@@ -8,7 +8,10 @@ const { sendEmail } = require('../services/emailService');
 const { paymentReceipt } = require('../services/emailTemplates');
 
 function getStripe() {
-  if (!process.env.STRIPE_SECRET_KEY) throw new ApiError(500, 'Stripe secret key is missing');
+  if (!process.env.STRIPE_SECRET_KEY) {
+    throw new ApiError(503, 'Online payment is not configured. Set STRIPE_SECRET_KEY to enable Stripe.');
+  }
+
   return new Stripe(process.env.STRIPE_SECRET_KEY);
 }
 
@@ -56,6 +59,18 @@ const createOrder = asyncHandler(async (req, res) => {
 
   const amount = resolveAmount(booking, paymentType);
   if (!amount || amount <= 0) throw new ApiError(400, 'Invalid payment amount');
+
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return res.json({
+      success: true,
+      message: 'Online payment is currently unavailable. Booking has been created; please contact support to complete payment manually.',
+      checkoutUrl: '',
+      paymentType,
+      amount,
+      manualPayment: true,
+      paymentConfigured: false
+    });
+  }
 
   const stripe = getStripe();
 
