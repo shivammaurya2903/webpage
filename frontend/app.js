@@ -578,6 +578,9 @@
   const authCloseBtn = document.getElementById('authCloseBtn');
   const loginOpenBtn = document.getElementById('loginOpenBtn');
   const registerOpenBtn = document.getElementById('registerOpenBtn');
+  const mobileLoginOpenBtn = document.getElementById('mobileLoginOpenBtn');
+  const mobileRegisterOpenBtn = document.getElementById('mobileRegisterOpenBtn');
+
   const loginForm = document.getElementById('loginForm');
   const registerForm = document.getElementById('registerForm');
   const showRegister = document.getElementById('showRegister');
@@ -586,30 +589,41 @@
 
   function openAuth(mode = 'login') {
     if (!authModal) return;
-    authModal.style.display = 'flex';
+    authModal.classList.add('is-open');
     authModal.setAttribute('aria-hidden', 'false');
+
     if (mode === 'login') {
-      loginForm.style.display = 'block';
-      registerForm.style.display = 'none';
+      loginForm?.classList.remove('is-hidden');
+      registerForm?.classList.add('is-hidden');
       authTitle.textContent = 'Login';
     } else {
-      loginForm.style.display = 'none';
-      registerForm.style.display = 'block';
+      loginForm?.classList.add('is-hidden');
+      registerForm?.classList.remove('is-hidden');
       authTitle.textContent = 'Register';
     }
   }
 
   function closeAuth() {
     if (!authModal) return;
-    authModal.style.display = 'none';
+    authModal.classList.remove('is-open');
     authModal.setAttribute('aria-hidden', 'true');
   }
+
 
   authCloseBtn?.addEventListener('click', closeAuth);
   loginOpenBtn?.addEventListener('click', () => openAuth('login'));
   registerOpenBtn?.addEventListener('click', () => openAuth('register'));
+  mobileLoginOpenBtn?.addEventListener('click', () => {
+    closeMenu();
+    openAuth('login');
+  });
+  mobileRegisterOpenBtn?.addEventListener('click', () => {
+    closeMenu();
+    openAuth('register');
+  });
   showRegister?.addEventListener('click', () => openAuth('register'));
   showLogin?.addEventListener('click', () => openAuth('login'));
+
 
   loginForm?.addEventListener('submit', async (e) => {
     e.preventDefault();

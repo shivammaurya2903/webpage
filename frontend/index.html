@@ -43,16 +43,22 @@
           <i class="fa-solid fa-phone"></i>
           8081181368
         </a>
-        <button id="loginOpenBtn" class="btn btn-ghost" type="button">Login</button>
-        <button id="registerOpenBtn" class="btn btn-ghost" type="button">Register</button>
 
+        <!-- desktop auth buttons -->
+        <div class="desktop-auth" aria-label="Desktop authentication">
+          <button id="loginOpenBtn" class="btn btn-ghost" type="button">Login</button>
+          <button id="registerOpenBtn" class="btn btn-ghost" type="button">Register</button>
+        </div>
+
+        <!-- mobile menu button -->
         <button class="menu-btn" data-menu-button aria-label="Open menu" aria-controls="mobile-menu" aria-expanded="false" type="button">
           <i class="fa-solid fa-bars"></i>
         </button>
       </div>
+
     </div>
 
-    <div class="mobile-menu" data-menu id="mobile-menu">
+        <div class="mobile-menu" data-menu id="mobile-menu">
       <div class="container mobile-menu-inner">
         <a href="#home" class="is-active">Home</a>
         <a href="#cars">Cars</a>
@@ -61,13 +67,24 @@
         <a href="#services">Services</a>
         <a href="#about">About Us</a>
         <a href="#support">Support</a>
+
+        <div class="mobile-auth" aria-label="Mobile authentication">
+          <button id="mobileLoginOpenBtn" class="btn btn-ghost" type="button">Login</button>
+          <button id="mobileRegisterOpenBtn" class="btn btn-ghost" type="button">Register</button>
+        </div>
+
+
         <!-- <a href="tel:8081181368" class="mobile-call">
+
+
           <i class="fa-solid fa-phone"></i>
           8081181368
         </a> -->
+
       </div>
     </div>
   </nav>
+
 
   <!-- HERO -->
   <section id="home" class="hero" aria-label="Luxury hero">
@@ -136,26 +153,43 @@
   </section>
 
   <!-- AUTH MODAL -->
-  <div id="authModal" class="auth-modal" aria-hidden="true" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;z-index:10000;">
-    <div style="background:#fff;padding:20px;border-radius:8px;max-width:420px;width:100%;box-shadow:0 8px 24px rgba(0,0,0,0.2);">
-      <button id="authCloseBtn" style="float:right;background:transparent;border:none;font-size:18px;">&times;</button>
-      <h3 id="authTitle">Login</h3>
+  <div id="authModal" class="auth-modal" aria-hidden="true">
+    <div class="auth-modal__panel">
+      <button id="authCloseBtn" class="auth-modal__close" type="button" aria-label="Close">&times;</button>
 
-      <form id="loginForm" style="display:block;margin-top:12px;">
+      <div class="auth-modal__header">
+        <h3 id="authTitle" class="auth-modal__title">Login</h3>
+      </div>
+
+      <form id="loginForm" class="auth-form" aria-label="Login form">
         <div class="field"><input name="email" type="email" placeholder="Email" required /></div>
         <div class="field"><input name="password" type="password" placeholder="Password" required /></div>
-        <div style="margin-top:8px;"><button type="submit" class="btn btn-primary">Login</button> <button id="showRegister" type="button" class="btn btn-ghost">Register instead</button></div>
+
+        <div class="auth-form__actions">
+          <button type="submit" class="btn btn-primary">Login</button>
+          <button id="showRegister" type="button" class="btn btn-ghost">Register instead</button>
+        </div>
       </form>
 
-      <form id="registerForm" style="display:none;margin-top:12px;">
+      <form id="registerForm" class="auth-form is-hidden" aria-label="Register form">
         <div class="field"><input name="name" type="text" placeholder="Full name" required /></div>
         <div class="field"><input name="email" type="email" placeholder="Email" required /></div>
         <div class="field"><input name="phone" type="tel" placeholder="Phone (+919xxxxxxxxx)" required /></div>
         <div class="field"><input name="password" type="password" placeholder="Password (min 8 chars)" required /></div>
-        <div style="margin-top:8px;"><button type="submit" class="btn btn-primary">Register</button> <button id="showLogin" type="button" class="btn btn-ghost">Login instead</button></div>
+
+        <div class="auth-form__actions">
+          <button type="submit" class="btn btn-primary">Register</button>
+          <button id="showLogin" type="button" class="btn btn-ghost">Login instead</button>
+        </div>
       </form>
+
+      <div class="auth-modal__hint" aria-hidden="true">
+        <i class="fa-solid fa-lock"></i>
+        <span>Secure login • Fast onboarding</span>
+      </div>
     </div>
   </div>
+
 
   <!-- BOOKINGS MODAL -->
   <div id="bookingsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;z-index:10000;">

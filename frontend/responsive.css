@@ -1,13 +1,22 @@
 /* Responsive refinements */
 
 @media (max-width: 992px) {
+  .auth-modal__panel {
+    width: min(520px, 100%);
+  }
+
   .nav-right .call-btn {
+    display: none;
+  }
+
+  .desktop-auth {
     display: none;
   }
 
   .nav-links {
     display: none;
   }
+
 
   .menu-btn {
     display: inline-flex;

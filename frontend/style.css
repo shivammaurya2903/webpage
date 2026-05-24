@@ -3,6 +3,161 @@
    Vanilla CSS only
    ===================================================== */
 
+/* =====================================================
+   AUTH MODAL (Login/Register)
+   ===================================================== */
+
+.auth-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  z-index: 10000;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+.auth-modal.is-open {
+  display: flex;
+}
+
+.auth-modal {
+  overflow-y: auto;
+}
+
+.auth-modal__panel {
+  margin: 0 auto;
+}
+
+
+.auth-modal__panel {
+  width: min(520px, 100%);
+  background: linear-gradient(180deg, rgba(255, 255, 255, .92), rgba(247, 241, 255, .86));
+  border: 1px solid rgba(106, 27, 154, .14);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  padding: 20px 20px 18px;
+  position: relative;
+  overflow: hidden;
+  animation: authModalPop .18s ease-out;
+}
+
+@keyframes authModalPop {
+  from { transform: translateY(8px) scale(.99); opacity: .6; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.auth-modal__panel::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  background: radial-gradient(800px 240px at 15% 0%, rgba(106, 27, 154, .18), transparent 45%),
+    radial-gradient(600px 220px at 95% 15%, rgba(212, 175, 55, .20), transparent 45%);
+  pointer-events: none;
+}
+
+.auth-modal__close {
+  position: absolute;
+  right: 16px;
+  top: 14px;
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  border: 1px solid rgba(106, 27, 154, .12);
+  background: rgba(255, 255, 255, .75);
+  color: #2f073f;
+  cursor: pointer;
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform .18s ease, background .18s ease;
+}
+
+.auth-modal__close:hover {
+  transform: translateY(-1px);
+  background: rgba(239, 227, 255, .7);
+}
+
+.auth-modal__header {
+  padding-top: 4px;
+  margin-bottom: 6px;
+}
+
+.auth-modal__title {
+  font-family: 'Cormorant Garamond', serif;
+  color: #2f073f;
+  font-size: 32px;
+  letter-spacing: -.5px;
+  padding-right: 50px;
+}
+
+.auth-form {
+  margin-top: 12px;
+}
+
+.auth-form.is-hidden {
+  display: none;
+}
+
+.auth-form .field {
+  margin-bottom: 12px;
+}
+
+.auth-form .field input {
+  width: 100%;
+  padding: 15px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(106, 27, 154, .14);
+  background: rgba(255, 255, 255, .88);
+  outline: none;
+  font-weight: 600;
+  color: #2a2a2a;
+  box-shadow: 0 10px 26px rgba(48, 16, 84, .05);
+  transition: box-shadow .2s ease, border-color .2s ease, background .2s ease, transform .2s ease;
+}
+
+.auth-form .field input:focus {
+  border-color: rgba(212, 175, 55, .6);
+  box-shadow: 0 0 0 5px rgba(212, 175, 55, .18);
+  background: #fff;
+}
+
+.auth-form__actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.auth-form__actions .btn {
+  flex: 1;
+}
+
+.auth-modal__hint {
+  margin-top: 14px;
+
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: rgba(212, 175, 55, .12);
+  border: 1px solid rgba(212, 175, 55, .32);
+  color: #5a2a00;
+  font-weight: 800;
+}
+
+.auth-modal__hint i {
+  color: var(--primary);
+}
+
+/* booking uses .has-error already */
+
+
+
 :root {
   --primary: #6A1B9A;
   --primary-2: #8e44ad;
@@ -66,8 +221,22 @@ img {
   margin: 0 auto;
 }
 
+/* Mobile auth buttons inside hamburger menu */
+.mobile-auth {
+  display: flex;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.mobile-auth .btn {
+  flex: 1;
+  padding: 12px 14px;
+}
+
+
 /* Utilities */
 .sr-only {
+
   position: absolute;
   width: 1px;
   height: 1px;
@@ -263,11 +432,18 @@ img {
   width: 100%;
 }
 
-.nav-right {
+  .nav-right {
   display: flex;
   gap: 14px;
   align-items: center;
 }
+
+.desktop-auth {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
 
 .call-btn {
   background: linear-gradient(135deg, var(--primary), #8e44ad);
