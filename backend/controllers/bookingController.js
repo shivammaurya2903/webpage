@@ -1,5 +1,6 @@
 const Booking = require('../models/Booking');
 const Invoice = require('../models/Invoice');
+const SiteSettings = require('../models/SiteSettings');
 const Driver = require('../models/Driver');
 const Route = require('../models/Route');
 const Car = require('../models/Car');
@@ -305,7 +306,9 @@ const downloadBookingInvoice = asyncHandler(async (req, res) => {
   const invoice = booking.invoice || await findInvoiceForBooking(booking);
   if (!invoice) throw new ApiError(404, 'Invoice not found');
 
-  const pdfBuffer = await buildInvoicePdf({ booking, invoice, driver: booking.assignedDriver });
+  const settings = await SiteSettings.findOne({}).lean();
+
+  const pdfBuffer = await buildInvoicePdf({ booking, invoice, driver: booking.assignedDriver, settings });
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${invoice.invoiceId || booking.bookingId}.pdf"`);
   res.send(pdfBuffer);

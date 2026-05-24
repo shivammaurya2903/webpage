@@ -145,6 +145,17 @@ async function seedDefaults() {
     contactPhone: '8081181368',
     address: 'Lucknow, Uttar Pradesh',
     logoText: 'RK',
+    billing: {
+      gstin: '09ABCDE1234F1Z5',
+      taxPercent: 5,
+      upiId: 'rktravel@upi',
+      bankAccountName: 'RAM KRISHNA TOUR & TRAVELS',
+      bankAccountNumber: '000000000000',
+      bankIfsc: 'BANK0000000',
+      bankBranch: 'Lucknow Main',
+      paymentLink: '',
+      footerNote: 'Thank you for choosing our premium chauffeur and travel services.'
+    },
     homepage: {
       heroTitle: 'Travel in luxury, arrive in style',
       heroSubtitle: 'Premium rides. Trusted drivers. Memorable journeys.',

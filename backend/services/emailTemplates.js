@@ -54,7 +54,7 @@ function invoiceGenerated(invoice, booking) {
     <p><strong>Invoice ID:</strong> ${invoice.invoiceId}<br/>
     <strong>Final Amount:</strong> ₹${invoice.totalFare}<br/>
     <strong>Payment Status:</strong> ${invoice.paymentStatus}</p>
-    <p>You can review the invoice in your booking details and complete payment after ride completion.</p>
+    <p>Your premium PDF invoice is attached. You can also review, print, or download it from your booking details.</p>
   `);
 }
 
@@ -64,6 +64,7 @@ function paymentReceipt(payment, booking) {
     <p><strong>Amount:</strong> ₹${payment.amount}<br/>
     <strong>Status:</strong> ${payment.status}<br/>
     <strong>Invoice:</strong> ${booking.invoiceId || 'Pending'}</p>
+    <p>Your updated PDF receipt is attached for records and printing.</p>
   `);
 }
 

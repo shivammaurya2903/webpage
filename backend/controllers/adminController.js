@@ -64,6 +64,17 @@ function mapSettingsPayload(body, file) {
     contactPhone: body.contactPhone,
     address: body.address,
     logoText: body.logoText,
+    billing: {
+      gstin: body.gstin,
+      taxPercent: toNumber(body.taxPercent, 5),
+      upiId: body.upiId,
+      bankAccountName: body.bankAccountName,
+      bankAccountNumber: body.bankAccountNumber,
+      bankIfsc: body.bankIfsc,
+      bankBranch: body.bankBranch,
+      paymentLink: body.paymentLink,
+      footerNote: body.footerNote
+    },
     socialLinks: {
       website: body.website,
       facebook: body.facebook,
@@ -540,6 +551,37 @@ const listPayments = asyncHandler(async (req, res) => {
   res.json({ success: true, page, limit, total, pages: Math.ceil(total / limit), payments });
 });
 
+const listInvoices = asyncHandler(async (req, res) => {
+  const page = Math.max(1, Number(req.query.page || 1));
+  const limit = Math.min(50, Math.max(1, Number(req.query.limit || 10)));
+  const skip = (page - 1) * limit;
+  const search = String(req.query.search || '').trim();
+  const paymentStatus = String(req.query.paymentStatus || '').trim();
+  const filters = [];
+
+  if (paymentStatus) filters.push({ paymentStatus });
+  if (search) {
+    const escaped = escapeRegExp(search);
+    filters.push({
+      $or: [
+        { invoiceId: { $regex: escaped, $options: 'i' } },
+        { bookingId: { $regex: escaped, $options: 'i' } },
+        { customerName: { $regex: escaped, $options: 'i' } },
+        { email: { $regex: escaped, $options: 'i' } },
+        { phone: { $regex: escaped, $options: 'i' } }
+      ]
+    });
+  }
+
+  const query = filters.length ? { $and: filters } : {};
+  const [invoices, total] = await Promise.all([
+    Invoice.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).populate('booking').lean(),
+    Invoice.countDocuments(query)
+  ]);
+
+  res.json({ success: true, page, limit, total, pages: Math.ceil(total / limit), invoices });
+});
+
 const refundPayment = asyncHandler(async (req, res) => {
   const payment = await Payment.findById(req.params.id).populate('booking');
   if (!payment) throw new ApiError(404, 'Payment not found');
@@ -730,6 +772,7 @@ module.exports = {
   blockCustomer,
   deleteCustomer,
   listPayments,
+  listInvoices,
   refundPayment,
   listMessages,
   replyMessage,

@@ -43,6 +43,7 @@
     profileAvatar: document.getElementById('profileAvatar'),
     notificationCount: document.getElementById('notificationCount'),
     notificationList: document.getElementById('notificationList'),
+    notificationDropdown: document.getElementById('notificationDropdown'),
     topbar: document.querySelector('.topbar'),
     modalBackdrop: document.getElementById('modalBackdrop'),
     modalTitle: document.getElementById('modalTitle'),
@@ -54,7 +55,7 @@
   };
 
   const state = {
-    token: localStorage.getItem(STORAGE_TOKEN) || '',
+    token: localStorage.getItem(STORAGE_TOKEN) || sessionStorage.getItem(STORAGE_TOKEN) || '',
     admin: readJSON(STORAGE_ADMIN),
     view: 'dashboard',
     search: '',
@@ -66,6 +67,7 @@
     routes: null,
     customers: null,
     payments: null,
+    invoices: null,
     messages: null,
     settings: null,
     notifications: null,
@@ -76,7 +78,7 @@
 
   function readJSON(key) {
     try {
-      const raw = localStorage.getItem(key);
+      const raw = localStorage.getItem(key) || sessionStorage.getItem(key);
       return raw ? JSON.parse(raw) : null;
     } catch (_) {
       return null;
@@ -287,6 +289,7 @@
       routes: ['Routes', 'Route Pricing Management'],
       customers: ['Customers', 'Customer Operations'],
       payments: ['Payments', 'Transaction Control'],
+      invoices: ['Invoices', 'Invoice Management'],
       messages: ['Messages', 'Inquiry Inbox'],
       content: ['Website Content', 'Brand & Homepage Control'],
       analytics: ['Analytics', 'Business Intelligence'],
@@ -367,11 +370,14 @@
 
   function statCard(icon, label, value, meta) {
     return `
-      <article class="card metric-card">
+      <article class="card dashboard-stat-row">
         <div class="metric-icon"><i class="fa-solid ${icon}"></i></div>
-        <div class="metric-label">${escapeHtml(label)}</div>
-        <h3 class="metric-value">${escapeHtml(value)}</h3>
-        <div class="metric-meta">${escapeHtml(meta || '')}</div>
+        <div class="dashboard-stat-copy">
+          <div class="metric-label">${escapeHtml(label)}</div>
+          <h3 class="metric-value">${escapeHtml(value)}</h3>
+          <div class="metric-meta">${escapeHtml(meta || '')}</div>
+        </div>
+        <div class="dashboard-stat-rail"></div>
       </article>
     `;
   }
@@ -415,52 +421,68 @@
     const notifications = dashboard.notifications || [];
 
     el.viewRoot.innerHTML = `
-      <div class="view">
-        <section class="section-grid">
-          ${statCard('fa-calendar-check', 'Total bookings', stats.totalBookings || 0, `${stats.pendingRides || 0} pending rides`)}
-          ${statCard('fa-user-shield', 'Active drivers', stats.activeDrivers || 0, `${stats.acceptedRides || 0} accepted rides`)}
-          ${statCard('fa-indian-rupee-sign', 'Revenue', fmtMoney(stats.revenue || 0), `${stats.pendingPayments || 0} pending payments`)}
-          ${statCard('fa-users', 'Customers', stats.totalCustomers || 0, `${stats.blockedCustomers || 0} blocked accounts`)}
-          <article class="card chart-card">
-            <div class="card-header"><div><h3>Revenue trend</h3><p>Monthly completed payment totals</p></div></div>
-            <div class="chart-box"><canvas id="revenueChart"></canvas></div>
-          </article>
-          <article class="card chart-card">
-            <div class="card-header"><div><h3>Booking trend</h3><p>Monthly booking activity</p></div></div>
-            <div class="chart-box"><canvas id="bookingChart"></canvas></div>
-          </article>
+      <div class="view view-dashboard">
+        <section class="card dashboard-hero">
+          <div class="card-header dashboard-hero-header">
+            <div>
+              <p class="eyebrow">Dashboard snapshot</p>
+              <h3>Luxury operations overview</h3>
+            </div>
+            <div class="helper">Live status and activity summary</div>
+          </div>
+
+          <div class="dashboard-stat-list">
+            ${statCard('fa-calendar-check', 'Total bookings', stats.totalBookings || 0, `${stats.pendingRides || 0} pending rides`)}
+            ${statCard('fa-user-shield', 'Active drivers', stats.activeDrivers || 0, `${stats.acceptedRides || 0} accepted rides`)}
+            ${statCard('fa-indian-rupee-sign', 'Revenue', fmtMoney(stats.revenue || 0), `${stats.pendingPayments || 0} pending payments`)}
+            ${statCard('fa-users', 'Customers', stats.totalCustomers || 0, `${stats.blockedCustomers || 0} blocked accounts`)}
+          </div>
         </section>
 
-        <section class="subgrid">
+        <section class="dashboard-feed">
+          <section class="dashboard-chart-row">
+            <article class="card chart-card">
+              <div class="card-header"><div><h3>Revenue trend</h3><p>Monthly completed payment totals</p></div></div>
+              <div class="chart-box"><canvas id="revenueChart"></canvas></div>
+            </article>
+
+            <article class="card chart-card">
+              <div class="card-header"><div><h3>Booking trend</h3><p>Monthly booking activity</p></div></div>
+              <div class="chart-box"><canvas id="bookingChart"></canvas></div>
+            </article>
+          </section>
+
           <article class="card stack-card">
             <div class="card-header"><div><h4>Recent bookings</h4><p>Live operational queue</p></div></div>
             <div class="notice-list">
               ${recentBookings.map((booking) => `<div class="notice-item"><strong>${escapeHtml(booking.bookingId || '—')}</strong><span>${escapeHtml(booking.customerName || '')}</span><span class="helper">${escapeHtml(booking.pickupLocation || '')} → ${escapeHtml(booking.dropLocation || '')}</span><div>${renderBadge(booking.bookingStatus || booking.paymentStatus)}</div></div>`).join('') || '<div class="empty-state">No bookings yet.</div>'}
             </div>
           </article>
+
           <article class="card stack-card">
             <div class="card-header"><div><h4>Recent payments</h4><p>Settlement activity</p></div></div>
             <div class="notice-list">
               ${recentPayments.map((payment) => `<div class="notice-item"><strong>${escapeHtml(payment.booking?.bookingId || payment.metadata?.bookingId || 'Payment')}</strong><span>${fmtMoney(payment.amount)}</span><span class="helper">${escapeHtml(payment.paymentType)} · ${escapeHtml(payment.status)}</span></div>`).join('') || '<div class="empty-state">No payments yet.</div>'}
             </div>
           </article>
+
           <article class="card stack-card">
             <div class="card-header"><div><h4>Inbox</h4><p>Newest inquiries</p></div></div>
             <div class="notice-list">
               ${recentMessages.map((message) => `<div class="notice-item"><strong>${escapeHtml(message.subject || 'General inquiry')}</strong><span>${escapeHtml(message.name || '')}</span><span class="helper">${escapeHtml(message.email || '')}</span></div>`).join('') || '<div class="empty-state">No messages yet.</div>'}
             </div>
           </article>
-        </section>
 
-        <section class="card table-card">
-          <div class="card-header"><div><h3>Notifications</h3><p>System alerts and live events</p></div></div>
-          ${tableShell(['Title', 'Message', 'Time'], notifications.map((item) => `
-            <tr>
-              <td>${escapeHtml(item.title || item.type || 'Notification')}</td>
-              <td>${escapeHtml(item.message || '')}</td>
-              <td>${escapeHtml(fmtDateTime(item.createdAt))}</td>
-            </tr>
-          `).join(''), 'No notifications available')}
+          <article class="card table-card">
+            <div class="card-header"><div><h3>Notifications</h3><p>System alerts and live events</p></div></div>
+            ${tableShell(['Title', 'Message', 'Time'], notifications.map((item) => `
+              <tr>
+                <td>${escapeHtml(item.title || item.type || 'Notification')}</td>
+                <td>${escapeHtml(item.message || '')}</td>
+                <td>${escapeHtml(fmtDateTime(item.createdAt))}</td>
+              </tr>
+            `).join(''), 'No notifications available')}
+          </article>
         </section>
       </div>
     `;
@@ -541,6 +563,15 @@
     return state.payments;
   }
 
+  async function loadInvoices(force = false) {
+    if (state.invoices && !force) return state.invoices;
+    const query = new URLSearchParams();
+    if (state.search) query.set('search', state.search);
+    const body = await apiFetch(`/api/admin/invoices?${query.toString()}`);
+    state.invoices = body.invoices || [];
+    return state.invoices;
+  }
+
   async function loadMessages(force = false) {
     if (state.messages && !force) return state.messages;
     const body = await apiFetch('/api/admin/messages');
@@ -565,6 +596,12 @@
 
   function renderBookingsView() {
     const bookings = state.bookings || [];
+    const bookingStats = {
+      total: bookings.length,
+      pending: bookings.filter((booking) => String(booking.bookingStatus || '').toLowerCase().includes('pending')).length,
+      approved: bookings.filter((booking) => String(booking.bookingStatus || '').toLowerCase().includes('approved')).length,
+      paid: bookings.filter((booking) => String(booking.paymentStatus || '').toLowerCase().includes('paid')).length
+    };
     const rows = bookings.map((booking) => `
       <tr>
         <td><strong>${escapeHtml(booking.bookingId)}</strong><div class="helper">${escapeHtml(fmtDateTime(booking.createdAt))}</div></td>
@@ -581,6 +618,8 @@
             `<button class="small-btn" data-action="booking-status" data-id="${booking._id}" data-status="Ride Started">Start</button>`,
             `<button class="small-btn" data-action="booking-status" data-id="${booking._id}" data-status="Ride Completed">Complete</button>`,
             `<button class="small-btn primary" data-action="booking-generate-invoice" data-id="${booking._id}">Generate invoice</button>`,
+            `${booking.invoiceId || booking.invoice?.invoiceId ? `<button class="small-btn" data-action="booking-regenerate-invoice" data-id="${booking._id}">Regenerate</button>` : ''}`,
+            `${booking.invoiceId || booking.invoice?.invoiceId ? `<button class="small-btn gold" data-action="booking-send-invoice" data-id="${booking._id}">Resend</button>` : ''}`,
             `<button class="small-btn gold" data-action="booking-mark-paid" data-id="${booking._id}">Mark paid</button>`,
             `<button class="small-btn danger" data-action="booking-reject" data-id="${booking._id}">Reject</button>`,
             `${booking.invoiceId || booking.invoice?.invoiceId ? `<button class="small-btn" data-action="booking-download-invoice" data-id="${booking._id}">Download invoice</button>` : ''}`,
@@ -591,16 +630,40 @@
     `).join('');
 
     el.viewRoot.innerHTML = `
-      <div class="view">
-        <section class="card">
-          <div class="card-header">
-            <div><h3>Booking control</h3><p>Search, filter, accept, reject, assign driver, and delete</p></div>
-            <div class="action-row">
+      <div class="view booking-view">
+        <section class="booking-hero">
+          <div class="card-header booking-header">
+            <div>
+              <p class="eyebrow">Booking section</p>
+              <h3>Booking control</h3>
+              <p>Search, filter, accept, reject, assign driver, and delete</p>
+            </div>
+            <div class="action-row booking-actions">
               <input class="search-pill" id="bookingSearch" type="search" placeholder="Search bookings" value="${escapeHtml(state.search)}" />
               <button class="primary-btn" id="bookingRefreshBtn" type="button">Refresh</button>
             </div>
           </div>
-          <div class="filter-row">
+
+          <ul class="booking-summary">
+            <li class="booking-stat">
+              <span class="booking-stat__label">Total bookings</span>
+              <strong>${bookingStats.total}</strong>
+            </li>
+            <li class="booking-stat">
+              <span class="booking-stat__label">Pending</span>
+              <strong>${bookingStats.pending}</strong>
+            </li>
+            <li class="booking-stat">
+              <span class="booking-stat__label">Approved</span>
+              <strong>${bookingStats.approved}</strong>
+            </li>
+            <li class="booking-stat">
+              <span class="booking-stat__label">Paid</span>
+              <strong>${bookingStats.paid}</strong>
+            </li>
+          </ul>
+
+          <div class="filter-row booking-filters">
             <button class="secondary-btn" data-filter-status="">All</button>
             <button class="secondary-btn" data-filter-status="Pending">Pending</button>
             <button class="secondary-btn" data-filter-status="Approved">Approved</button>
@@ -612,7 +675,7 @@
             <button class="secondary-btn" data-filter-status="Cancelled">Cancelled</button>
           </div>
         </section>
-        <section class="card table-card">
+        <section class="card table-card booking-table-card">
           ${tableShell(['Booking', 'Customer', 'Route', 'Vehicle', 'Status', 'Payment', 'Driver', 'Actions'], rows)}
         </section>
       </div>
@@ -795,6 +858,37 @@
     `;
   }
 
+  function renderInvoicesView() {
+    const invoices = state.invoices || [];
+    const rows = invoices.map((invoice) => {
+      const bookingId = invoice.booking?._id || invoice.booking;
+      return `
+      <tr>
+        <td><strong>${escapeHtml(invoice.invoiceId || '—')}</strong><div class="helper">${escapeHtml(invoice.bookingId || '—')}</div></td>
+        <td>${escapeHtml(invoice.customerName || '—')}<div class="helper">${escapeHtml(invoice.email || '')}</div></td>
+        <td>${fmtMoney(invoice.totalFare || 0)}</td>
+        <td>${renderBadge(invoice.paymentStatus || 'Pending')}</td>
+        <td>${escapeHtml(fmtDateTime(invoice.createdAt))}</td>
+        <td>
+          ${bookingId ? renderButtons([
+            `<button class="small-btn" data-action="booking-download-invoice" data-id="${bookingId}">Download</button>`,
+            `<button class="small-btn gold" data-action="booking-send-invoice" data-id="${bookingId}">Resend</button>`,
+            `<button class="small-btn primary" data-action="booking-regenerate-invoice" data-id="${bookingId}">Regenerate</button>`
+          ]) : '<span class="helper">Booking not linked</span>'}
+        </td>
+      </tr>
+    `;
+    }).join('');
+
+    el.viewRoot.innerHTML = `
+      <div class="view">
+        <section class="card table-card">
+          ${tableShell(['Invoice', 'Customer', 'Amount', 'Status', 'Created', 'Actions'], rows, 'No invoices found')}
+        </section>
+      </div>
+    `;
+  }
+
   function renderMessagesView() {
     const messages = state.messages || [];
     const rows = messages.map((message) => `
@@ -929,6 +1023,7 @@
     else if (state.view === 'routes') renderRoutesView();
     else if (state.view === 'customers') renderCustomersView();
     else if (state.view === 'payments') renderPaymentsView();
+    else if (state.view === 'invoices') renderInvoicesView();
     else if (state.view === 'messages') renderMessagesView();
     else if (state.view === 'content') renderContentView();
     else if (state.view === 'analytics') renderAnalyticsView();
@@ -937,7 +1032,7 @@
   }
 
   function resetCaches(except = null) {
-    const keys = ['dashboard', 'bookings', 'drivers', 'cars', 'packages', 'routes', 'customers', 'payments', 'messages', 'settings', 'notifications'];
+    const keys = ['dashboard', 'bookings', 'drivers', 'cars', 'packages', 'routes', 'customers', 'payments', 'invoices', 'messages', 'settings', 'notifications'];
     keys.forEach((key) => {
       if (key !== except) state[key] = null;
     });
@@ -969,6 +1064,9 @@
       } else if (state.view === 'payments') {
         await loadPayments(true);
         renderPaymentsView();
+      } else if (state.view === 'invoices') {
+        await loadInvoices(true);
+        renderInvoicesView();
       } else if (state.view === 'messages') {
         await loadMessages(true);
         renderMessagesView();
@@ -1136,7 +1234,9 @@
         car: `/api/admin/cars/${id}`,
         package: `/api/admin/packages/${id}`,
         route: `/api/admin/routes/${id}`,
-        booking: `/api/admin/bookings/${id}`
+        booking: `/api/admin/bookings/${id}`,
+        customer: `/api/admin/customers/${id}`,
+        message: `/api/admin/messages/${id}`
       };
       await apiFetch(paths[entity], { method: 'DELETE' });
       resetCaches();
@@ -1182,6 +1282,18 @@
       } else if (action === 'booking-generate-invoice') {
         await apiFetch(`/api/admin/bookings/${id}/generate-invoice`, { method: 'POST' });
         toast('Invoice generated', 'Invoice is ready for download');
+        state.bookings = null;
+        state.dashboard = null;
+        await refreshView();
+      } else if (action === 'booking-regenerate-invoice') {
+        await apiFetch(`/api/admin/bookings/${id}/regenerate-invoice`, { method: 'POST' });
+        toast('Invoice regenerated', 'A fresh PDF was created');
+        state.bookings = null;
+        state.dashboard = null;
+        await refreshView();
+      } else if (action === 'booking-send-invoice') {
+        await apiFetch(`/api/admin/bookings/${id}/send-invoice`, { method: 'POST' });
+        toast('Invoice resent', 'Customer received the updated invoice');
         state.bookings = null;
         state.dashboard = null;
         await refreshView();
@@ -1256,15 +1368,22 @@
       } else if (target.dataset.messageDelete) {
         await deleteEntity('message', target.dataset.messageDelete);
       } else if (target.dataset.notificationRead) {
-        await apiFetch(`/api/admin/notifications/${target.dataset.notificationRead}/read`, { method: 'PATCH' });
-        state.notifications = null;
+        const response = await apiFetch(`/api/admin/notifications/${target.dataset.notificationRead}/read`, { method: 'PATCH' });
+        const updated = response.notification || null;
+        state.notifications = (state.notifications || []).map((item) => (
+          item._id === target.dataset.notificationRead
+            ? { ...item, readAt: updated?.readAt || new Date().toISOString() }
+            : item
+        ));
+        renderShellNotifications();
+        if (state.view === 'notifications') renderCurrentView();
         toast('Notification read', 'Updated');
-        await refreshView();
       } else if (target.dataset.notificationDelete) {
         await apiFetch(`/api/admin/notifications/${target.dataset.notificationDelete}`, { method: 'DELETE' });
-        state.notifications = null;
+        state.notifications = (state.notifications || []).filter((item) => item._id !== target.dataset.notificationDelete);
+        renderShellNotifications();
+        if (state.view === 'notifications') renderCurrentView();
         toast('Notification removed', 'Deleted successfully');
-        await refreshView();
       }
     } catch (error) {
       toast('Action failed', error.message, 'error');
@@ -1371,6 +1490,7 @@
     state.routes = null;
     state.customers = null;
     state.payments = null;
+    state.invoices = null;
     state.messages = null;
     state.settings = null;
     state.notifications = null;
@@ -1405,6 +1525,11 @@
       const shellAction = event.target.closest('[data-shell-action="logout"]');
       if (shellAction) {
         logout();
+        return;
+      }
+      const closeNotifications = event.target.closest('[data-shell-action="close-notifications"]');
+      if (closeNotifications && el.notificationDropdown) {
+        el.notificationDropdown.open = false;
       }
     });
     el.sideNav.addEventListener('click', async (event) => {
@@ -1437,6 +1562,9 @@
           renderCurrentView();
         } else if (button.dataset.view === 'payments') {
           await loadPayments(true);
+          renderCurrentView();
+        } else if (button.dataset.view === 'invoices') {
+          await loadInvoices(true);
           renderCurrentView();
         } else if (button.dataset.view === 'messages') {
           await loadMessages(true);

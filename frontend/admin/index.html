@@ -96,6 +96,7 @@
         <button class="nav-item" data-view="cars"><i class="fa-solid fa-car-side"></i><span>Cars</span></button>
         <button class="nav-item" data-view="packages"><i class="fa-solid fa-route"></i><span>Packages</span></button>
         <button class="nav-item" data-view="payments"><i class="fa-solid fa-indian-rupee-sign"></i><span>Payments</span></button>
+        <button class="nav-item" data-view="invoices"><i class="fa-solid fa-file-invoice"></i><span>Invoices</span></button>
         <button class="nav-item" data-view="customers"><i class="fa-solid fa-users"></i><span>Customers</span></button>
         <button class="nav-item" data-view="analytics"><i class="fa-solid fa-wave-square"></i><span>Analytics</span></button>
         <button class="nav-item" data-view="messages"><i class="fa-solid fa-message"></i><span>Messages</span></button>
@@ -140,7 +141,12 @@
                   <p class="eyebrow">Notifications</p>
                   <strong>Recent activity</strong>
                 </div>
-                <span class="dropdown-chip">Live</span>
+                <div class="dropdown-header-actions">
+                  <span class="dropdown-chip">Live</span>
+                  <button type="button" class="icon-button icon-button--soft dropdown-close" data-shell-action="close-notifications" aria-label="Close notifications">
+                    <i class="fa-solid fa-xmark"></i>
+                  </button>
+                </div>
               </div>
               <div class="dropdown-list" id="notificationList"></div>
             </div>

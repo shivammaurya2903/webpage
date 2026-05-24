@@ -29,6 +29,8 @@ router.patch(
 );
 router.patch('/bookings/:id/assign-driver', [body('driverId').notEmpty().withMessage('driverId is required')], validateRequest, adminController.assignDriverToBooking);
 router.post('/bookings/:id/generate-invoice', invoiceController.generateBookingInvoice);
+router.post('/bookings/:id/regenerate-invoice', invoiceController.regenerateBookingInvoice);
+router.post('/bookings/:id/send-invoice', invoiceController.resendBookingInvoice);
 router.post('/bookings/:id/mark-paid', [body('paymentMethod').notEmpty().withMessage('paymentMethod is required')], validateRequest, invoiceController.markBookingPaid);
 router.get('/bookings/:id/invoice', invoiceController.downloadBookingInvoice);
 router.delete('/bookings/:id', adminController.deleteBooking);
@@ -58,6 +60,7 @@ router.patch('/customers/:id/block', adminController.blockCustomer);
 router.delete('/customers/:id', adminController.deleteCustomer);
 
 router.get('/payments', adminController.listPayments);
+router.get('/invoices', adminController.listInvoices);
 router.post('/payments/:id/refund', adminController.refundPayment);
 
 router.get('/messages', adminController.listMessages);

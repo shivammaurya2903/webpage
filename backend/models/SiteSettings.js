@@ -7,6 +7,17 @@ const siteSettingsSchema = new mongoose.Schema(
     contactPhone: { type: String, default: '8081181368' },
     address: { type: String, default: 'Lucknow, Uttar Pradesh' },
     logoText: { type: String, default: 'RK' },
+    billing: {
+      gstin: { type: String, default: '09ABCDE1234F1Z5' },
+      taxPercent: { type: Number, default: 5 },
+      upiId: { type: String, default: 'rktravel@upi' },
+      bankAccountName: { type: String, default: 'RAM KRISHNA TOUR & TRAVELS' },
+      bankAccountNumber: { type: String, default: '000000000000' },
+      bankIfsc: { type: String, default: 'BANK0000000' },
+      bankBranch: { type: String, default: 'Lucknow Main' },
+      paymentLink: { type: String, default: '' },
+      footerNote: { type: String, default: 'Thank you for choosing our premium chauffeur and travel services.' }
+    },
     socialLinks: {
       website: { type: String, default: '' },
       facebook: { type: String, default: '' },
