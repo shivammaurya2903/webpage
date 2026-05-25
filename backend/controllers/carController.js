@@ -1,6 +1,7 @@
 const Car = require('../models/Car');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
+const { sanitizeImageUrl } = require('../utils/imageUrl');
 
 const listCars = asyncHandler(async (req, res) => {
   const cars = await Car.find({}).sort({ createdAt: -1 }).lean();
@@ -9,7 +10,7 @@ const listCars = asyncHandler(async (req, res) => {
 
 const createCar = asyncHandler(async (req, res) => {
   const payload = { ...req.body };
-  if (req.file) payload.image = `/uploads/${req.file.filename}`;
+  payload.image = sanitizeImageUrl(payload.image, '');
   payload.pricePerDay = Number(payload.pricePerDay || payload.baseFare || 0);
   payload.baseFare = Number(payload.baseFare || payload.pricePerDay || 0);
   payload.pricePerKm = Number(payload.pricePerKm || 0);
@@ -26,13 +27,13 @@ const updateCar = asyncHandler(async (req, res) => {
   if (!car) throw new ApiError(404, 'Car not found');
 
   Object.assign(car, req.body);
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, 'image')) car.image = sanitizeImageUrl(req.body.image, car.image || '');
   if (req.body.baseFare) car.baseFare = Number(req.body.baseFare);
   if (req.body.pricePerKm) car.pricePerKm = Number(req.body.pricePerKm);
   if (req.body.extraKmRate) car.extraKmRate = Number(req.body.extraKmRate);
   if (req.body.nightChargePercent) car.nightChargePercent = Number(req.body.nightChargePercent);
   if (req.body.driverAllowance) car.driverAllowance = Number(req.body.driverAllowance);
   if (req.body.includedKm) car.includedKm = Number(req.body.includedKm);
-  if (req.file) car.image = `/uploads/${req.file.filename}`;
   await car.save();
   res.json({ success: true, car });
 });

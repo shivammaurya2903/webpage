@@ -1,12 +1,57 @@
+const fs = require('fs');
+const path = require('path');
 const PDFDocument = require('pdfkit');
 
-function formatMoney(value, currency = 'INR') {
+function findFontPath(candidates) {
+  for (const candidate of candidates) {
+    if (candidate && fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+function registerInvoiceFonts(doc) {
+  const fontPaths = {
+    regular: findFontPath([
+      'C:\\Windows\\Fonts\\segoeui.ttf',
+      'C:\\Windows\\Fonts\\segoeui.woff',
+      'C:\\Windows\\Fonts\\arial.ttf',
+      'C:\\Windows\\Fonts\\calibri.ttf'
+    ]),
+    bold: findFontPath([
+      'C:\\Windows\\Fonts\\segoeuib.ttf',
+      'C:\\Windows\\Fonts\\arialbd.ttf',
+      'C:\\Windows\\Fonts\\calibrib.ttf',
+      'C:\\Windows\\Fonts\\segoeuiz.ttf'
+    ]),
+    fallback: findFontPath([
+      'C:\\Windows\\Fonts\\seguisb.ttf',
+      'C:\\Windows\\Fonts\\segoesb.ttf'
+    ])
+  };
+
+  if (fontPaths.regular) doc.registerFont('Invoice-Regular', fontPaths.regular);
+  if (fontPaths.bold) doc.registerFont('Invoice-Bold', fontPaths.bold);
+  if (!fontPaths.regular && fontPaths.fallback) doc.registerFont('Invoice-Fallback', fontPaths.fallback);
+
+  // Ensure rupee glyph availability: most Windows UI fonts include INR glyphs.
+  const regularFont = fontPaths.regular ? 'Invoice-Regular' : (fontPaths.fallback ? 'Invoice-Fallback' : 'Helvetica');
+
+  return {
+    regular: regularFont,
+    bold: fontPaths.bold ? 'Invoice-Bold' : (fontPaths.fallback ? 'Invoice-Fallback' : 'Helvetica-Bold')
+  };
+}
+
+
+function formatMoney(value) {
   const amount = Number(value || 0);
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 0
-  }).format(amount);
+  return `${String.fromCharCode(0x20B9)}${new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(amount)}`;
+}
+
+function formatMoneySigned(value) {
+  const amount = Number(value || 0);
+  if (amount < 0) return `-${formatMoney(Math.abs(amount))}`;
+  return formatMoney(amount);
 }
 
 function formatDate(value, fallback = '—') {
@@ -26,6 +71,92 @@ function formatDateTime(value, fallback = '—') {
 function safeText(value, fallback = '—') {
   const text = String(value ?? '').trim();
   return text || fallback;
+}
+
+function truncateText(value, maxLength = 42, fallback = '—') {
+  const text = safeText(value, fallback);
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+}
+
+function getSubtotalFromFare(fare = {}, booking = {}, invoice = {}) {
+  const baseFare = Number(fare.baseFare || fare.baseAmount || booking.baseFare || invoice.subtotalAmount || booking.estimatedFare || 0);
+  const distanceCharges = Number(fare.distanceFare || fare.distanceCharges || 0);
+  const driverAllowance = Number(fare.driverAllowance || 0);
+  const tollCharges = Number(fare.tollCharges || 0);
+  const waitingCharges = Number(fare.waitingCharges || 0);
+  const nightCharges = Number(fare.nightCharges || 0);
+  const discountAmount = Math.max(0, Number(invoice.discountAmount || booking.finalBill?.discountAmount || fare.discountAmount || 0));
+
+  return Math.max(0, baseFare + distanceCharges + driverAllowance + tollCharges + waitingCharges + nightCharges - discountAmount);
+}
+
+function buildFinancialRows(model) {
+  const rows = [
+    {
+      description: 'Base Fare',
+      quantity: 1,
+      unitPrice: model.fare.baseFare,
+      tax: 0,
+      amount: model.fare.baseFare
+    },
+    {
+      description: 'Distance Charges',
+      quantity: 1,
+      unitPrice: model.fare.distanceCharges,
+      tax: 0,
+      amount: model.fare.distanceCharges
+    },
+    {
+      description: 'Driver Allowance',
+      quantity: 1,
+      unitPrice: model.fare.driverAllowance,
+      tax: 0,
+      amount: model.fare.driverAllowance
+    },
+    {
+      description: 'Toll Charges',
+      quantity: 1,
+      unitPrice: model.fare.tollCharges,
+      tax: 0,
+      amount: model.fare.tollCharges
+    },
+    {
+      description: 'Waiting Charges',
+      quantity: 1,
+      unitPrice: model.fare.waitingCharges,
+      tax: 0,
+      amount: model.fare.waitingCharges
+    },
+    {
+      description: 'Night Charges',
+      quantity: 1,
+      unitPrice: model.fare.nightCharges,
+      tax: 0,
+      amount: model.fare.nightCharges
+    },
+    {
+      description: `GST (${model.tax.taxPercent}%)`,
+      quantity: 1,
+      unitPrice: model.tax.subtotal,
+      tax: model.tax.taxAmount,
+      amount: model.tax.taxAmount,
+      isTaxRow: true
+    }
+  ];
+
+  if (model.tax.discountAmount > 0) {
+    rows.push({
+      description: 'Discounts',
+      quantity: 1,
+      unitPrice: model.tax.discountAmount,
+      tax: 0,
+      amount: -model.tax.discountAmount,
+      isDiscountRow: true
+    });
+  }
+
+  return rows;
 }
 
 function getBusinessInfo(settings = {}) {
@@ -53,47 +184,65 @@ function getBusinessInfo(settings = {}) {
 }
 
 function getLineItems(booking, invoice, businessInfo) {
-  if (Array.isArray(invoice.lineItems) && invoice.lineItems.length > 0) {
-    return invoice.lineItems;
-  }
-
   const fare = invoice.fareBreakdown || booking.finalBill || {};
-  const baseFare = Number(fare.baseFare || fare.baseAmount || invoice.subtotalAmount || booking.estimatedFare || invoice.totalFare || 0);
-  const distanceCharges = Number(fare.distanceFare || fare.distanceCharges || 0);
-  const waitingCharges = Number(fare.waitingCharges || 0);
-  const tollCharges = Number(fare.tollCharges || 0);
-  const driverAllowance = Number(fare.driverAllowance || 0);
-  const nightCharges = Number(fare.nightCharges || 0);
-  const discountAmount = Number(fare.discountAmount || 0);
   const taxPercent = Number(fare.gstPercent || invoice.taxPercent || businessInfo.taxPercent || 5);
-  const taxable = Math.max(0, baseFare + distanceCharges + waitingCharges + tollCharges + driverAllowance + nightCharges - discountAmount);
-  const taxAmount = Number(fare.gstAmount || invoice.taxAmount || Math.round(taxable * (taxPercent / 100)));
+  const subtotal = getSubtotalFromFare(fare, booking, invoice);
+  const discountAmount = Math.max(0, Number(invoice.discountAmount || booking.finalBill?.discountAmount || fare.discountAmount || 0));
+  const taxAmount = Number(fare.gstAmount || invoice.taxAmount || Math.round(subtotal * (taxPercent / 100)));
 
-  return [
-    { description: 'Base Fare', quantity: 1, rate: baseFare, amount: baseFare },
-    { description: 'Distance Charges', quantity: 1, rate: distanceCharges, amount: distanceCharges },
-    { description: 'Waiting Charges', quantity: 1, rate: waitingCharges, amount: waitingCharges },
-    { description: 'Toll Charges', quantity: 1, rate: tollCharges, amount: tollCharges },
-    { description: 'Driver Allowance', quantity: 1, rate: driverAllowance, amount: driverAllowance },
-    { description: 'Night Charges', quantity: 1, rate: nightCharges, amount: nightCharges },
-    { description: 'Discount', quantity: 1, rate: -discountAmount, amount: -discountAmount },
-    { description: `GST (${taxPercent}%)`, quantity: 1, rate: taxAmount, amount: taxAmount }
-  ];
+  return buildFinancialRows({
+    fare: {
+      baseFare: Number(fare.baseFare || fare.baseAmount || booking.baseFare || invoice.subtotalAmount || booking.estimatedFare || 0),
+      distanceCharges: Number(fare.distanceFare || fare.distanceCharges || 0),
+      driverAllowance: Number(fare.driverAllowance || 0),
+      tollCharges: Number(fare.tollCharges || 0),
+      waitingCharges: Number(fare.waitingCharges || 0),
+      nightCharges: Number(fare.nightCharges || 0)
+    },
+    tax: {
+      subtotal,
+      discountAmount,
+      taxPercent,
+      taxAmount
+    }
+  });
 }
 
 function buildInvoiceModel({ booking, invoice, driver, settings }) {
   const business = getBusinessInfo(settings);
-  const lineItems = getLineItems(booking, invoice, business);
-  const subtotal = lineItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-  const discountAmount = Math.abs(Number(invoice.discountAmount || booking.finalBill?.discountAmount || 0));
-  const taxPercent = Number(invoice.taxPercent || booking.finalBill?.gstPercent || business.taxPercent || 5);
-  const taxAmount = Number(invoice.taxAmount || booking.finalBill?.gstAmount || lineItems.find((item) => String(item.description).startsWith('GST'))?.amount || Math.round(Math.max(0, subtotal - discountAmount) * (taxPercent / 100)));
+  const fare = invoice.fareBreakdown || booking.finalBill || {};
+  const discountAmount = Math.max(0, Number(invoice.discountAmount || booking.finalBill?.discountAmount || fare.discountAmount || 0));
+  const taxPercent = Number(invoice.taxPercent || booking.finalBill?.gstPercent || fare.gstPercent || business.taxPercent || 5);
+  const baseAmount = Number(fare.baseFare || fare.baseAmount || booking.baseFare || invoice.subtotalAmount || booking.estimatedFare || 0);
+  const distanceAmount = Number(fare.distanceFare || fare.distanceCharges || 0);
+  const waitingAmount = Number(fare.waitingCharges || 0);
+  const tollAmount = Number(fare.tollCharges || 0);
+  const driverAllowance = Number(fare.driverAllowance || 0);
+  const nightAmount = Number(fare.nightCharges || 0);
+  const subtotal = Math.max(0, baseAmount + distanceAmount + waitingAmount + tollAmount + driverAllowance + nightAmount - discountAmount);
+  const taxAmount = Number(invoice.taxAmount || booking.finalBill?.gstAmount || fare.gstAmount || Math.round(subtotal * (taxPercent / 100)));
   const cgstAmount = Number(invoice.cgstAmount || Math.round(taxAmount / 2));
   const sgstAmount = Number(invoice.sgstAmount || Math.max(0, taxAmount - cgstAmount));
-  const totalAmount = Number(invoice.totalFare || booking.totalFare || booking.finalBill?.totalAmount || Math.max(0, subtotal + taxAmount - discountAmount));
+  const totalAmount = Number(invoice.totalFare || booking.totalFare || booking.finalBill?.totalAmount || Math.max(0, subtotal + taxAmount));
   const paymentStatus = invoice.paymentStatus || booking.paymentStatus || 'Pending';
   const amountPaid = Number(invoice.amountPaid || booking.finalBill?.paidAmount || (['Paid', 'Paid Offline', 'Paid Online', 'Fully Paid'].includes(paymentStatus) ? totalAmount : 0));
   const balanceDue = Math.max(0, totalAmount - amountPaid);
+  const lineItems = buildFinancialRows({
+    fare: {
+      baseFare: baseAmount,
+      distanceCharges: distanceAmount,
+      driverAllowance,
+      tollCharges: tollAmount,
+      waitingCharges: waitingAmount,
+      nightCharges: nightAmount
+    },
+    tax: {
+      subtotal,
+      discountAmount,
+      taxPercent,
+      taxAmount
+    }
+  });
 
   return {
     business,
@@ -139,6 +288,8 @@ function buildInvoiceModel({ booking, invoice, driver, settings }) {
       cgstAmount,
       sgstAmount,
       totalAmount,
+      amountPaid,
+      balanceDue,
       currency: 'INR'
     },
     terms: Array.isArray(invoice.terms) && invoice.terms.length ? invoice.terms : [
@@ -152,84 +303,188 @@ function buildInvoiceModel({ booking, invoice, driver, settings }) {
   };
 }
 
-function drawSectionTitle(doc, title, subtitle) {
-  doc.font('Helvetica-Bold').fontSize(12.5).fillColor('#5b21b6').text(String(title).toUpperCase(), { characterSpacing: 1.1 });
+function drawSectionTitle(doc, fonts, title, subtitle, accent = '#5b21b6') {
+  doc.fillColor(accent).font(fonts.bold).fontSize(9.2).text(String(title).toUpperCase(), { characterSpacing: 0.55 });
   if (subtitle) {
-    doc.moveDown(0.1);
-    doc.font('Helvetica').fontSize(9).fillColor('#6b7280').text(subtitle);
+    doc.moveDown(0.01);
+    doc.fillColor('#6b7280').font(fonts.regular).fontSize(6.9).text(subtitle);
   }
-  doc.moveDown(0.35);
+  doc.moveDown(0.05);
 }
 
-function drawInfoGrid(doc, items, columns = 2) {
-  const gap = 14;
-  const width = (doc.page.width - doc.page.margins.left - doc.page.margins.right - gap * (columns - 1)) / columns;
+function drawMetaStrip(doc, fonts, items) {
+  const gap = 8;
+  const width = (doc.page.width - doc.page.margins.left - doc.page.margins.right - gap * (items.length - 1)) / items.length;
   const startX = doc.page.margins.left;
-  let x = startX;
-  let y = doc.y;
-  let rowHeight = 0;
+  const y = doc.y;
+  const height = 24;
 
   items.forEach((item, index) => {
-    if (index > 0 && index % columns === 0) {
-      x = startX;
-      y += rowHeight + 10;
-      rowHeight = 0;
-    }
-
-    const itemHeight = Math.max(52, doc.heightOfString(item.value || '—', { width: width - 28 }) + 30);
-    doc.roundedRect(x, y, width, itemHeight, 14).fillAndStroke('#fbf7ff', '#eadcf8');
-    doc.fillColor('#6b21a8').font('Helvetica-Bold').fontSize(8.5).text(item.label, x + 14, y + 12, { width: width - 28 });
-    doc.fillColor('#111827').font('Helvetica').fontSize(10.2).text(item.value || '—', x + 14, y + 26, { width: width - 28, lineGap: 2 });
-    rowHeight = Math.max(rowHeight, itemHeight);
-    x += width + gap;
+    const itemX = startX + index * (width + gap);
+    doc.roundedRect(itemX, y, width, height, 7).fillAndStroke('#f8f5ff', '#e5d9f6');
+    doc.fillColor('#6b21a8').font(fonts.bold).fontSize(6.5).text(item.label, itemX + 8, y + 4, { width: width - 16, align: 'center' });
+    doc.fillColor('#111827').font(fonts.regular).fontSize(7.6).text(truncateText(item.value || '—', item.maxLength || 20), itemX + 8, y + 12, { width: width - 16, align: 'center' });
   });
 
-  doc.y = y + rowHeight + 10;
+  doc.y = y + height + 6;
 }
 
-function drawTable(doc, rows) {
+function drawDetailCard(doc, fonts, title, items, options = {}) {
+  const width = options.width || 258;
+  const height = options.height || (36 + Math.ceil(items.length / 2) * 16);
+  const x = options.x || doc.page.margins.left;
+  const y = options.y || doc.y;
+  const accent = options.accent || '#5b21b6';
+  const background = options.background || '#ffffff';
+  const border = options.border || '#e6d7f5';
+  const headerFill = options.headerFill || '#f8f5ff';
+
+  doc.roundedRect(x, y, width, height, 8).fillAndStroke(background, border);
+  doc.roundedRect(x, y, width, 18, 8).fillAndStroke(headerFill, border);
+  doc.fillColor(accent).font(fonts.bold).fontSize(8.2).text(title.toUpperCase(), x + 8, y + 5, { width: width - 16, align: 'left' });
+
+  const bodyTop = y + 22;
+  const bodyWidth = width - 16;
+  const colWidth = bodyWidth / 2;
+
+  items.forEach((item, index) => {
+    const row = Math.floor(index / 2);
+    const col = index % 2;
+    const itemX = x + 8 + col * colWidth;
+    const itemY = bodyTop + row * 16;
+    doc.fillColor('#6b7280').font(fonts.bold).fontSize(6.2).text(item.label, itemX, itemY, { width: colWidth - 4 });
+    doc.fillColor('#111827').font(fonts.regular).fontSize(7.5).text(truncateText(item.value || '—', item.maxLength || 26), itemX, itemY + 7, { width: colWidth - 4 });
+  });
+
+  return y + height;
+}
+
+function drawCardRow(doc, fonts, cards, options = {}) {
+  const gap = options.gap ?? 10;
+  const widths = options.widths || cards.map(() => (doc.page.width - doc.page.margins.left - doc.page.margins.right - gap * (cards.length - 1)) / cards.length);
+  const x = options.x || doc.page.margins.left;
+  const y = options.y || doc.y;
+
+  let nextY = y;
+  cards.forEach((card, index) => {
+    const cardX = x + widths.slice(0, index).reduce((sum, amount) => sum + amount, 0) + gap * index;
+    const cardHeight = drawDetailCard(doc, fonts, card.title, card.items, {
+      x: cardX,
+      y,
+      width: widths[index],
+      height: card.height,
+      accent: card.accent,
+      background: card.background,
+      border: card.border,
+      headerFill: card.headerFill
+    });
+    nextY = Math.max(nextY, cardHeight);
+  });
+
+  doc.y = nextY + (options.afterGap ?? 6);
+}
+
+function drawTable(doc, fonts, rows) {
   const startX = doc.page.margins.left;
-  const widths = [250, 70, 95, 105];
+  const widths = [220, 42, 84, 66, 107];
   const tableWidth = widths.reduce((sum, value) => sum + value, 0);
   const headerY = doc.y;
-  const rowGap = 0;
+  const rowHeight = 15;
+  const headerHeight = 19;
 
-  doc.roundedRect(startX, headerY, tableWidth, 26, 8).fillAndStroke('#5b21b6', '#5b21b6');
-  ['Description', 'Qty', 'Rate', 'Amount'].forEach((label, index) => {
+  doc.roundedRect(startX, headerY, tableWidth, headerHeight, 7).fillAndStroke('#5b21b6', '#5b21b6');
+  ['Description', 'Qty', 'Unit Price', 'Tax', 'Amount'].forEach((label, index) => {
     const x = startX + widths.slice(0, index).reduce((sum, value) => sum + value, 0);
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9).text(label, x + 10, headerY + 8, {
-      width: widths[index] - 20,
+    doc.fillColor('#ffffff').font(fonts.bold).fontSize(7.1).text(label, x + 7, headerY + 5.5, {
+      width: widths[index] - 14,
       align: index === 0 ? 'left' : 'right'
     });
   });
 
-  doc.y = headerY + 30;
+  doc.y = headerY + headerHeight;
   rows.forEach((row, index) => {
-    const rowHeight = Math.max(28, doc.heightOfString(String(row.description), { width: widths[0] - 20 }) + 16);
-    if (doc.y + rowHeight > doc.page.height - doc.page.margins.bottom - 120) {
-      doc.addPage();
-      doc.y = doc.page.margins.top;
-    }
-
     const fill = index % 2 === 0 ? '#ffffff' : '#faf7ff';
-    doc.roundedRect(startX, doc.y, tableWidth, rowHeight, 8).fillAndStroke(fill, '#eadcf8');
-    const values = [row.description, String(row.quantity ?? 1), formatMoney(row.rate ?? 0), formatMoney(row.amount ?? 0)];
+    const rowY = doc.y;
+    doc.roundedRect(startX, rowY, tableWidth, rowHeight, 7).fillAndStroke(fill, '#e8dff7');
+
+    const values = [
+      truncateText(row.description, 34),
+      String(row.quantity ?? 1),
+      formatMoney(row.unitPrice ?? row.rate ?? 0),
+      formatMoneySigned(row.tax ?? 0),
+      formatMoneySigned(row.amount ?? 0)
+    ];
+
     values.forEach((value, valueIndex) => {
       const x = startX + widths.slice(0, valueIndex).reduce((sum, amount) => sum + amount, 0);
-      doc.fillColor('#111827').font(valueIndex === 0 ? 'Helvetica-Bold' : 'Helvetica').fontSize(9.4).text(value, x + 10, doc.y + 8, {
-        width: widths[valueIndex] - 20,
-        align: valueIndex === 0 ? 'left' : 'right'
+      const isDescription = valueIndex === 0;
+      const color = row.isDiscountRow ? '#b45309' : '#111827';
+      doc.fillColor(color).font(isDescription ? fonts.bold : fonts.regular).fontSize(isDescription ? 7.5 : 7.3).text(value, x + 7, rowY + 4, {
+        width: widths[valueIndex] - 14,
+        align: isDescription ? 'left' : 'right'
       });
     });
-    doc.y += rowHeight + rowGap;
+
+    doc.y += rowHeight;
   });
+  doc.y += 4;
+}
+
+function drawSummaryBox(doc, fonts, model) {
+  const boxWidth = 214;
+  const boxHeight = 82;
+  const x = doc.page.width - doc.page.margins.right - boxWidth;
+  const y = doc.y + 2;
+
+  doc.roundedRect(x, y, boxWidth, boxHeight, 8).fillAndStroke('#fffdf7', '#ead79f');
+  doc.fillColor('#7c2d12').font(fonts.bold).fontSize(8.5).text('Financial Summary', x + 10, y + 7);
+
+  const rows = [
+    ['Subtotal', formatMoney(model.tax.subtotal), false],
+    ['CGST', formatMoney(model.tax.cgstAmount), false],
+    ['SGST', formatMoney(model.tax.sgstAmount), false],
+    ['Grand Total', formatMoney(model.tax.totalAmount), true],
+    ['Amount Paid', formatMoney(model.tax.amountPaid), false],
+    ['Remaining Balance', formatMoney(model.tax.balanceDue), false]
+  ];
+
+  let rowY = y + 20;
+  rows.forEach((row) => {
+    const isTotal = row[2];
+    doc.fillColor(isTotal ? '#111827' : '#374151').font(isTotal ? fonts.bold : fonts.regular).fontSize(isTotal ? 8.8 : 7.3).text(row[0], x + 10, rowY, { width: 116 });
+    doc.fillColor(isTotal ? '#5b21b6' : '#111827').font(isTotal ? fonts.bold : fonts.regular).fontSize(isTotal ? 9.4 : 7.3).text(row[1], x + 96, rowY, { width: 108, align: 'right' });
+    rowY += isTotal ? 13 : 11;
+  });
+
+  doc.y = y + boxHeight + 4;
+}
+
+function drawFooter(doc, fonts, model) {
+  const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const termsText = model.terms.slice(0, 2).join(' ');
+  const termsHeight = Math.max(24, Math.min(34, doc.heightOfString(termsText, { width: contentWidth - 16, lineGap: 0.5 }) + 10));
+
+  doc.roundedRect(doc.page.margins.left, doc.y, contentWidth, termsHeight, 8).fillAndStroke('#fcfbff', '#eadcf8');
+  doc.fillColor('#374151').font(fonts.regular).fontSize(6.8).text(termsText, doc.page.margins.left + 8, doc.y + 5, { width: contentWidth - 16, lineGap: 0.5 });
+  doc.y += termsHeight + 4;
+
+  doc.fillColor('#5b21b6').font(fonts.bold).fontSize(7.7).text(model.business.footerNote, { align: 'center' });
+  doc.fillColor('#6b7280').font(fonts.regular).fontSize(6.8).text(`Support: ${model.business.phone} | ${model.business.email} | ${model.business.website}`, { align: 'center' });
+  doc.moveDown(0.08);
+
+  const signatureY = doc.y + 2;
+  const sigWidth = 112;
+  const sigX = doc.page.width - doc.page.margins.right - sigWidth;
+  doc.fillColor('#92400e').font(fonts.bold).fontSize(7.2).text('Authorized Signature', sigX, signatureY, { width: sigWidth, align: 'right' });
+  doc.moveTo(sigX + 8, signatureY + 10).lineTo(sigX + sigWidth, signatureY + 10).strokeColor('#d4af37').lineWidth(0.8).stroke();
 }
 
 function buildInvoicePdf({ booking, invoice, driver, settings }) {
   const model = buildInvoiceModel({ booking, invoice, driver, settings });
 
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 38, bufferPages: true });
+    const doc = new PDFDocument({ size: 'A4', margin: 16, bufferPages: true });
+    const fonts = registerInvoiceFonts(doc);
     const chunks = [];
 
     doc.on('data', (chunk) => chunks.push(chunk));
@@ -237,111 +492,103 @@ function buildInvoicePdf({ booking, invoice, driver, settings }) {
     doc.on('error', reject);
 
     const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-    const headerHeight = 112;
 
     doc.info.Title = `Invoice ${model.invoice.invoiceId}`;
     doc.info.Author = model.business.businessName;
     doc.info.Subject = `${model.business.businessName} Commercial Invoice`;
 
     const headerY = doc.y;
-    doc.roundedRect(doc.page.margins.left, headerY, contentWidth, headerHeight, 18).fill('#5b21b6');
-    doc.roundedRect(doc.page.margins.left + 16, headerY + 16, 54, 54, 16).fill('#d4af37');
-    doc.fillColor('#1f103b').font('Helvetica-Bold').fontSize(22).text(model.business.logoText, doc.page.margins.left + 16, headerY + 31, { width: 54, align: 'center' });
+    doc.roundedRect(doc.page.margins.left, headerY, contentWidth, 58, 10).fill('#5b21b6');
+    doc.roundedRect(doc.page.margins.left + 10, headerY + 11, 34, 34, 9).fill('#d4af37');
+    doc.fillColor('#1f103b').font(fonts.bold).fontSize(12.2).text(model.business.logoText, doc.page.margins.left + 10, headerY + 21, { width: 34, align: 'center' });
 
-    const leftX = doc.page.margins.left + 82;
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(17).text(model.business.businessName, leftX, headerY + 18, { width: 300 });
-    doc.font('Helvetica').fontSize(9.5).fillColor('#f4e8ff').text(model.business.tagline, leftX, headerY + 41, { width: 320 });
-    doc.font('Helvetica').fontSize(8.5).fillColor('#f4e8ff').text(`${model.business.address}\n${model.business.phone} • ${model.business.email}\n${model.business.website}`, leftX, headerY + 58, { width: 320, lineGap: 2 });
+    const leftX = doc.page.margins.left + 50;
+    doc.fillColor('#ffffff').font(fonts.bold).fontSize(14.4).text(model.business.businessName, leftX, headerY + 9, { width: 240 });
+    doc.font(fonts.regular).fontSize(7.0).fillColor('#f4e8ff').text(model.business.tagline, leftX, headerY + 23, { width: 240 });
+    doc.font(fonts.regular).fontSize(6.8).fillColor('#f4e8ff').text(`${truncateText(model.business.address, 30)} | ${model.business.phone}`, leftX, headerY + 34, { width: 240 });
 
-    const badgeX = doc.page.width - doc.page.margins.right - 232;
-    doc.roundedRect(badgeX, headerY + 16, 216, 80, 14).fill('#fefce8');
-    doc.fillColor('#5b21b6').font('Helvetica-Bold').fontSize(16).text('TAX INVOICE', badgeX + 12, headerY + 25, { width: 192, align: 'right' });
-    doc.font('Helvetica').fontSize(8.7).fillColor('#6b7280').text(`Invoice #: ${model.invoice.invoiceId}`, badgeX + 12, headerY + 46, { width: 192, align: 'right' });
-    doc.text(`Booking ID: ${model.invoice.bookingId}`, badgeX + 12, headerY + 58, { width: 192, align: 'right' });
-    doc.text(`Date: ${formatDate(model.invoice.invoiceDate)}`, badgeX + 12, headerY + 70, { width: 192, align: 'right' });
-    doc.fillColor('#92400e').font('Helvetica-Bold').fontSize(9).text(model.invoice.status || 'Pending', badgeX + 12, headerY + 82, { width: 192, align: 'right' });
+    const badgeX = doc.page.width - doc.page.margins.right - 152;
+    doc.roundedRect(badgeX, headerY + 9, 144, 40, 9).fill('#fefce8');
+    doc.fillColor('#5b21b6').font(fonts.bold).fontSize(10.2).text('TAX INVOICE', badgeX + 8, headerY + 14, { width: 128, align: 'right' });
+    doc.font(fonts.regular).fontSize(6.9).fillColor('#6b7280').text(`Invoice #: ${model.invoice.invoiceId}`, badgeX + 8, headerY + 25, { width: 128, align: 'right' });
+    doc.text(`Booking: ${model.invoice.bookingId}`, badgeX + 8, headerY + 34, { width: 128, align: 'right' });
 
-    doc.y = headerY + headerHeight + 16;
+    doc.y = headerY + 66;
+    drawMetaStrip(doc, fonts, [
+      { label: 'Invoice Date', value: formatDateTime(model.invoice.invoiceDate), maxLength: 18 },
+      { label: 'Due Date', value: formatDateTime(model.invoice.dueDate), maxLength: 18 },
+      { label: 'GSTIN', value: model.business.gstin, maxLength: 18 },
+      { label: 'Status', value: model.payment.status, maxLength: 16 }
+    ]);
 
-    drawSectionTitle(doc, 'Invoice Snapshot', 'Commercial summary and payment status');
-    drawInfoGrid(doc, [
-      { label: 'Invoice Date', value: formatDateTime(model.invoice.invoiceDate) },
-      { label: 'Due Date', value: formatDateTime(model.invoice.dueDate) },
-      { label: 'GSTIN', value: model.business.gstin },
-      { label: 'Payment Status', value: safeText(model.payment.status) }
-    ], 2);
+    drawCardRow(doc, fonts, [
+      {
+        title: 'Customer & Booking',
+        accent: '#5b21b6',
+        background: '#ffffff',
+        border: '#e6d7f5',
+        headerFill: '#f8f5ff',
+        items: [
+          { label: 'Customer', value: model.customer.name, maxLength: 22 },
+          { label: 'Booking ID', value: model.invoice.bookingId, maxLength: 18 },
+          { label: 'Phone', value: model.customer.phone, maxLength: 16 },
+          { label: 'Email', value: model.customer.email, maxLength: 24 },
+          { label: 'Pickup', value: model.customer.pickupLocation, maxLength: 24 },
+          { label: 'Drop', value: model.customer.dropLocation, maxLength: 24 }
+        ]
+      },
+      {
+        title: 'Trip Details',
+        accent: '#92400e',
+        background: '#fffdf7',
+        border: '#ead79f',
+        headerFill: '#fff8e1',
+        items: [
+          { label: 'Vehicle', value: model.ride.vehicle, maxLength: 18 },
+          { label: 'Trip Type', value: model.ride.vehicleType, maxLength: 18 },
+          { label: 'Pickup Date', value: formatDate(model.ride.pickupDate), maxLength: 16 },
+          { label: 'Pickup Time', value: safeText(model.ride.pickupTime, '—'), maxLength: 12 },
+          { label: 'Driver', value: model.ride.driverName, maxLength: 18 },
+          { label: 'Driver Phone', value: model.ride.driverPhone, maxLength: 16 }
+        ]
+      }
+    ], { afterGap: 6 });
 
-    drawSectionTitle(doc, 'Customer Details', 'Billing and contact information');
-    drawInfoGrid(doc, [
-      { label: 'Customer', value: model.customer.name },
-      { label: 'Email', value: model.customer.email },
-      { label: 'Phone', value: model.customer.phone },
-      { label: 'Billing Address', value: model.customer.address },
-      { label: 'Pickup Location', value: model.customer.pickupLocation },
-      { label: 'Drop Location', value: model.customer.dropLocation }
-    ], 2);
+    drawCardRow(doc, fonts, [
+      {
+        title: 'Ride Summary',
+        accent: '#1d4ed8',
+        background: '#f8fbff',
+        border: '#cfe0ff',
+        headerFill: '#edf4ff',
+        items: [
+          { label: 'Distance', value: model.ride.distance, maxLength: 16 },
+          { label: 'Duration', value: model.ride.rideDuration, maxLength: 16 },
+          { label: 'Ride Status', value: model.ride.rideStatus, maxLength: 16 },
+          { label: 'Payment Status', value: model.payment.status, maxLength: 16 }
+        ]
+      },
+      {
+        title: 'Payment Info',
+        accent: '#0f766e',
+        background: '#f7fffd',
+        border: '#cdeee7',
+        headerFill: '#ecfdf8',
+        items: [
+          { label: 'Method', value: model.payment.method, maxLength: 20 },
+          { label: 'Status', value: model.payment.status, maxLength: 16 },
+          { label: 'Transaction ID', value: model.payment.transactionId, maxLength: 20 },
+          { label: 'Due Date', value: formatDateTime(model.invoice.dueDate), maxLength: 18 }
+        ]
+      }
+    ], { afterGap: 4 });
 
-    drawSectionTitle(doc, 'Ride Summary', 'Vehicle allocation and trip timeline');
-    drawInfoGrid(doc, [
-      { label: 'Vehicle', value: model.ride.vehicle },
-      { label: 'Vehicle Type', value: model.ride.vehicleType },
-      { label: 'Driver', value: model.ride.driverName },
-      { label: 'Driver Phone', value: model.ride.driverPhone },
-      { label: 'Pickup Time', value: `${formatDate(model.ride.pickupDate)} ${safeText(model.ride.pickupTime, '')}`.trim() },
-      { label: 'Ride Status', value: model.ride.rideStatus },
-      { label: 'Distance', value: model.ride.distance },
-      { label: 'Ride Duration', value: model.ride.rideDuration }
-    ], 2);
+    drawSectionTitle(doc, fonts, 'Fare Breakdown', 'Compact financial table with right-aligned currency values');
+    drawTable(doc, fonts, model.lineItems);
 
-    drawSectionTitle(doc, 'Fare Breakdown', 'Line-item commercial invoice with GST split');
-    drawTable(doc, model.lineItems);
+    drawSummaryBox(doc, fonts, model);
 
-    doc.moveDown(0.5);
-    const paymentY = doc.y + 12;
-    const boxWidth = (contentWidth - 16) / 2;
-    doc.roundedRect(doc.page.margins.left, paymentY, boxWidth, 140, 16).fillAndStroke('#ffffff', '#eadcf8');
-    doc.roundedRect(doc.page.margins.left + boxWidth + 16, paymentY, boxWidth, 140, 16).fillAndStroke('#fffaf0', '#f3d98b');
-
-    doc.fillColor('#5b21b6').font('Helvetica-Bold').fontSize(10).text('Payment Summary', doc.page.margins.left + 14, paymentY + 12);
-    doc.font('Helvetica').fontSize(9).fillColor('#374151').text(`Method: ${safeText(model.payment.method)}`, doc.page.margins.left + 14, paymentY + 30);
-    doc.text(`Status: ${safeText(model.payment.status)}`, doc.page.margins.left + 14, paymentY + 44);
-    doc.text(`Amount Paid: ${formatMoney(model.payment.amountPaid)}`, doc.page.margins.left + 14, paymentY + 58);
-    doc.text(`Remaining Amount: ${formatMoney(model.payment.balanceDue)}`, doc.page.margins.left + 14, paymentY + 72);
-    doc.text(`Transaction ID: ${safeText(model.payment.transactionId)}`, doc.page.margins.left + 14, paymentY + 86, { width: boxWidth - 28 });
-    doc.text(`Payment Date: ${formatDateTime(model.payment.paymentDate)}`, doc.page.margins.left + 14, paymentY + 100);
-
-    doc.fillColor('#92400e').font('Helvetica-Bold').fontSize(10).text('Tax Summary', doc.page.margins.left + boxWidth + 30, paymentY + 12);
-    doc.font('Helvetica').fontSize(9).fillColor('#374151').text(`Subtotal: ${formatMoney(model.tax.subtotal)}`, doc.page.margins.left + boxWidth + 30, paymentY + 30);
-    doc.text(`Discount: ${formatMoney(model.tax.discountAmount)}`, doc.page.margins.left + boxWidth + 30, paymentY + 44);
-    doc.text(`CGST (${model.tax.taxPercent / 2}%): ${formatMoney(model.tax.cgstAmount)}`, doc.page.margins.left + boxWidth + 30, paymentY + 58);
-    doc.text(`SGST (${model.tax.taxPercent / 2}%): ${formatMoney(model.tax.sgstAmount)}`, doc.page.margins.left + boxWidth + 30, paymentY + 72);
-    doc.text(`GST Total (${model.tax.taxPercent}%): ${formatMoney(model.tax.taxAmount)}`, doc.page.margins.left + boxWidth + 30, paymentY + 86);
-    doc.font('Helvetica-Bold').fontSize(11).text(`Grand Total: ${formatMoney(model.tax.totalAmount)}`, doc.page.margins.left + boxWidth + 30, paymentY + 106);
-
-    doc.y = paymentY + 158;
-
-    drawSectionTitle(doc, 'Bank & Online Payment', 'Optional payment details for transfer and UPI');
-    drawInfoGrid(doc, [
-      { label: 'UPI ID', value: model.business.upiId },
-      { label: 'Account Name', value: model.business.bankAccountName },
-      { label: 'Account Number', value: model.business.bankAccountNumber },
-      { label: 'IFSC Code', value: model.business.bankIfsc },
-      { label: 'Branch', value: model.business.bankBranch },
-      { label: 'Payment Link', value: model.business.paymentLink || 'Available on request' }
-    ], 2);
-
-    drawSectionTitle(doc, 'Terms & Conditions', 'Commercial terms and billing compliance');
-    const termsText = model.terms.map((term) => `• ${term}`).join('\n');
-    const termsHeight = Math.max(88, doc.heightOfString(termsText, { width: contentWidth - 28, lineGap: 2 }) + 26);
-    doc.roundedRect(doc.page.margins.left, doc.y, contentWidth, termsHeight, 16).fillAndStroke('#fcfbff', '#eadcf8');
-    doc.fillColor('#374151').font('Helvetica').fontSize(8.7).text(termsText, doc.page.margins.left + 14, doc.y + 12, { width: contentWidth - 28, lineGap: 2 });
-
-    doc.moveDown(1.8);
-    doc.fillColor('#5b21b6').font('Helvetica-Bold').fontSize(10).text(model.business.footerNote, { align: 'center' });
-    doc.font('Helvetica').fontSize(8.5).fillColor('#6b7280').text(`Support: ${model.business.phone} | ${model.business.email} | ${model.business.website}`, { align: 'center' });
-    doc.moveDown(0.5);
-    doc.fillColor('#92400e').font('Helvetica-Bold').fontSize(9).text('Authorized Signature', { align: 'right' });
-    doc.moveTo(doc.page.width - doc.page.margins.right - 140, doc.y + 2).lineTo(doc.page.width - doc.page.margins.right, doc.y + 2).strokeColor('#d4af37').lineWidth(1.1).stroke();
+    drawFooter(doc, fonts, model);
 
     doc.end();
   });

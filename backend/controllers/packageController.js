@@ -1,6 +1,7 @@
 const Package = require('../models/Package');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
+const { sanitizeImageUrl } = require('../utils/imageUrl');
 
 const listPackages = asyncHandler(async (req, res) => {
   const packages = await Package.find({}).sort({ createdAt: -1 }).lean();
@@ -9,7 +10,7 @@ const listPackages = asyncHandler(async (req, res) => {
 
 const createPackage = asyncHandler(async (req, res) => {
   const payload = { ...req.body };
-  if (req.file) payload.image = `/uploads/${req.file.filename}`;
+  payload.image = sanitizeImageUrl(payload.image, '');
   const tripPackage = await Package.create(payload);
   res.status(201).json({ success: true, package: tripPackage });
 });
@@ -19,7 +20,7 @@ const updatePackage = asyncHandler(async (req, res) => {
   if (!tripPackage) throw new ApiError(404, 'Package not found');
 
   Object.assign(tripPackage, req.body);
-  if (req.file) tripPackage.image = `/uploads/${req.file.filename}`;
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, 'image')) tripPackage.image = sanitizeImageUrl(req.body.image, tripPackage.image || '');
   await tripPackage.save();
   res.json({ success: true, package: tripPackage });
 });

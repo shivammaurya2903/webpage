@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const carSchema = new mongoose.Schema(
   {
     carName: { type: String, required: true, unique: true, trim: true },
-    image: { type: String, required: true },
+    image: { type: String, default: '' },
     seatingCapacity: { type: Number, required: true },
     category: { type: String, required: true },
     fuelType: { type: String, required: true },

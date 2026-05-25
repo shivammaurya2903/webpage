@@ -206,6 +206,65 @@ img { max-width: 100%; display: block; }
 .preview {
   margin-top: 12px; width: 100%; height: 180px; border-radius: 18px; object-fit: cover; border: 1px solid rgba(255,255,255,0.12);
 }
+
+.image-thumb {
+  height: 128px;
+  margin-top: 14px;
+  transition: transform 0.28s ease, box-shadow 0.28s ease;
+}
+
+.image-thumb:hover {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 20px 46px rgba(0, 0, 0, 0.24);
+}
+
+.image-url-field {
+  gap: 12px;
+  animation: fadeInUp 0.28s ease both;
+}
+
+.image-url-field input {
+  background: rgba(10, 8, 20, 0.8);
+}
+
+.image-preview-card {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) 1fr;
+  gap: 16px;
+  align-items: stretch;
+  padding: 16px;
+  border-radius: 22px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
+.image-preview {
+  width: 100%;
+  min-height: 180px;
+  border-radius: 18px;
+  object-fit: cover;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(8, 6, 17, 0.72);
+}
+
+.image-preview-copy {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  padding: 6px 2px;
+}
+
+.image-preview-copy strong {
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.image-preview-copy p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
 .row-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .modal-backdrop {
@@ -246,10 +305,15 @@ img { max-width: 100%; display: block; }
 .split-grid .half { grid-column: span 6; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
 @media (max-width: 1180px) {
   .metric-card, .chart-card, .stack-card, .split-grid .half { grid-column: span 12; }
   .form-grid .field, .form-grid .field.wide { grid-column: span 6; }
+  .image-preview-card { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 980px) {
@@ -964,6 +1028,7 @@ body.shell-open { overflow: hidden; }
 
   .dashboard-stat-row {
     min-height: 190px;
+  .image-preview { min-height: 160px; }
   }
 }
 

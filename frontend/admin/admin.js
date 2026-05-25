@@ -137,6 +137,115 @@
     window.setTimeout(() => node.remove(), 4200);
   }
 
+  function createImagePlaceholder() {
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-label="Image unavailable">
+        <defs>
+          <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#120d1b" />
+            <stop offset="100%" stop-color="#24193a" />
+          </linearGradient>
+        </defs>
+        <rect width="960" height="540" rx="40" fill="url(#bg)" />
+        <rect x="56" y="56" width="848" height="428" rx="28" fill="none" stroke="rgba(255,255,255,0.16)" stroke-width="4" />
+        <circle cx="250" cy="260" r="72" fill="rgba(212,175,55,0.18)" />
+        <path d="M188 300c30-55 72-82 126-82 48 0 90 23 130 71l26 31h112c18 0 32 14 32 32v42c0 14-12 26-26 26h-34c-10 33-40 57-76 57s-66-24-76-57H348c-10 33-40 57-76 57s-66-24-76-57h-26c-14 0-26-12-26-26v-28c0-13 5-24 14-36z" fill="rgba(212,175,55,0.8)" />
+        <text x="480" y="392" fill="#f6f1e7" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" text-anchor="middle">Image unavailable</text>
+      </svg>`;
+    return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+  }
+
+  const DEFAULT_IMAGE_PLACEHOLDER = createImagePlaceholder();
+
+  function normalizeImageUrl(value) {
+    return String(value || '').trim();
+  }
+
+  function isLikelyImageUrl(value) {
+    const url = normalizeImageUrl(value);
+    if (!url) return true;
+
+    try {
+      const parsed = new URL(url);
+      if (!['http:', 'https:'].includes(parsed.protocol)) return false;
+
+      const pathname = `${parsed.pathname}${parsed.search}`.toLowerCase();
+      if (/\.(jpe?g|png|webp)(?:$|\?)/.test(pathname)) return true;
+
+      const host = parsed.hostname.toLowerCase();
+      return host === 'images.unsplash.com' || host === 'unsplash.com' || host.endsWith('.cloudinary.com') || host.includes('image');
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function getPreviewSrc(value) {
+    const url = normalizeImageUrl(value);
+    return url && isLikelyImageUrl(url) ? url : DEFAULT_IMAGE_PLACEHOLDER;
+  }
+
+  function updatePreviewImage(previewEl, value, statusEl, altText) {
+    if (!previewEl) return;
+    const url = normalizeImageUrl(value);
+    previewEl.src = getPreviewSrc(url);
+    previewEl.alt = altText || previewEl.alt || 'Preview image';
+    previewEl.dataset.fallback = DEFAULT_IMAGE_PLACEHOLDER;
+    if (!statusEl) return;
+    if (!url) {
+      statusEl.textContent = 'Paste a direct image URL to preview it here.';
+      return;
+    }
+    statusEl.textContent = isLikelyImageUrl(url)
+      ? 'Image URL looks valid.'
+      : 'This URL is not a supported direct image link. Preview is showing the fallback image.';
+  }
+
+  function renderImageThumb(value, altText) {
+    const previewSrc = getPreviewSrc(value);
+    return `<img class="preview image-thumb" src="${escapeHtml(previewSrc)}" alt="${escapeHtml(altText || 'Image preview')}" data-fallback="${escapeHtml(DEFAULT_IMAGE_PLACEHOLDER)}" onerror="this.onerror=null;this.src=this.dataset.fallback;" />`;
+  }
+
+  function renderImageUrlField({ name, label, value, alt, previewId, statusId, helper }) {
+    const imageValue = normalizeImageUrl(value);
+    const previewSrc = getPreviewSrc(imageValue);
+    const statusText = !imageValue
+      ? 'Paste a direct image URL to preview it here.'
+      : (isLikelyImageUrl(imageValue) ? 'Image URL looks valid.' : 'This URL is not a supported direct image link. Preview is showing the fallback image.');
+
+    return `
+      <label class="field full image-url-field">
+        <span>${escapeHtml(label)}</span>
+        <input
+          class="image-url-input"
+          type="url"
+          name="${escapeHtml(name)}"
+          value="${escapeHtml(imageValue)}"
+          placeholder="https://images.unsplash.com/..."
+          autocomplete="off"
+          spellcheck="false"
+          data-image-preview="${escapeHtml(previewId)}"
+          data-image-status="${escapeHtml(statusId)}"
+          data-image-alt="${escapeHtml(alt || label)}"
+        />
+        <div class="image-preview-card">
+          <img
+            id="${escapeHtml(previewId)}"
+            class="image-preview"
+            src="${escapeHtml(previewSrc)}"
+            alt="${escapeHtml(alt || label)}"
+            data-fallback="${escapeHtml(DEFAULT_IMAGE_PLACEHOLDER)}"
+            onerror="this.onerror=null;this.src=this.dataset.fallback;"
+          />
+          <div class="image-preview-copy">
+            <strong>Live preview</strong>
+            <p>${escapeHtml(helper || 'Direct image URLs keep vehicle and content images lightweight and easy to manage.')}</p>
+            <small class="helper" id="${escapeHtml(statusId)}">${escapeHtml(statusText)}</small>
+          </div>
+        </div>
+      </label>
+    `;
+  }
+
   async function safeJson(response) {
     const text = await response.text();
     if (!text) return null;
@@ -731,7 +840,7 @@
         <td>
           <strong>${escapeHtml(car.carName)}</strong>
           <div class="helper">${escapeHtml(car.category || '')}</div>
-          ${car.image ? `<img class="preview" src="${escapeHtml(car.image)}" alt="${escapeHtml(car.carName)}" />` : ''}
+          ${renderImageThumb(car.image, car.carName)}
         </td>
         <td>${escapeHtml(String(car.seatingCapacity || ''))}</td>
         <td>${escapeHtml(car.fuelType || '')}<div class="helper">${escapeHtml(car.transmission || '')}</div></td>
@@ -753,7 +862,7 @@
       <div class="view">
         <section class="card">
           <div class="card-header"><div><h3>Fleet management</h3><p>Maintain vehicle images, pricing, and features</p></div><button class="primary-btn" data-open-form="car">Add car</button></div>
-          <div class="helper">Cars support image upload and feature lists separated by commas or new lines.</div>
+          <div class="helper">Cars support direct image URLs and feature lists separated by commas or new lines.</div>
         </section>
         <section class="card table-card">
           ${tableShell(['Car', 'Seats', 'Fuel', 'Base fare', 'Price/km', 'Availability', 'Included km', 'Features', 'Actions'], rows, 'No cars found')}
@@ -769,7 +878,7 @@
         <td>
           <strong>${escapeHtml(item.packageName)}</strong>
           <div class="helper">${escapeHtml(item.duration || '')}</div>
-          ${item.image ? `<img class="preview" src="${escapeHtml(item.image)}" alt="${escapeHtml(item.packageName)}" />` : ''}
+          ${renderImageThumb(item.image, item.packageName)}
         </td>
         <td>${fmtMoney(item.price)}</td>
         <td>${(item.destinations || []).map((value) => `<span class="badge">${escapeHtml(value)}</span>`).join(' ') || '—'}</td>
@@ -785,7 +894,7 @@
       <div class="view">
         <section class="card">
           <div class="card-header"><div><h3>Tour packages</h3><p>Manage destinations, pricing, and inclusions</p></div><button class="primary-btn" data-open-form="package">Add package</button></div>
-          <div class="helper">Destination, inclusion, and exclusion lists accept comma or line-separated values.</div>
+          <div class="helper">Destination, inclusion, and exclusion lists accept comma or line-separated values. Package artwork is managed by image URL.</div>
         </section>
         <section class="card table-card">
           ${tableShell(['Package', 'Price', 'Destinations', 'Description', 'Actions'], rows, 'No packages found')}
@@ -949,7 +1058,15 @@
             <label class="field wide"><span>Facebook</span><input name="facebook" value="${escapeHtml(settings.socialLinks?.facebook || '')}" /></label>
             <label class="field wide"><span>Instagram</span><input name="instagram" value="${escapeHtml(settings.socialLinks?.instagram || '')}" /></label>
             <label class="field wide"><span>WhatsApp</span><input name="whatsapp" value="${escapeHtml(settings.socialLinks?.whatsapp || '')}" /></label>
-            <label class="field wide"><span>Banner image</span><input name="bannerImage" type="file" accept="image/*" /></label>
+            ${renderImageUrlField({
+              name: 'bannerImage',
+              label: 'Banner image URL',
+              value: homepage.bannerImage || '',
+              alt: 'Homepage banner preview',
+              previewId: 'bannerImagePreview',
+              statusId: 'bannerImageStatus',
+              helper: 'Paste a direct JPG, PNG, JPEG, or WEBP image URL for the homepage banner.'
+            })}
             <label class="field wide"><span>Currency</span><input name="currency" value="${escapeHtml(settings.paymentSettings?.currency || 'INR')}" /></label>
             <label class="field wide"><span>Advance percent</span><input name="advancePercent" type="number" value="${escapeHtml(String(settings.paymentSettings?.advancePercent ?? 20))}" /></label>
             <label class="field wide"><span>Payment gateway</span><input name="gatewayName" value="${escapeHtml(settings.paymentSettings?.gatewayName || 'Stripe')}" /></label>
@@ -967,7 +1084,6 @@
             <label class="inline-toggle"><input type="checkbox" name="whatsappEnabled" ${settings.notificationSettings?.whatsappEnabled !== false ? 'checked' : ''} /><span>WhatsApp notifications enabled</span></label>
             <label class="inline-toggle"><input type="checkbox" name="realtimeEnabled" ${settings.notificationSettings?.realtimeEnabled !== false ? 'checked' : ''} /><span>Realtime updates enabled</span></label>
           </div>
-          ${settings.homepage?.bannerImage ? `<img class="preview" src="${escapeHtml(settings.homepage.bannerImage)}" alt="Banner preview" />` : ''}
         </section>
       </div>
     `;
@@ -1127,7 +1243,7 @@
         title: record ? 'Edit car' : 'Add car',
         eyebrow: 'Fleet form',
         fields: `
-          <form class="auth-form" data-save-entity="car" enctype="multipart/form-data">
+          <form class="auth-form" data-save-entity="car">
             <div class="form-grid">
               <label class="field wide"><span>Car name</span><input name="carName" value="${escapeHtml(record?.carName || '')}" required /></label>
               <label class="field wide"><span>Seating capacity</span><input type="number" name="seatingCapacity" value="${escapeHtml(String(record?.seatingCapacity || ''))}" required /></label>
@@ -1141,7 +1257,15 @@
               <label class="field wide"><span>Night charge %</span><input type="number" name="nightChargePercent" value="${escapeHtml(String(record?.nightChargePercent ?? 10))}" /></label>
               <label class="field wide"><span>Driver allowance</span><input type="number" name="driverAllowance" value="${escapeHtml(String(record?.driverAllowance ?? ''))}" /></label>
               <label class="field full"><span>Features</span><textarea name="features">${escapeHtml((record?.features || []).join(', '))}</textarea></label>
-              <label class="field wide"><span>Car image</span><input name="image" type="file" accept="image/*" /></label>
+              ${renderImageUrlField({
+                name: 'image',
+                label: 'Car image URL',
+                value: record?.image || '',
+                alt: record?.carName || 'Car image preview',
+                previewId: 'carImagePreview',
+                statusId: 'carImageStatus',
+                helper: 'Use a direct image URL. Empty or invalid values show the fallback preview.'
+              })}
             </div>
             <input type="hidden" name="id" value="${escapeHtml(record?._id || '')}" />
             <div class="form-actions"><button class="primary-btn" type="submit">Save car</button><button class="secondary-btn" type="button" data-close-modal>Cancel</button></div>
@@ -1152,7 +1276,7 @@
         title: record ? 'Edit package' : 'Add package',
         eyebrow: 'Package form',
         fields: `
-          <form class="auth-form" data-save-entity="package" enctype="multipart/form-data">
+          <form class="auth-form" data-save-entity="package">
             <div class="form-grid">
               <label class="field wide"><span>Package name</span><input name="packageName" value="${escapeHtml(record?.packageName || '')}" required /></label>
               <label class="field wide"><span>Duration</span><input name="duration" value="${escapeHtml(record?.duration || '')}" required /></label>
@@ -1161,7 +1285,15 @@
               <label class="field full"><span>Destinations</span><textarea name="destinations">${escapeHtml((record?.destinations || []).join(', '))}</textarea></label>
               <label class="field full"><span>Inclusions</span><textarea name="inclusions">${escapeHtml((record?.inclusions || []).join(', '))}</textarea></label>
               <label class="field full"><span>Exclusions</span><textarea name="exclusions">${escapeHtml((record?.exclusions || []).join(', '))}</textarea></label>
-              <label class="field wide"><span>Package image</span><input name="image" type="file" accept="image/*" /></label>
+              ${renderImageUrlField({
+                name: 'image',
+                label: 'Package image URL',
+                value: record?.image || '',
+                alt: record?.packageName || 'Package image preview',
+                previewId: 'packageImagePreview',
+                statusId: 'packageImageStatus',
+                helper: 'Use a direct image URL for the package card or gallery preview.'
+              })}
             </div>
             <input type="hidden" name="id" value="${escapeHtml(record?._id || '')}" />
             <div class="form-actions"><button class="primary-btn" type="submit">Save package</button><button class="secondary-btn" type="button" data-close-modal>Cancel</button></div>
@@ -1219,10 +1351,16 @@
         method = id ? 'PUT' : 'POST';
         const baseFareValue = formData.get('baseFare');
         const pricePerDayValue = baseFareValue !== null && baseFareValue !== '' ? baseFareValue : formData.get('pricePerDay');
-        formData.set('pricePerDay', String(pricePerDayValue ?? '0'));
+        const carPayload = Object.fromEntries(formData.entries());
+        carPayload.pricePerDay = String(pricePerDayValue ?? '0');
+        carPayload.image = normalizeImageUrl(carPayload.image);
+        payload = JSON.stringify(carPayload);
       } else if (entity === 'package') {
         path = id ? `/api/admin/packages/${id}` : '/api/admin/packages';
         method = id ? 'PUT' : 'POST';
+        const packagePayload = Object.fromEntries(formData.entries());
+        packagePayload.image = normalizeImageUrl(packagePayload.image);
+        payload = JSON.stringify(packagePayload);
       } else if (entity === 'route') {
         path = id ? `/api/admin/routes/${id}` : '/api/admin/routes';
         method = id ? 'PUT' : 'POST';
@@ -1420,20 +1558,12 @@
     const form = document.getElementById('contentForm');
     if (!form) return;
     try {
-      const formData = new FormData();
+      const payload = {};
       form.querySelectorAll('input, textarea, select').forEach((input) => {
         if (!input.name) return;
-        if (input.type === 'file') {
-          if (input.files[0]) formData.append(input.name, input.files[0]);
-          return;
-        }
-        if (input.type === 'checkbox') {
-          formData.append(input.name, input.checked ? 'true' : 'false');
-          return;
-        }
-        formData.append(input.name, input.value);
+        payload[input.name] = input.type === 'checkbox' ? input.checked : input.value;
       });
-      await apiFetch('/api/admin/settings', { method: 'PUT', body: formData });
+      await apiFetch('/api/admin/settings', { method: 'PUT', body: JSON.stringify(payload) });
       state.settings = null;
       toast('Saved', 'Website content updated');
       await refreshView();
@@ -1634,11 +1764,20 @@
     });
     el.viewRoot.addEventListener('input', async (event) => {
       const search = event.target.closest('#bookingSearch');
-      if (!search) return;
-      state.search = search.value.trim();
-      const body = await apiFetch(`/api/admin/bookings?search=${encodeURIComponent(state.search)}`);
-      state.bookings = body.bookings || [];
-      renderBookingsView();
+      if (search) {
+        state.search = search.value.trim();
+        const body = await apiFetch(`/api/admin/bookings?search=${encodeURIComponent(state.search)}`);
+        state.bookings = body.bookings || [];
+        renderBookingsView();
+        return;
+      }
+
+      const imageInput = event.target.closest('[data-image-preview]');
+      if (imageInput) {
+        const preview = document.getElementById(imageInput.dataset.imagePreview);
+        const status = document.getElementById(imageInput.dataset.imageStatus);
+        updatePreviewImage(preview, imageInput.value, status, imageInput.dataset.imageAlt);
+      }
     });
     el.globalSearch.addEventListener('input', (event) => {
       state.search = event.target.value.trim();

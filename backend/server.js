@@ -80,7 +80,6 @@ app.use(express.urlencoded({ extended: true }));
 app.use(mongoSanitize());
 app.use(hpp());
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.static(frontendPath));
 app.use('/frontend', express.static(frontendPath));
 app.use('/admin', express.static(adminPath));

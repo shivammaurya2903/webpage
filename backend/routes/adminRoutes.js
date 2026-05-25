@@ -2,9 +2,9 @@ const router = require('express').Router();
 const { body } = require('express-validator');
 const { protect, authorize } = require('../middleware/auth');
 const { validateRequest } = require('../middleware/validate');
-const { uploadSingleImage } = require('../middleware/upload');
 const adminController = require('../controllers/adminController');
 const invoiceController = require('../controllers/invoiceController');
+const { isValidImageUrl } = require('../utils/imageUrl');
 
 router.post(
 	'/auth/login',
@@ -41,13 +41,13 @@ router.put('/drivers/:id', adminController.updateDriver);
 router.delete('/drivers/:id', adminController.deleteDriver);
 
 router.get('/cars', adminController.listCars);
-router.post('/cars', uploadSingleImage('image'), adminController.createCar);
-router.put('/cars/:id', uploadSingleImage('image'), adminController.updateCar);
+router.post('/cars', [body('image').optional({ checkFalsy: true }).custom((value) => isValidImageUrl(value)).withMessage('Image URL must be a JPG, JPEG, PNG, or WEBP link')], validateRequest, adminController.createCar);
+router.put('/cars/:id', [body('image').optional({ checkFalsy: true }).custom((value) => isValidImageUrl(value)).withMessage('Image URL must be a JPG, JPEG, PNG, or WEBP link')], validateRequest, adminController.updateCar);
 router.delete('/cars/:id', adminController.deleteCar);
 
 router.get('/packages', adminController.listPackages);
-router.post('/packages', uploadSingleImage('image'), adminController.createPackage);
-router.put('/packages/:id', uploadSingleImage('image'), adminController.updatePackage);
+router.post('/packages', [body('image').optional({ checkFalsy: true }).custom((value) => isValidImageUrl(value)).withMessage('Image URL must be a JPG, JPEG, PNG, or WEBP link')], validateRequest, adminController.createPackage);
+router.put('/packages/:id', [body('image').optional({ checkFalsy: true }).custom((value) => isValidImageUrl(value)).withMessage('Image URL must be a JPG, JPEG, PNG, or WEBP link')], validateRequest, adminController.updatePackage);
 router.delete('/packages/:id', adminController.deletePackage);
 
 router.get('/routes', adminController.listRoutes);
@@ -69,7 +69,7 @@ router.patch('/messages/:id/resolve', adminController.resolveMessage);
 router.delete('/messages/:id', adminController.deleteMessage);
 
 router.get('/settings', adminController.getSettings);
-router.put('/settings', uploadSingleImage('bannerImage'), adminController.updateSettings);
+router.put('/settings', [body('bannerImage').optional({ checkFalsy: true }).custom((value) => isValidImageUrl(value)).withMessage('Image URL must be a JPG, JPEG, PNG, or WEBP link')], validateRequest, adminController.updateSettings);
 
 router.get('/notifications', adminController.listNotifications);
 router.patch('/notifications/:id/read', adminController.markNotificationRead);

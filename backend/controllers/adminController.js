@@ -14,6 +14,7 @@ const SiteSettings = require('../models/SiteSettings');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { attachAdminToken } = require('../utils/generateToken');
+const { sanitizeImageUrl } = require('../utils/imageUrl');
 const { notifyAdmins, notifyBookingStatusChange } = require('../services/notificationService');
 const { sendEmail } = require('../services/emailService');
 const { sendWhatsApp } = require('../services/whatsappService');
@@ -61,7 +62,7 @@ async function getSettingsDocument() {
   return settings;
 }
 
-function mapSettingsPayload(body, file) {
+function mapSettingsPayload(body) {
   const payload = {
     businessName: body.businessName,
     contactEmail: body.contactEmail,
@@ -115,8 +116,8 @@ function mapSettingsPayload(body, file) {
     }
   };
 
-  if (file) {
-    payload.homepage.bannerImage = `/uploads/${file.filename}`;
+  if (hasOwnValue(body, 'bannerImage')) {
+    payload.homepage.bannerImage = sanitizeImageUrl(body.bannerImage, '');
   }
 
   return payload;
@@ -401,7 +402,7 @@ const listCars = asyncHandler(async (req, res) => {
 
 const createCar = asyncHandler(async (req, res) => {
   const payload = { ...req.body };
-  if (req.file) payload.image = `/uploads/${req.file.filename}`;
+  payload.image = sanitizeImageUrl(payload.image, '');
   payload.seatingCapacity = toNumber(payload.seatingCapacity, 1);
   payload.pricePerDay = toNumber(payload.pricePerDay, toNumber(payload.baseFare, 0));
   payload.baseFare = toNumber(payload.baseFare, payload.pricePerDay);
@@ -429,9 +430,9 @@ const updateCar = asyncHandler(async (req, res) => {
   if (hasOwnValue(req.body, 'driverAllowance')) payload.driverAllowance = toNumber(payload.driverAllowance, car.driverAllowance || 0);
   if (hasOwnValue(req.body, 'includedKm')) payload.includedKm = toNumber(payload.includedKm, car.includedKm || 0);
   if (hasOwnValue(req.body, 'features')) payload.features = parseList(payload.features);
+  if (hasOwnValue(req.body, 'image')) payload.image = sanitizeImageUrl(payload.image, car.image || '');
 
   Object.assign(car, payload);
-  if (req.file) car.image = `/uploads/${req.file.filename}`;
   await car.save();
   res.json({ success: true, car });
 });
@@ -449,7 +450,7 @@ const listPackages = asyncHandler(async (req, res) => {
 
 const createPackage = asyncHandler(async (req, res) => {
   const payload = { ...req.body };
-  if (req.file) payload.image = `/uploads/${req.file.filename}`;
+  payload.image = sanitizeImageUrl(payload.image, '');
   payload.price = toNumber(payload.price, 0);
   payload.destinations = parseList(payload.destinations);
   payload.inclusions = parseList(payload.inclusions);
@@ -467,9 +468,9 @@ const updatePackage = asyncHandler(async (req, res) => {
   if (hasOwnValue(req.body, 'destinations')) payload.destinations = parseList(payload.destinations);
   if (hasOwnValue(req.body, 'inclusions')) payload.inclusions = parseList(payload.inclusions);
   if (hasOwnValue(req.body, 'exclusions')) payload.exclusions = parseList(payload.exclusions);
+  if (hasOwnValue(req.body, 'image')) payload.image = sanitizeImageUrl(payload.image, tripPackage.image || '');
 
   Object.assign(tripPackage, payload);
-  if (req.file) tripPackage.image = `/uploads/${req.file.filename}`;
   await tripPackage.save();
   res.json({ success: true, package: tripPackage });
 });
@@ -718,7 +719,7 @@ const getSettings = asyncHandler(async (req, res) => {
 
 const updateSettings = asyncHandler(async (req, res) => {
   const settings = await getSettingsDocument();
-  const payload = mapSettingsPayload(req.body, req.file);
+  const payload = mapSettingsPayload(req.body);
 
   if (payload.businessName) settings.businessName = payload.businessName;
   if (payload.contactEmail) settings.contactEmail = payload.contactEmail;
@@ -734,7 +735,7 @@ const updateSettings = asyncHandler(async (req, res) => {
     settings.homepage = {
       ...(settings.homepage?.toObject ? settings.homepage.toObject() : settings.homepage || {}),
       ...payload.homepage,
-      bannerImage: payload.homepage.bannerImage || settings.homepage?.bannerImage || ''
+      bannerImage: payload.homepage.bannerImage ?? settings.homepage?.bannerImage ?? ''
     };
   }
 
