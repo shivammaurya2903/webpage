@@ -305,8 +305,19 @@
     el.modalTitle.textContent = title;
     el.modalEyebrow.textContent = eyebrow;
     el.modalBody.innerHTML = body;
+    const form = el.modalBody.querySelector('form[data-save-entity]');
+    if (form) {
+      form.addEventListener('submit', handleEntityFormSubmit);
+    }
     el.modalBackdrop.hidden = false;
     document.body.style.overflow = 'hidden';
+  }
+
+  async function handleEntityFormSubmit(event) {
+    const form = event.currentTarget;
+    event.preventDefault();
+    event.stopPropagation();
+    await submitEntityForm(form);
   }
 
   function closeModal() {
@@ -1384,19 +1395,16 @@
       } else if (target.dataset.messageDelete) {
         await deleteEntity('message', target.dataset.messageDelete);
       } else if (target.dataset.notificationRead) {
-        const response = await apiFetch(`/api/admin/notifications/${target.dataset.notificationRead}/read`, { method: 'PATCH' });
-        const updated = response.notification || null;
-        state.notifications = (state.notifications || []).map((item) => (
-          item._id === target.dataset.notificationRead
-            ? { ...item, readAt: updated?.readAt || new Date().toISOString() }
-            : item
-        ));
+        await apiFetch(`/api/admin/notifications/${target.dataset.notificationRead}/read`, { method: 'PATCH' });
+        state.notifications = null;
+        await loadNotifications(true);
         renderShellNotifications();
         if (state.view === 'notifications') renderCurrentView();
         toast('Notification read', 'Updated');
       } else if (target.dataset.notificationDelete) {
         await apiFetch(`/api/admin/notifications/${target.dataset.notificationDelete}`, { method: 'DELETE' });
-        state.notifications = (state.notifications || []).filter((item) => item._id !== target.dataset.notificationDelete);
+        state.notifications = null;
+        await loadNotifications(true);
         renderShellNotifications();
         if (state.view === 'notifications') renderCurrentView();
         toast('Notification removed', 'Deleted successfully');
@@ -1602,12 +1610,6 @@
       if (event.target === el.modalBackdrop) closeModal();
     });
     el.viewRoot.addEventListener('click', handleTableActions);
-    el.viewRoot.addEventListener('submit', async (event) => {
-      const form = event.target.closest('[data-save-entity]');
-      if (!form) return;
-      event.preventDefault();
-      await submitEntityForm(form);
-    });
     el.viewRoot.addEventListener('click', async (event) => {
       const openFormButton = event.target.closest('[data-open-form]');
       if (openFormButton) {
