@@ -623,19 +623,34 @@
 
     const getMaxIndex = () => Math.max(0, cards.length - 1);
 
-    const update = (nextIndex) => {
-      index = Math.max(0, Math.min(getMaxIndex(), nextIndex));
+    const update = (nextIndex, { loop = false } = {}) => {
+      const maxIndex = getMaxIndex();
+      if (!maxIndex && cards.length) {
+        index = 0;
+      } else if (loop) {
+        // loop never show end: wrap around
+        const wrapped = ((nextIndex % (maxIndex + 1)) + (maxIndex + 1)) % (maxIndex + 1);
+        index = wrapped;
+      } else {
+        index = Math.max(0, Math.min(maxIndex, nextIndex));
+      }
+
       const step = getStep();
       if (track) track.style.transform = `translateX(${-index * step}px)`;
 
-      if (prevBtn) prevBtn.disabled = index === 0;
-      if (nextBtn) nextBtn.disabled = index === getMaxIndex();
+      if (prevBtn) prevBtn.disabled = false;
+      if (nextBtn) nextBtn.disabled = false;
+
+      // mark active card for CSS animation
+      cards.forEach((card, i) => {
+        card.dataset.active = String(i === index);
+      });
     };
 
     const advance = () => {
       const maxIndex = getMaxIndex();
       if (!maxIndex) return;
-      update(index >= maxIndex ? 0 : index + 1);
+      update(index + 1, { loop: true });
     };
 
     const startAutoplay = () => {
@@ -649,8 +664,34 @@
       autoplayId = null;
     };
 
-    prevBtn?.addEventListener('click', () => update(index - 1));
-    nextBtn?.addEventListener('click', () => update(index + 1));
+    prevBtn?.addEventListener('click', () => update(index - 1, { loop: true }));
+    nextBtn?.addEventListener('click', () => update(index + 1, { loop: true }));
+
+    // Keyboard support (Left/Right) when carousel is focused
+    // - Works even if buttons are not focused
+    carousel.addEventListener('keydown', (event) => {
+      if (!event || event.defaultPrevented) return;
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        stopAutoplay();
+        update(index - 1, { loop: true });
+        startAutoplay();
+      }
+      if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        stopAutoplay();
+        update(index + 1, { loop: true });
+        startAutoplay();
+      }
+    });
+
+    // Make sure arrow buttons show correct disabled state when card count is 1
+    // (update() will handle this, but this is a quick visual sync)
+    if (cards.length < 2) {
+      if (prevBtn) prevBtn.disabled = true;
+      if (nextBtn) nextBtn.disabled = true;
+    }
+
 
     carousel.addEventListener('pointerdown', (event) => {
       isPointerDown = true;
@@ -663,7 +704,7 @@
       isPointerDown = false;
       const delta = event.clientX - startX;
       if (Math.abs(delta) > 50) {
-        update(delta < 0 ? index + 1 : index - 1);
+        update(delta < 0 ? index + 1 : index - 1, { loop: true });
       }
       startAutoplay();
     });
