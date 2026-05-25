@@ -9,6 +9,9 @@
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&family=Cormorant+Garamond:wght@500;600;700&display=swap" rel="stylesheet">
 
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
   <!-- Font Awesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 
@@ -192,11 +195,11 @@
 
 
   <!-- BOOKINGS MODAL -->
-  <div id="bookingsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;z-index:10000;">
-    <div style="background:#fff;padding:18px;border-radius:8px;max-width:820px;width:100%;box-shadow:0 8px 24px rgba(0,0,0,0.2);">
-      <button id="bookingsCloseBtn" style="float:right;background:transparent;border:none;font-size:18px;">&times;</button>
+  <div id="bookingsModal" class="bookings-modal" aria-hidden="true">
+    <div class="bookings-modal__dialog">
+      <button id="bookingsCloseBtn" class="bookings-modal__close" type="button">&times;</button>
       <h3>My Bookings</h3>
-      <div id="bookingsList" style="margin-top:12px;max-height:60vh;overflow:auto;">
+      <div id="bookingsList" class="bookings-modal__list">
         <!-- Bookings will be rendered here -->
       </div>
     </div>
@@ -442,8 +445,10 @@
                 <input name="email" type="email" placeholder="Email Address" autocomplete="email" required />
               </div>
 
-              <div class="field">
-                <input name="phone" type="tel" placeholder="Phone Number" autocomplete="tel" required inputmode="numeric" />
+              <div class="field phone-field">
+                <label class="sr-only" for="bookingPhone">Phone Number</label>
+                <!-- <span class="phone-prefix" aria-hidden="true">+91</span> -->
+                <input id="bookingPhone" name="phone" type="tel" placeholder="9876543210" autocomplete="tel-national" required inputmode="numeric" />
               </div>
 
               <div class="field">
@@ -452,11 +457,15 @@
               </div>
 
               <div class="field">
-                <input name="pickupLocation" type="text" placeholder="Pickup Location" required />
+                <input id="pickupLocation" name="pickupLocation" type="text" placeholder="Pickup Location" list="pickupSuggestions" autocomplete="off" required />
+                <input type="hidden" name="pickupCoordinates" data-pickup-coordinates />
+                <datalist id="pickupSuggestions"></datalist>
               </div>
 
               <div class="field">
-                <input name="dropLocation" type="text" placeholder="Drop Location" required />
+                <input id="dropLocation" name="dropLocation" type="text" placeholder="Drop Location" list="dropSuggestions" autocomplete="off" required />
+                <input type="hidden" name="dropCoordinates" data-drop-coordinates />
+                <datalist id="dropSuggestions"></datalist>
               </div>
 
               <div class="field">
@@ -467,31 +476,6 @@
               <div class="field">
                 <label class="sr-only" for="dropDate">Drop Date</label>
                 <input id="dropDate" name="dropDate" type="date" required />
-              </div>
-
-              <div class="field">
-                <label class="sr-only" for="selectedCar">Select Car</label>
-                <select id="selectedCar" name="selectedCar" required>
-                  <option value="" selected disabled>Select Car</option>
-                  <option>Mercedes V-Class</option>
-                  <option>Innova Hycross</option>
-                  <option>Toyota Fortuner Legender</option>
-                  <option>Toyota Fortuner</option>
-                  <option>Force Traveller</option>
-                  <option>Innova Crysta</option>
-                  <option>Hyundai Verna</option>
-                  <option>others</option>
-                </select>
-              </div>
-
-              <div class="field">
-                <label class="sr-only" for="selectedPackage">Select Package</label>
-                <select id="selectedPackage" name="selectedPackage" required>
-                  <option value="" selected disabled>Select Package</option>
-                  <option>Airport Transfer</option>
-                  <option>Luxury Outstation Tour</option>
-                  <option>Wedding & VIP Event</option>
-                </select>
               </div>
 
               <div class="field">
@@ -506,7 +490,52 @@
                 </select>
               </div>
 
+              <!-- <div class="field">
+                <label class="sr-only" for="selectedCar">Select Car</label>
+                <select id="selectedCar" name="selectedCar" required>
+                  <option value="" selected disabled>Select Car</option>
+                  <option>Mercedes V-Class</option>
+                  <option>Innova Hycross</option>
+                  <option>Toyota Fortuner Legender</option>
+                  <option>Toyota Fortuner</option>
+                  <option>Force Traveller</option>
+                  <option>Innova Crysta</option>
+                  <option>Hyundai Verna</option>
+                  <option>others</option>
+                </select>
+              </div> -->
 
+              <!-- <div class="field">
+                <label class="sr-only" for="selectedPackage">Select Package</label>
+                <select id="selectedPackage" name="selectedPackage" required>
+                  <option value="" selected disabled>Select Package</option>
+                  <option>Airport Transfer</option>
+                  <option>Luxury Outstation Tour</option>
+                  <option>Wedding & VIP Event</option>
+                </select>
+              </div> -->
+
+              <div class="field">
+                <label class="sr-only" for="tripType">Trip Type</label>
+                <select id="tripType" name="tripType" data-trip-type>
+                  <option value="" selected>Trip Type</option>
+                  <option value="one-way">One-way</option>
+                  <option value="round-trip">Round trip</option>
+                  <option value="local-package">Local package</option>
+                  <option value="airport-transfer">Airport transfer</option>
+                  <option value="multi-day-tour">Multi-day tour</option>
+                </select>
+              </div>
+
+              <div class="field field-full">
+                <label class="sr-only" for="vehicleId">Choose Vehicle</label>
+                <select id="vehicleId" name="vehicleId" data-vehicle-select required>
+                  <option value="" selected disabled>Loading vehicles...</option>
+                </select>
+                <input type="hidden" name="selectedCar" data-selected-car />
+              </div>
+
+              
               <div class="field">
                 <input name="requirements" type="text" placeholder="Additional Requirements" />
               </div>
@@ -529,9 +558,38 @@
         </div>
 
         <div class="booking-right">
-          <div class="booking-image" aria-hidden="true">
-            <img src="https://4kwallpapers.com/images/wallpapers/lexus-gx-550-3840x2160-11818.jpeg" alt="SUV" loading="lazy" decoding="async" />
-            <div class="booking-glass"></div>
+          <div class="booking-live-panel card" data-fare-panel>
+            <div class="booking-live-header">
+              <div>
+                <p class="eyebrow">Instant quote</p>
+                <h3>Live fare estimate</h3>
+              </div>
+              <div class="booking-live-pill" data-fare-source>OpenRouteService</div>
+            </div>
+
+            <div class="fare-summary-grid" data-fare-summary>
+              <div class="fare-metric"><span>Distance</span><strong data-fare-distance>--</strong></div>
+              <div class="fare-metric"><span>Duration</span><strong data-fare-duration>--</strong></div>
+              <div class="fare-metric"><span>Base fare</span><strong data-fare-base>--</strong></div>
+              <div class="fare-metric"><span>Per km</span><strong data-fare-rate>--</strong></div>
+              <div class="fare-metric"><span>Toll</span><strong data-fare-toll>--</strong></div>
+              <div class="fare-metric"><span>GST</span><strong data-fare-gst>--</strong></div>
+            </div>
+
+            <div class="fare-total-card">
+              <span>Estimated total</span>
+              <strong data-fare-total>₹0</strong>
+            </div>
+
+            <div class="booking-map-shell">
+              <div class="booking-map" id="bookingMap" aria-label="Route preview map"></div>
+              <div class="booking-map-note" data-route-note>Route preview will appear after pickup and drop are resolved.</div>
+            </div>
+
+            <div class="booking-image booking-image--compact" aria-hidden="true">
+              <img src="https://4kwallpapers.com/images/wallpapers/lexus-gx-550-3840x2160-11818.jpeg" alt="SUV" loading="lazy" decoding="async" />
+              <div class="booking-glass"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -880,6 +938,7 @@
     </a>
   </div>
 
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="app.js"></script>
 </body>
 

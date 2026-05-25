@@ -17,7 +17,9 @@ router.post(
     body('category').notEmpty(),
     body('fuelType').notEmpty(),
     body('transmission').notEmpty(),
-    body('pricePerDay').isFloat({ min: 1 })
+    body('pricePerDay').optional({ checkFalsy: true }).isFloat({ min: 0 }),
+    body('baseFare').optional({ checkFalsy: true }).isFloat({ min: 0 }),
+    body('pricePerKm').optional({ checkFalsy: true }).isFloat({ min: 0 })
   ],
   validateRequest,
   createCar

@@ -46,7 +46,7 @@ function buildFinalBill(estimatedFare) {
   return {
     baseAmount,
     taxAmount,
-    taxPercent,
+      taxPercent,
     cgstAmount,
     sgstAmount,
     discountAmount,
@@ -84,7 +84,7 @@ function syncInvoiceFromModel(booking, invoice, model, finalBill, paymentStatus)
   invoice.driverName = booking.assignedDriver?.driverName || invoice.driverName || '';
   invoice.driverPhone = booking.assignedDriver?.phone || invoice.driverPhone || '';
   invoice.carType = booking.selectedPackage || invoice.carType || '';
-  invoice.distance = booking.finalBill?.distance || invoice.distance || '';
+  invoice.distance = booking.distanceInKm ? `${Number(booking.distanceInKm).toFixed(1)} KM` : booking.finalBill?.distance || invoice.distance || '';
   invoice.distanceValue = invoice.distance;
   invoice.businessSnapshot = model.business;
   invoice.customerSnapshot = model.customer;
@@ -93,20 +93,14 @@ function syncInvoiceFromModel(booking, invoice, model, finalBill, paymentStatus)
   invoice.paymentSummary = model.payment;
   invoice.terms = model.terms;
   invoice.fareBreakdown = {
-    baseAmount: finalBill.baseAmount,
-    taxAmount: finalBill.taxAmount,
-    taxPercent: finalBill.taxPercent,
-    cgstAmount: finalBill.cgstAmount,
-    sgstAmount: finalBill.sgstAmount,
-    discountAmount: finalBill.discountAmount,
-    totalAmount: finalBill.totalAmount,
-    currency: 'INR'
+    ...finalBill,
+    currency: finalBill.currency || 'INR'
   };
-  invoice.subtotalAmount = finalBill.baseAmount;
-  invoice.taxAmount = finalBill.taxAmount;
+  invoice.subtotalAmount = finalBill.subtotalAmount || finalBill.baseAmount;
+  invoice.taxAmount = finalBill.taxAmount || finalBill.gstAmount || 0;
   invoice.cgstAmount = finalBill.cgstAmount;
   invoice.sgstAmount = finalBill.sgstAmount;
-  invoice.taxPercent = finalBill.taxPercent;
+  invoice.taxPercent = finalBill.taxPercent || finalBill.gstPercent || 5;
   invoice.discountAmount = finalBill.discountAmount;
   invoice.totalFare = finalBill.totalAmount;
   invoice.paymentMethod = booking.paymentMethod || invoice.paymentMethod || '';
@@ -169,7 +163,7 @@ const generateBookingInvoice = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'Invoice cannot be generated for a rejected or cancelled booking');
   }
 
-  const finalBill = buildFinalBill(booking.totalFare || booking.estimatedFare || 0);
+    const finalBill = booking.finalBill?.totalAmount ? booking.finalBill : buildFinalBill(booking.totalFare || booking.estimatedFare || 0);
   const existingInvoice = booking.invoice || await Invoice.findOne({ booking: booking._id });
   const invoice = existingInvoice || new Invoice({ invoiceId: booking.invoiceId || createInvoiceId(), booking: booking._id });
 

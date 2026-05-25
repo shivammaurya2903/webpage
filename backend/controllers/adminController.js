@@ -14,7 +14,7 @@ const SiteSettings = require('../models/SiteSettings');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { attachAdminToken } = require('../utils/generateToken');
-const { notifyAdmins } = require('../services/notificationService');
+const { notifyAdmins, notifyBookingStatusChange } = require('../services/notificationService');
 const { sendEmail } = require('../services/emailService');
 const { sendWhatsApp } = require('../services/whatsappService');
 const { bookingAccepted, driverAssigned, rideCompleted } = require('../services/emailTemplates');
@@ -85,6 +85,16 @@ function mapSettingsPayload(body, file) {
       currency: body.currency,
       advancePercent: toNumber(body.advancePercent, 20),
       gatewayName: body.gatewayName
+    },
+    pricingSettings: {
+      gstPercent: toNumber(body.gstPercent, 5),
+      nightChargePercent: toNumber(body.nightChargePercent, 10),
+      driverAllowance: toNumber(body.driverAllowance, 0),
+      extraKmRate: toNumber(body.extraKmRate, 0),
+      waitingChargePerHour: toNumber(body.waitingChargePerHour, 0),
+      defaultIncludedKm: toNumber(body.defaultIncludedKm, 0),
+      baseFare: toNumber(body.defaultBaseFare, 0),
+      pricePerKm: toNumber(body.defaultPricePerKm, 0)
     },
     notificationSettings: {
       emailEnabled: toBoolean(body.emailEnabled, true),
@@ -288,30 +298,12 @@ const setBookingStatus = asyncHandler(async (req, res) => {
 
   await booking.save();
 
-  if (booking.email && normalizedStatus === 'Approved') {
-    await sendEmail({ to: booking.email, subject: `Booking approved - ${booking.bookingId}`, html: bookingAccepted(booking) }).catch(() => undefined);
-    await sendWhatsApp({ to: booking.phone, message: `Your booking ${booking.bookingId} has been approved.` }).catch(() => undefined);
-  }
-
-  if (booking.email && (normalizedStatus === 'Rejected' || normalizedStatus === 'Cancelled')) {
-    await sendEmail({
-      to: booking.email,
-      subject: `Booking rejected - ${booking.bookingId}`,
-      html: `<div style="font-family:Arial,sans-serif"><h2>Booking Rejected</h2><p>Your booking <strong>${booking.bookingId}</strong> was rejected.</p><p>Reason: ${booking.rejectionReason || 'Not provided'}</p></div>`
-    }).catch(() => undefined);
-    await sendWhatsApp({ to: booking.phone, message: `Booking ${booking.bookingId} was cancelled. ${booking.rejectionReason || ''}`.trim() }).catch(() => undefined);
-  }
-
-  if (booking.email && normalizedStatus === 'Ride Completed') {
-    await sendEmail({ to: booking.email, subject: `Ride completed - ${booking.bookingId}`, html: rideCompleted(booking) }).catch(() => undefined);
-  }
-
-  await notifyAdmins('booking:updated', {
-    title: 'Booking updated',
-    message: `${booking.bookingId} moved to ${booking.bookingStatus}`,
-    bookingId: booking.bookingId,
+  await notifyBookingStatusChange({
+    booking,
     status: booking.bookingStatus,
-    paymentStatus: booking.paymentStatus
+    note: booking.rejectionReason || booking.adminNotes || '',
+    userId: booking.user || null,
+    socketEvent: 'booking:status-updated'
   });
 
   res.json({ success: true, booking });
@@ -332,17 +324,14 @@ const assignDriverToBooking = asyncHandler(async (req, res) => {
   driver.availability = false;
   await driver.save();
 
-  if (booking.email) {
-    await sendEmail({ to: booking.email, subject: `Driver assigned - ${booking.bookingId}`, html: driverAssigned(booking, driver) }).catch(() => undefined);
-    await sendWhatsApp({ to: booking.phone, message: `Driver ${driver.driverName} has been assigned to booking ${booking.bookingId}.` }).catch(() => undefined);
-  }
-
-  await notifyAdmins('booking:driver-assigned', {
-    title: 'Driver assigned',
-    message: `${driver.driverName} assigned to ${booking.bookingId}`,
-    bookingId: booking.bookingId,
-    driverName: driver.driverName,
-    vehicleAssigned: driver.vehicleAssigned
+  await notifyBookingStatusChange({
+    booking,
+    status: booking.bookingStatus,
+    note: `Driver ${driver.driverName} assigned`,
+    userId: booking.user || null,
+    socketEvent: 'booking:driver-assigned',
+    adminEvent: 'booking:driver-assigned',
+    adminTitle: 'Driver assigned'
   });
 
   res.json({ success: true, booking, driver });
@@ -393,7 +382,13 @@ const createCar = asyncHandler(async (req, res) => {
   const payload = { ...req.body };
   if (req.file) payload.image = `/uploads/${req.file.filename}`;
   payload.seatingCapacity = toNumber(payload.seatingCapacity, 1);
-  payload.pricePerDay = toNumber(payload.pricePerDay, 0);
+  payload.pricePerDay = toNumber(payload.pricePerDay, toNumber(payload.baseFare, 0));
+  payload.baseFare = toNumber(payload.baseFare, payload.pricePerDay);
+  payload.pricePerKm = toNumber(payload.pricePerKm, 0);
+  payload.extraKmRate = toNumber(payload.extraKmRate, payload.pricePerKm || 0);
+  payload.nightChargePercent = toNumber(payload.nightChargePercent, 10);
+  payload.driverAllowance = toNumber(payload.driverAllowance, 0);
+  payload.includedKm = toNumber(payload.includedKm, 0);
   payload.features = parseList(payload.features);
   const car = await Car.create(payload);
   res.status(201).json({ success: true, car });
@@ -405,7 +400,13 @@ const updateCar = asyncHandler(async (req, res) => {
 
   const payload = { ...req.body };
   if (payload.seatingCapacity) payload.seatingCapacity = toNumber(payload.seatingCapacity, car.seatingCapacity);
-  if (payload.pricePerDay) payload.pricePerDay = toNumber(payload.pricePerDay, car.pricePerDay);
+  if (payload.pricePerDay || payload.baseFare) payload.pricePerDay = toNumber(payload.pricePerDay, toNumber(payload.baseFare, car.pricePerDay));
+  if (payload.baseFare) payload.baseFare = toNumber(payload.baseFare, car.baseFare || car.pricePerDay);
+  if (payload.pricePerKm) payload.pricePerKm = toNumber(payload.pricePerKm, car.pricePerKm || 0);
+  if (payload.extraKmRate) payload.extraKmRate = toNumber(payload.extraKmRate, car.extraKmRate || car.pricePerKm || 0);
+  if (payload.nightChargePercent) payload.nightChargePercent = toNumber(payload.nightChargePercent, car.nightChargePercent || 10);
+  if (payload.driverAllowance) payload.driverAllowance = toNumber(payload.driverAllowance, car.driverAllowance || 0);
+  if (payload.includedKm) payload.includedKm = toNumber(payload.includedKm, car.includedKm || 0);
   if (payload.features) payload.features = parseList(payload.features);
 
   Object.assign(car, payload);

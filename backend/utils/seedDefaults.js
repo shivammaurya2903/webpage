@@ -67,6 +67,12 @@ async function seedDefaults() {
       fuelType: 'Diesel',
       transmission: 'Automatic',
       pricePerDay: 18000,
+      baseFare: 500,
+      pricePerKm: 18,
+      extraKmRate: 25,
+      nightChargePercent: 10,
+      driverAllowance: 500,
+      includedKm: 300,
       availability: true,
       features: ['Leather seats', 'Captain seats', 'Ambient lighting', 'Premium AC']
     },
@@ -78,6 +84,12 @@ async function seedDefaults() {
       fuelType: 'Hybrid',
       transmission: 'Automatic',
       pricePerDay: 20000,
+      baseFare: 700,
+      pricePerKm: 25,
+      extraKmRate: 30,
+      nightChargePercent: 10,
+      driverAllowance: 600,
+      includedKm: 300,
       availability: true,
       features: ['Executive lounge', 'Captain recliners', 'Smart infotainment', 'Chauffeur focus']
     },
@@ -89,6 +101,12 @@ async function seedDefaults() {
       fuelType: 'Diesel',
       transmission: 'Automatic',
       pricePerDay: 12000,
+      baseFare: 700,
+      pricePerKm: 25,
+      extraKmRate: 30,
+      nightChargePercent: 10,
+      driverAllowance: 600,
+      includedKm: 300,
       availability: true,
       features: ['High ground clearance', 'Spacious cabin', 'Tour-ready', 'Reliable performance']
     }

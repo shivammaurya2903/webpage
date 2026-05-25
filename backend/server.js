@@ -19,6 +19,7 @@ const { seedDefaults } = require('./utils/seedDefaults');
 const authRoutes = require('./routes/authRoutes');
 const bookingRoutes = require('./routes/bookingRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
+const fareRoutes = require('./routes/fareRoutes');
 const carRoutes = require('./routes/carRoutes');
 const packageRoutes = require('./routes/packageRoutes');
 const routeRoutes = require('./routes/routeRoutes');
@@ -92,6 +93,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/payment', paymentRoutes);
+app.use('/api/fare', fareRoutes);
 app.use('/api/cars', carRoutes);
 app.use('/api/packages', packageRoutes);
 app.use('/api/routes', routeRoutes);

@@ -29,6 +29,16 @@ const siteSettingsSchema = new mongoose.Schema(
       advancePercent: { type: Number, default: 20 },
       gatewayName: { type: String, default: 'Stripe' }
     },
+    pricingSettings: {
+      gstPercent: { type: Number, default: 5 },
+      nightChargePercent: { type: Number, default: 10 },
+      driverAllowance: { type: Number, default: 0 },
+      extraKmRate: { type: Number, default: 0 },
+      waitingChargePerHour: { type: Number, default: 0 },
+      defaultIncludedKm: { type: Number, default: 0 },
+      baseFare: { type: Number, default: 0 },
+      pricePerKm: { type: Number, default: 0 }
+    },
     notificationSettings: {
       emailEnabled: { type: Boolean, default: true },
       whatsappEnabled: { type: Boolean, default: true },

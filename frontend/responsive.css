@@ -127,6 +127,18 @@
     padding: 18px;
   }
 
+  .booking-live-panel {
+    padding: 18px;
+  }
+
+  .fare-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .booking-map {
+    min-height: 240px;
+  }
+
   .booking-image img {
     min-height: 340px;
   }
@@ -158,6 +170,14 @@
     padding: 16px;
   }
 
+  .booking-live-header {
+    flex-direction: column;
+  }
+
+  .fare-total-card strong {
+    font-size: 24px;
+  }
+
   .booking-features {
     grid-template-columns: 1fr;
   }
@@ -169,6 +189,10 @@
 
   .booking-image img {
     min-height: 260px;
+  }
+
+  .booking-map {
+    min-height: 210px;
   }
 
   .booking-title,

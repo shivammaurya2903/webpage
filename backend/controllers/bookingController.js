@@ -8,11 +8,11 @@ const Package = require('../models/Package');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { createBookingId } = require('../utils/bookingId');
-const { estimateFare } = require('../utils/fareEstimator');
 const { createInvoiceId } = require('../utils/invoiceId');
 const { buildInvoicePdf } = require('../utils/invoicePdf');
-const { notifyAdmins } = require('../services/notificationService');
-const { bookingConfirmation, bookingAccepted, driverAssigned, rideCompleted, invoiceGenerated, paymentReceipt } = require('../services/emailTemplates');
+const { calculateFareQuote } = require('../services/fareCalculator');
+const { notifyAdmins, notifyBookingStatusChange } = require('../services/notificationService');
+const { bookingConfirmation } = require('../services/emailTemplates');
 const { sendEmail } = require('../services/emailService');
 const { sendWhatsApp } = require('../services/whatsappService');
 
@@ -87,43 +87,165 @@ async function findBestRoute(pickupLocation, dropLocation) {
   }) || null;
 }
 
+function parseCoordinates(value) {
+  if (!value) return null;
+  if (Array.isArray(value) && value.length >= 2) {
+    const longitude = Number(value[0]);
+    const latitude = Number(value[1]);
+    return Number.isFinite(longitude) && Number.isFinite(latitude) ? [longitude, latitude] : null;
+  }
+
+  if (typeof value === 'string') {
+    const parts = value.split(',').map((item) => Number(item.trim()));
+    if (parts.length >= 2 && parts.every(Number.isFinite)) return [parts[0], parts[1]];
+  }
+
+  if (typeof value === 'object') {
+    const longitude = Number(value.longitude ?? value.lng ?? value.lon);
+    const latitude = Number(value.latitude ?? value.lat);
+    if (Number.isFinite(longitude) && Number.isFinite(latitude)) return [longitude, latitude];
+  }
+
+  return null;
+}
+
+function parseLocalDateOnly(value) {
+  const match = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(String(value || '').trim());
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+  return date;
+}
+
+function startOfToday() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today;
+}
+
+function normalizeIndianPhone(value) {
+  const cleaned = String(value || '').trim().replace(/[\s-]/g, '');
+  if (!cleaned || /[^+0-9]/.test(cleaned)) return '';
+
+  let digits = cleaned.startsWith('+') ? cleaned.slice(1) : cleaned;
+  if (digits.startsWith('91') && digits.length === 12) {
+    digits = digits.slice(2);
+  }
+
+  if (!/^[6-9][0-9]{9}$/.test(digits)) return '';
+  return `+91${digits}`;
+}
+
+function validationError(field, message) {
+  return new ApiError(400, 'Validation failed', [{ field, message }]);
+}
+
 const createBooking = asyncHandler(async (req, res) => {
+  const customerName = String(req.body.customerName || req.body.fullName || '').trim();
+  if (customerName.length < 2) throw validationError('customerName', 'Customer name is required');
+
+  const normalizedPhone = normalizeIndianPhone(req.body.phone);
+  if (!normalizedPhone) throw validationError('phone', 'Please enter a valid Indian mobile number.');
+
+  const email = String(req.body.email || '').trim().toLowerCase();
+  const pickupLocation = String(req.body.pickupLocation || '').trim();
+  const dropLocation = String(req.body.dropLocation || '').trim();
+  const pickupDateValue = String(req.body.pickupDate || '').trim();
+  const pickupDate = parseLocalDateOnly(pickupDateValue);
+  const pickupTime = String(req.body.pickupTime || '').trim();
+  const passengers = String(req.body.passengers || '').trim();
+  const selectedCar = String(req.body.selectedCar || '').trim();
+  const selectedPackage = String(req.body.selectedPackage || req.body.tripType || '').trim();
+
+  if (!email) throw validationError('email', 'Valid email is required');
+  if (!pickupLocation) throw validationError('pickupLocation', 'Pickup location is required');
+  if (!dropLocation) throw validationError('dropLocation', 'Drop location is required');
+  if (!pickupDate) throw validationError('pickupDate', 'Valid pickup date is required');
+  if (pickupDate < startOfToday()) throw validationError('pickupDate', 'Booking date cannot be earlier than today.');
+  if (!pickupTime) throw validationError('pickupTime', 'Valid pickup time is required');
+  if (!passengers) throw validationError('passengers', 'Passenger count is required');
+  if (!selectedCar) throw validationError('selectedCar', 'Selected car is required');
+  if (!selectedPackage) throw validationError('selectedPackage', 'Selected package is required');
+
+  const dropDateValue = String(req.body.dropDate || '').trim();
+  if (dropDateValue) {
+    const dropDate = parseLocalDateOnly(dropDateValue);
+    if (!dropDate) throw validationError('dropDate', 'Valid drop date is required');
+    if (dropDate < pickupDate) throw validationError('dropDate', 'Drop date cannot be earlier than pickup date.');
+  }
+
   const payload = {
-    customerName: req.body.customerName || req.body.fullName,
-    phone: req.body.phone,
-    email: req.body.email,
-    pickupLocation: req.body.pickupLocation,
-    dropLocation: req.body.dropLocation,
-    pickupDate: req.body.pickupDate,
-    pickupTime: req.body.pickupTime,
-    passengers: req.body.passengers,
-    selectedCar: req.body.selectedCar,
-    selectedPackage: req.body.selectedPackage,
-    specialRequirements: req.body.specialRequirements || req.body.requirements || '',
+    customerName,
+    phone: normalizedPhone,
+    email,
+    pickupLocation,
+    dropLocation,
+    pickupDate: pickupDateValue,
+    pickupTime,
+    passengers,
+    selectedCar,
+    selectedPackage,
+    tripType: String(req.body.tripType || req.body.selectedPackage || '').trim(),
+    vehicleId: String(req.body.vehicleId || req.body.selectedCarId || '').trim(),
+    pickupCoordinates: parseCoordinates(req.body.pickupCoordinates || req.body.pickupCoords),
+    dropCoordinates: parseCoordinates(req.body.dropCoordinates || req.body.dropCoords),
+    specialRequirements: String(req.body.specialRequirements || req.body.requirements || '').trim(),
     user: req.user?._id || null
   };
 
-  const [car, tripPackage, route] = await Promise.all([
+  const [car, tripPackage, route, settings] = await Promise.all([
     Car.findOne({ carName: new RegExp(`^${escapeRegExp(payload.selectedCar)}$`, 'i') }),
     Package.findOne({ packageName: new RegExp(`^${escapeRegExp(payload.selectedPackage)}$`, 'i') }),
-    findBestRoute(payload.pickupLocation, payload.dropLocation)
+    findBestRoute(payload.pickupLocation, payload.dropLocation),
+    SiteSettings.findOne({}).lean()
   ]);
 
-  const pricing = estimateFare({ car, tripPackage, route, passengers: payload.passengers });
+  const pricing = await calculateFareQuote({
+    pickup: {
+      address: payload.pickupLocation,
+      coordinates: payload.pickupCoordinates
+    },
+    drop: {
+      address: payload.dropLocation,
+      coordinates: payload.dropCoordinates
+    },
+    vehicle: car,
+    tripPackage,
+    route,
+    tripType: payload.tripType,
+    passengers: payload.passengers,
+    pickupDateTime: `${payload.pickupDate}T${payload.pickupTime}`,
+    settings
+  });
 
   const booking = await Booking.create({
     bookingId: createBookingId(),
     ...payload,
-    pickupDate: new Date(`${payload.pickupDate}T00:00:00`),
-    estimatedFare: pricing.estimatedFare,
-    totalFare: pricing.estimatedFare,
+    pickupDate,
+    distanceInKm: pricing.distanceInKm,
+    estimatedDuration: pricing.estimatedDuration,
+    baseFare: pricing.fareBreakdown.baseFare,
+    perKmRate: pricing.fareBreakdown.perKmRate,
+    distanceFare: pricing.fareBreakdown.distanceFare,
+    tollCharges: pricing.fareBreakdown.tollCharges,
+    waitingCharges: pricing.fareBreakdown.waitingCharges,
+    nightCharges: pricing.fareBreakdown.nightCharges,
+    gstAmount: pricing.fareBreakdown.gstAmount,
+    estimatedFare: pricing.totalFare,
+    totalFare: pricing.totalFare,
     finalBill: {
-      estimatedFare: pricing.estimatedFare,
-      taxAmount: 0,
-      discountAmount: 0,
-      totalAmount: pricing.estimatedFare,
+      ...pricing.fareBreakdown,
       currency: 'INR',
-      payableAfterRide: true
+      payableAfterRide: true,
+      source: pricing.source,
+      routeGeometry: pricing.routeGeometry,
+      pickupCoordinates: pricing.pickup?.coordinates || null,
+      dropCoordinates: pricing.drop?.coordinates || null
     },
     paymentStatus: 'Unpaid',
     bookingStatus: 'Pending'
@@ -136,7 +258,9 @@ const createBooking = asyncHandler(async (req, res) => {
     dropLocation: booking.dropLocation,
     bookingStatus: booking.bookingStatus,
     paymentStatus: booking.paymentStatus,
-    estimatedFare: booking.estimatedFare
+    estimatedFare: booking.estimatedFare,
+    totalFare: booking.totalFare,
+    tripType: booking.tripType
   });
 
   await sendEmail({
@@ -239,32 +363,13 @@ const updateBookingStatus = asyncHandler(async (req, res) => {
 
   await booking.save();
 
-  if (booking.email && status === 'Approved') {
-    await sendEmail({ to: booking.email, subject: `Booking approved - ${booking.bookingId}`, html: bookingAccepted(booking) }).catch(() => undefined);
-    await sendWhatsApp({ to: booking.phone, message: `Your booking ${booking.bookingId} has been approved.` }).catch(() => undefined);
-  }
-
-  if (booking.email && status === 'Ride Completed') {
-    await sendEmail({ to: booking.email, subject: `Ride completed - ${booking.bookingId}`, html: rideCompleted(booking) }).catch(() => undefined);
-    await sendWhatsApp({ to: booking.phone, message: `Your ride for booking ${booking.bookingId} has been completed. The invoice will be generated shortly.` }).catch(() => undefined);
-  }
-
-  if (booking.email && status === 'Rejected') {
-    await sendWhatsApp({ to: booking.phone, message: `Booking ${booking.bookingId} was rejected. ${booking.rejectionReason || ''}`.trim() }).catch(() => undefined);
-  }
-
-  if (booking.email && status === 'Paid') {
-    const invoice = await findInvoiceForBooking(booking);
-    const summary = invoice || {
-      invoiceId: booking.invoiceId || 'PENDING',
-      totalFare: booking.totalFare || booking.estimatedFare || 0,
-      paymentStatus: booking.paymentStatus,
-      paymentMethod: booking.paymentMethod
-    };
-    await sendEmail({ to: booking.email, subject: `Payment receipt - ${booking.bookingId}`, html: paymentReceipt(summary, booking) }).catch(() => undefined);
-  }
-
-  await notifyAdmins('booking:updated', { bookingId: booking.bookingId, status: booking.bookingStatus, paymentStatus: booking.paymentStatus });
+  await notifyBookingStatusChange({
+    booking,
+    status: booking.bookingStatus,
+    note: booking.rejectionReason || '',
+    userId: booking.user || null,
+    socketEvent: 'booking:status-updated'
+  });
   res.json({ success: true, booking });
 });
 
@@ -283,14 +388,14 @@ const assignDriver = asyncHandler(async (req, res) => {
   driver.availability = false;
   await driver.save();
 
-  if (booking.email) {
-    await sendEmail({ to: booking.email, subject: `Driver assigned - ${booking.bookingId}`, html: driverAssigned(booking, driver) }).catch(() => undefined);
-  }
-
-  await notifyAdmins('booking:driver-assigned', {
-    bookingId: booking.bookingId,
-    driverName: driver.driverName,
-    vehicleAssigned: driver.vehicleAssigned
+  await notifyBookingStatusChange({
+    booking,
+    status: booking.bookingStatus,
+    note: `Driver ${driver.driverName} has been assigned`,
+    userId: booking.user || null,
+    socketEvent: 'booking:driver-assigned',
+    adminEvent: 'booking:driver-assigned',
+    adminTitle: 'Driver assigned'
   });
 
   res.json({ success: true, booking, driver });

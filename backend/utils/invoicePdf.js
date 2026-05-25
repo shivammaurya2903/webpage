@@ -57,15 +57,17 @@ function getLineItems(booking, invoice, businessInfo) {
     return invoice.lineItems;
   }
 
-  const baseFare = Number(invoice.subtotalAmount || booking.estimatedFare || invoice.totalFare || 0);
-  const distanceCharges = Number(invoice.distanceCharges || booking.finalBill?.distanceCharges || 0);
-  const waitingCharges = Number(invoice.waitingCharges || booking.finalBill?.waitingCharges || 0);
-  const tollCharges = Number(invoice.tollCharges || booking.finalBill?.tollCharges || 0);
-  const driverAllowance = Number(invoice.driverAllowance || booking.finalBill?.driverAllowance || 0);
-  const discountAmount = Number(invoice.discountAmount || booking.finalBill?.discountAmount || 0);
-  const taxPercent = Number(invoice.taxPercent || businessInfo.taxPercent || 5);
-  const taxable = Math.max(0, baseFare + distanceCharges + waitingCharges + tollCharges + driverAllowance - discountAmount);
-  const taxAmount = Number(invoice.taxAmount || Math.round(taxable * (taxPercent / 100)));
+  const fare = invoice.fareBreakdown || booking.finalBill || {};
+  const baseFare = Number(fare.baseFare || fare.baseAmount || invoice.subtotalAmount || booking.estimatedFare || invoice.totalFare || 0);
+  const distanceCharges = Number(fare.distanceFare || fare.distanceCharges || 0);
+  const waitingCharges = Number(fare.waitingCharges || 0);
+  const tollCharges = Number(fare.tollCharges || 0);
+  const driverAllowance = Number(fare.driverAllowance || 0);
+  const nightCharges = Number(fare.nightCharges || 0);
+  const discountAmount = Number(fare.discountAmount || 0);
+  const taxPercent = Number(fare.gstPercent || invoice.taxPercent || businessInfo.taxPercent || 5);
+  const taxable = Math.max(0, baseFare + distanceCharges + waitingCharges + tollCharges + driverAllowance + nightCharges - discountAmount);
+  const taxAmount = Number(fare.gstAmount || invoice.taxAmount || Math.round(taxable * (taxPercent / 100)));
 
   return [
     { description: 'Base Fare', quantity: 1, rate: baseFare, amount: baseFare },
@@ -73,6 +75,7 @@ function getLineItems(booking, invoice, businessInfo) {
     { description: 'Waiting Charges', quantity: 1, rate: waitingCharges, amount: waitingCharges },
     { description: 'Toll Charges', quantity: 1, rate: tollCharges, amount: tollCharges },
     { description: 'Driver Allowance', quantity: 1, rate: driverAllowance, amount: driverAllowance },
+    { description: 'Night Charges', quantity: 1, rate: nightCharges, amount: nightCharges },
     { description: 'Discount', quantity: 1, rate: -discountAmount, amount: -discountAmount },
     { description: `GST (${taxPercent}%)`, quantity: 1, rate: taxAmount, amount: taxAmount }
   ];
@@ -83,11 +86,11 @@ function buildInvoiceModel({ booking, invoice, driver, settings }) {
   const lineItems = getLineItems(booking, invoice, business);
   const subtotal = lineItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
   const discountAmount = Math.abs(Number(invoice.discountAmount || booking.finalBill?.discountAmount || 0));
-  const taxPercent = Number(invoice.taxPercent || business.taxPercent || 5);
-  const taxAmount = Number(invoice.taxAmount || lineItems.find((item) => String(item.description).startsWith('GST'))?.amount || Math.round(Math.max(0, subtotal - discountAmount) * (taxPercent / 100)));
+  const taxPercent = Number(invoice.taxPercent || booking.finalBill?.gstPercent || business.taxPercent || 5);
+  const taxAmount = Number(invoice.taxAmount || booking.finalBill?.gstAmount || lineItems.find((item) => String(item.description).startsWith('GST'))?.amount || Math.round(Math.max(0, subtotal - discountAmount) * (taxPercent / 100)));
   const cgstAmount = Number(invoice.cgstAmount || Math.round(taxAmount / 2));
   const sgstAmount = Number(invoice.sgstAmount || Math.max(0, taxAmount - cgstAmount));
-  const totalAmount = Number(invoice.totalFare || booking.totalFare || Math.max(0, subtotal + taxAmount - discountAmount));
+  const totalAmount = Number(invoice.totalFare || booking.totalFare || booking.finalBill?.totalAmount || Math.max(0, subtotal + taxAmount - discountAmount));
   const paymentStatus = invoice.paymentStatus || booking.paymentStatus || 'Pending';
   const amountPaid = Number(invoice.amountPaid || booking.finalBill?.paidAmount || (['Paid', 'Paid Offline', 'Paid Online', 'Fully Paid'].includes(paymentStatus) ? totalAmount : 0));
   const balanceDue = Math.max(0, totalAmount - amountPaid);
@@ -116,8 +119,8 @@ function buildInvoiceModel({ booking, invoice, driver, settings }) {
       driverPhone: invoice.driverPhone || driver?.phone || '—',
       pickupDate: booking.pickupDate,
       pickupTime: booking.pickupTime,
-      rideDuration: booking.finalBill?.rideDuration || booking.rideDuration || 'As scheduled',
-      distance: invoice.distance || booking.finalBill?.distance || booking.routeDistance || '—',
+      rideDuration: booking.estimatedDuration ? `${Math.round(Number(booking.estimatedDuration || 0))} min` : booking.finalBill?.rideDuration || booking.rideDuration || 'As scheduled',
+      distance: booking.distanceInKm ? `${Number(booking.distanceInKm).toFixed(1)} KM` : invoice.distance || booking.finalBill?.distance || booking.routeDistance || '—',
       rideStatus: booking.bookingStatus || paymentStatus
     },
     payment: {

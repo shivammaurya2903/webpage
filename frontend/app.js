@@ -54,11 +54,14 @@
   }
 
   function isBrowserExtensionNoise(reason) {
-    const text = String(reason?.message || reason || '').toLowerCase();
+    const text = String(reason?.message || reason?.stack || reason || '').toLowerCase();
     return (
       text.includes('listener indicated an asynchronous response')
       && text.includes('message channel closed before a response was received')
-    );
+    ) || text.includes('listener indicated an asynchronous response')
+      || text.includes('message channel closed before a response was received')
+      || text.includes('async response')
+      || text.includes('message channel closed');
   }
 
   function normalizeRequestError(error, url) {
@@ -137,11 +140,8 @@
   }
 
   window.addEventListener('unhandledrejection', (ev) => {
-    if (isBrowserExtensionNoise(ev?.reason)) {
-      if (typeof ev.preventDefault === 'function') ev.preventDefault();
-      console.info('Ignored browser extension async listener warning:', ev.reason);
-      return;
-    }
+    if (typeof ev.preventDefault === 'function') ev.preventDefault();
+    if (isBrowserExtensionNoise(ev?.reason)) return;
     console.error('Unhandled Promise Rejection:', ev.reason);
     showGlobalNotification('An unexpected error occurred. See console for details.');
   });
@@ -919,115 +919,458 @@
     const pickupDate = form.querySelector('[name="pickupDate"]');
     const dropDate = form.querySelector('[name="dropDate"]');
     const pickupTime = form.querySelector('[name="pickupTime"]');
-    const selectedCar = form.querySelector('[name="selectedCar"]');
-    const selectedPackage = form.querySelector('[name="selectedPackage"]');
+    const vehicleSelect = form.querySelector('[data-vehicle-select]');
+    const selectedCarName = form.querySelector('[data-selected-car]');
+    const tripType = form.querySelector('[data-trip-type]');
+    const selectedPackage = form.querySelector('[name="selectedPackage"]') || tripType;
+    const pickupCoordinates = form.querySelector('[data-pickup-coordinates]');
+    const dropCoordinates = form.querySelector('[data-drop-coordinates]');
+    const pickupSuggestions = document.getElementById('pickupSuggestions');
+    const dropSuggestions = document.getElementById('dropSuggestions');
+    const fareDistance = document.querySelector('[data-fare-distance]');
+    const fareDuration = document.querySelector('[data-fare-duration]');
+    const fareBase = document.querySelector('[data-fare-base]');
+    const fareRate = document.querySelector('[data-fare-rate]');
+    const fareToll = document.querySelector('[data-fare-toll]');
+    const fareGst = document.querySelector('[data-fare-gst]');
+    const fareTotal = document.querySelector('[data-fare-total]');
+    const fareSource = document.querySelector('[data-fare-source]');
+    const routeNote = document.querySelector('[data-route-note]');
+    const mapElement = document.getElementById('bookingMap');
+
+    const currencyFormatter = new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0
+    });
+
+    let quoteToken = 0;
+    let quoteTimer = null;
+    let pickupTimer = null;
+    let dropTimer = null;
+    let vehicles = [];
+    let bookingMap = null;
+    let bookingRouteLayer = null;
+    let bookingPickupMarker = null;
+    let bookingDropMarker = null;
+    let isBookingSubmitting = false;
 
     const originalSubmitLabel = submitBtn?.innerHTML || 'Submit Booking';
 
-    const setSubmitLoading = (loading) => {
-      if (!submitBtn) return;
-      submitBtn.disabled = loading;
-      submitBtn.classList.toggle('is-loading', loading);
-      submitBtn.innerHTML = loading
-        ? '<span class="btn-spinner" aria-hidden="true"></span><span>Submitting...</span>'
-        : originalSubmitLabel;
+    const getTodayDateValue = () => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
     };
 
-    const showError = (input, msg) => {
+    const parseDateValue = (value) => {
+      const match = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(String(value || '').trim());
+      if (!match) return null;
+
+      const year = Number(match[1]);
+      const month = Number(match[2]);
+      const day = Number(match[3]);
+      const date = new Date(year, month - 1, day);
+
+      if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+      return date;
+    };
+
+    const normalizeIndianPhone = (value) => {
+      const cleaned = String(value || '').trim().replace(/[\s-]/g, '');
+      if (!cleaned || /[^+0-9]/.test(cleaned)) return null;
+
+      let digits = cleaned.startsWith('+') ? cleaned.slice(1) : cleaned;
+      if (digits.startsWith('91') && digits.length === 12) {
+        digits = digits.slice(2);
+      }
+
+      if (!/^[6-9][0-9]{9}$/.test(digits)) return null;
+      return {
+        digits,
+        normalized: `+91${digits}`,
+        display: `+91 ${digits}`
+      };
+    };
+
+    const setBookingDateBounds = () => {
+      const todayValue = getTodayDateValue();
+      if (pickupDate) pickupDate.min = todayValue;
+      if (dropDate) dropDate.min = pickupDate?.value && parseDateValue(pickupDate.value) ? pickupDate.value : todayValue;
+    };
+
+    const setFieldState = (input, valid, message = '') => {
       const wrap = input?.closest('.field');
-      if (!wrap) return;
+      if (!wrap || !input) return valid;
+
       let error = wrap.querySelector('.error-msg');
       if (!error) {
         error = document.createElement('div');
         error.className = 'error-msg';
         wrap.appendChild(error);
       }
-      error.textContent = msg;
-      input.classList.add('has-error');
+
+      input.classList.toggle('has-error', !valid);
+      input.classList.toggle('is-valid', valid);
+      if (valid) input.removeAttribute('aria-invalid');
+      else input.setAttribute('aria-invalid', 'true');
+      error.textContent = valid ? '' : message;
+      return valid;
     };
 
     const clearError = (input) => {
       const wrap = input?.closest('.field');
-      if (!wrap) return;
+      if (!wrap || !input) return;
       const error = wrap.querySelector('.error-msg');
       if (error) error.textContent = '';
       input.classList.remove('has-error');
+      input.classList.remove('is-valid');
+      input.removeAttribute('aria-invalid');
     };
 
-    const isPhoneValid = (value) => /^\d{10}$/.test(String(value).replace(/\D/g, ''));
-
-    const toDate = (value) => {
-      if (!value) return null;
-      const date = new Date(value);
-      return Number.isNaN(date.getTime()) ? null : date;
+    const isBookingFormReady = () => {
+      const today = parseDateValue(getTodayDateValue());
+      const pickup = parseDateValue(pickupDate?.value);
+      const drop = parseDateValue(dropDate?.value);
+      return Boolean(
+        String(fullName?.value || '').trim().length >= 2
+        && /^\S+@\S+\.\S+$/.test(String(email?.value || '').trim())
+        && normalizeIndianPhone(phone?.value)
+        && pickupTime?.value
+        && String(pickupLoc?.value || '').trim()
+        && String(dropLoc?.value || '').trim()
+        && passengers?.value
+        && vehicleSelect?.value
+        && selectedPackage?.value
+        && pickup && today && pickup >= today
+        && drop && pickup && drop >= pickup
+      );
     };
 
-    const validate = () => {
-      let ok = true;
+    const updateSubmitState = () => {
+      if (!submitBtn) return;
+      submitBtn.disabled = isBookingSubmitting || !isBookingFormReady();
+    };
 
-      if (!fullName?.value.trim() || fullName.value.trim().length < 2) {
-        showError(fullName, 'Please enter your full name.');
-        ok = false;
-      } else clearError(fullName);
+    const validateBookingField = (input, showMessage = true) => {
+      if (!input) return true;
 
-      if (!email?.value.trim() || !/^\S+@\S+\.\S+$/.test(email.value.trim())) {
-        showError(email, 'Please enter a valid email address.');
-        ok = false;
-      } else clearError(email);
-
-      if (!isPhoneValid(phone?.value.trim())) {
-        showError(phone, 'Enter a valid 10-digit phone number.');
-        ok = false;
-      } else clearError(phone);
-
-      if (!pickupTime?.value) {
-        showError(pickupTime, 'Pickup time is required.');
-        ok = false;
-      } else clearError(pickupTime);
-
-      if (!pickupLoc?.value.trim()) {
-        showError(pickupLoc, 'Pickup location is required.');
-        ok = false;
-      } else clearError(pickupLoc);
-
-      if (!dropLoc?.value.trim()) {
-        showError(dropLoc, 'Drop location is required.');
-        ok = false;
-      } else clearError(dropLoc);
-
-      if (!passengers?.value) {
-        showError(passengers, 'Select passenger count.');
-        ok = false;
-      } else clearError(passengers);
-
-      if (!pickupDate?.value) {
-        showError(pickupDate, 'Pickup date is required.');
-        ok = false;
-      } else clearError(pickupDate);
-
-      if (!dropDate?.value) {
-        showError(dropDate, 'Drop date is required.');
-        ok = false;
-      } else clearError(dropDate);
-
-      if (!selectedCar?.value) {
-        showError(selectedCar, 'Please select a car.');
-        ok = false;
-      } else clearError(selectedCar);
-
-      if (!selectedPackage?.value) {
-        showError(selectedPackage, 'Please select a package.');
-        ok = false;
-      } else clearError(selectedPackage);
-
-      const pickup = toDate(pickupDate?.value);
-      const drop = toDate(dropDate?.value);
-      if (pickup && drop && drop < pickup) {
-        showError(dropDate, 'Drop date cannot be earlier than pickup date.');
-        ok = false;
+      if (input === fullName) {
+        const valid = String(input.value || '').trim().length >= 2;
+        return showMessage ? setFieldState(input, valid, 'Please enter your full name.') : valid;
       }
 
-      return ok;
+      if (input === email) {
+        const valid = /^\S+@\S+\.\S+$/.test(String(input.value || '').trim());
+        return showMessage ? setFieldState(input, valid, 'Please enter a valid email address.') : valid;
+      }
+
+      if (input === phone) {
+        const normalized = normalizeIndianPhone(input.value);
+        if (normalized) {
+          input.value = input.matches(':focus') ? normalized.digits : normalized.display;
+          return showMessage ? setFieldState(input, true) : true;
+        }
+        return showMessage ? setFieldState(input, false, 'Please enter a valid Indian mobile number.') : false;
+      }
+
+      if (input === pickupTime) {
+        const valid = Boolean(input.value);
+        return showMessage ? setFieldState(input, valid, 'Pickup time is required.') : valid;
+      }
+
+      if (input === pickupLoc) {
+        const valid = Boolean(String(input.value || '').trim());
+        return showMessage ? setFieldState(input, valid, 'Pickup location is required.') : valid;
+      }
+
+      if (input === dropLoc) {
+        const valid = Boolean(String(input.value || '').trim());
+        return showMessage ? setFieldState(input, valid, 'Drop location is required.') : valid;
+      }
+
+      if (input === passengers) {
+        const valid = Boolean(input.value);
+        return showMessage ? setFieldState(input, valid, 'Select passenger count.') : valid;
+      }
+
+      if (input === pickupDate) {
+        const selected = parseDateValue(input.value);
+        const today = parseDateValue(getTodayDateValue());
+        const valid = Boolean(selected && today && selected >= today);
+        return showMessage ? setFieldState(input, valid, 'Booking date cannot be earlier than today.') : valid;
+      }
+
+      if (input === dropDate) {
+        const pickup = parseDateValue(pickupDate?.value);
+        const selected = parseDateValue(input.value);
+        const valid = Boolean(selected && pickup && selected >= pickup);
+        const message = pickup && selected && selected < pickup
+          ? 'Drop date cannot be earlier than pickup date.'
+          : 'Please select a valid drop date.';
+        return showMessage ? setFieldState(input, valid, message) : valid;
+      }
+
+      if (input === vehicleSelect) {
+        const valid = Boolean(input.value);
+        return showMessage ? setFieldState(input, valid, 'Please select a vehicle.') : valid;
+      }
+
+      if (input === selectedPackage) {
+        const valid = Boolean(input.value);
+        return showMessage ? setFieldState(input, valid, 'Please select a package.') : valid;
+      }
+
+      return true;
+    };
+
+    const validateBookingForm = () => {
+      setBookingDateBounds();
+      let valid = true;
+
+      [fullName, email, phone, pickupTime, pickupLoc, dropLoc, passengers, pickupDate, dropDate, vehicleSelect, selectedPackage].forEach((input) => {
+        if (!validateBookingField(input, true)) valid = false;
+      });
+
+      if (pickupDate?.value && dropDate?.value) {
+        const pickup = parseDateValue(pickupDate.value);
+        const drop = parseDateValue(dropDate.value);
+        if (pickup && drop && drop < pickup) {
+          setFieldState(dropDate, false, 'Drop date cannot be earlier than pickup date.');
+          valid = false;
+        }
+      }
+
+      updateSubmitState();
+      return valid;
+    };
+
+    const formatMoney = (value) => currencyFormatter.format(Number(value || 0));
+
+    const setSubmitLoading = (loading) => {
+      if (!submitBtn) return;
+      isBookingSubmitting = loading;
+      submitBtn.disabled = loading;
+      submitBtn.classList.toggle('is-loading', loading);
+      submitBtn.innerHTML = loading
+        ? '<span class="btn-spinner" aria-hidden="true"></span><span>Submitting...</span>'
+        : originalSubmitLabel;
+      if (!loading) updateSubmitState();
+    };
+
+    const parseCoords = (value) => {
+      if (!value) return null;
+      const parts = String(value).split(',').map((item) => Number(item.trim()));
+      if (parts.length >= 2 && parts.every(Number.isFinite)) return parts;
+      return null;
+    };
+
+    const getTripTypeValue = () => tripType?.value || selectedPackage?.value || 'one-way';
+
+    const updateSelectedCarName = () => {
+      const option = vehicleSelect?.selectedOptions?.[0];
+      if (selectedCarName) selectedCarName.value = option?.dataset?.carName || option?.textContent?.trim() || '';
+    };
+
+    const updateFarePanel = (quote) => {
+      const breakdown = quote?.fareBreakdown || {};
+      if (fareDistance) fareDistance.textContent = breakdown.distanceInKm ? `${Number(breakdown.distanceInKm).toFixed(1)} km` : '--';
+      if (fareDuration) fareDuration.textContent = breakdown.estimatedDuration ? `${Math.max(1, Math.round(Number(breakdown.estimatedDuration)))} min` : '--';
+      if (fareBase) fareBase.textContent = formatMoney(breakdown.baseFare || 0);
+      if (fareRate) fareRate.textContent = formatMoney(breakdown.perKmRate || breakdown.extraKmRate || 0);
+      if (fareToll) fareToll.textContent = formatMoney(breakdown.tollCharges || 0);
+      if (fareGst) fareGst.textContent = formatMoney(breakdown.gstAmount || 0);
+      if (fareTotal) fareTotal.textContent = formatMoney(quote?.totalFare || 0);
+      if (fareSource) fareSource.textContent = quote?.source === 'openrouteservice' ? 'OpenRouteService' : 'Fallback route';
+      if (routeNote) {
+        routeNote.textContent = quote?.source === 'openrouteservice'
+          ? 'Live route resolved with OpenRouteService.'
+          : 'Fallback estimate used while live route data was unavailable.';
+      }
+    };
+
+    const clearRouteMap = () => {
+      if (bookingRouteLayer) {
+        bookingRouteLayer.remove();
+        bookingRouteLayer = null;
+      }
+      if (bookingPickupMarker) {
+        bookingPickupMarker.remove();
+        bookingPickupMarker = null;
+      }
+      if (bookingDropMarker) {
+        bookingDropMarker.remove();
+        bookingDropMarker = null;
+      }
+    };
+
+    const ensureBookingMap = () => {
+      if (bookingMap || !mapElement || !window.L) return bookingMap;
+      bookingMap = window.L.map(mapElement, { scrollWheelZoom: false, zoomControl: true }).setView([26.8467, 80.9462], 11);
+      window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(bookingMap);
+      return bookingMap;
+    };
+
+    const renderRoutePreview = (quote) => {
+      if (!window.L || !quote) return;
+      const map = ensureBookingMap();
+      if (!map) return;
+
+      const geometry = Array.isArray(quote.routeGeometry) ? quote.routeGeometry : [];
+      const routePoints = geometry.map((point) => [Number(point[1]), Number(point[0])]).filter((point) => Number.isFinite(point[0]) && Number.isFinite(point[1]));
+      const pickupPoint = Array.isArray(quote.pickup?.coordinates) ? [Number(quote.pickup.coordinates[1]), Number(quote.pickup.coordinates[0])] : null;
+      const dropPoint = Array.isArray(quote.drop?.coordinates) ? [Number(quote.drop.coordinates[1]), Number(quote.drop.coordinates[0])] : null;
+
+      clearRouteMap();
+
+      const allPoints = [];
+      if (pickupPoint && Number.isFinite(pickupPoint[0]) && Number.isFinite(pickupPoint[1])) {
+        bookingPickupMarker = window.L.marker(pickupPoint).addTo(map).bindPopup('Pickup');
+        allPoints.push(pickupPoint);
+      }
+      if (dropPoint && Number.isFinite(dropPoint[0]) && Number.isFinite(dropPoint[1])) {
+        bookingDropMarker = window.L.marker(dropPoint).addTo(map).bindPopup('Drop');
+        allPoints.push(dropPoint);
+      }
+      if (routePoints.length >= 2) {
+        bookingRouteLayer = window.L.polyline(routePoints, { color: '#6a1b9a', weight: 5, opacity: 0.92 }).addTo(map);
+        allPoints.push(...routePoints);
+      }
+
+      if (allPoints.length) {
+        map.fitBounds(window.L.latLngBounds(allPoints), { padding: [20, 20] });
+      }
+
+      window.setTimeout(() => map.invalidateSize(), 100);
+    };
+
+    const populateVehicles = async () => {
+      if (!vehicleSelect) return;
+      try {
+        const response = await performRequest(apiUrl('/api/cars'));
+        const data = await safeJson(response);
+        vehicles = Array.isArray(data?.cars) ? data.cars : [];
+        vehicleSelect.innerHTML = vehicles.length
+          ? '<option value="" selected disabled>Select Vehicle</option>'
+          : '<option value="" selected disabled>No vehicles available</option>';
+
+        vehicles.forEach((car, index) => {
+          const option = document.createElement('option');
+          option.value = car._id || car.carName || String(index);
+          option.dataset.carName = car.carName || '';
+          option.textContent = `${car.carName || 'Vehicle'} · ${formatMoney(car.baseFare || car.pricePerDay || 0)}`;
+          vehicleSelect.appendChild(option);
+        });
+
+        if (vehicles.length) {
+          vehicleSelect.value = vehicles[0]._id || vehicles[0].carName || '';
+          updateSelectedCarName();
+        }
+      } catch (error) {
+        console.warn('Failed to load vehicles for fare calculation', error);
+        if (vehicleSelect && !vehicleSelect.options.length) {
+          vehicleSelect.innerHTML = '<option value="" selected disabled>Unable to load vehicles</option>';
+        }
+      }
+    };
+
+    const refreshLocationSuggestions = async (input, datalist, coordField) => {
+      const query = String(input?.value || '').trim();
+      if (!query || query.length < 3 || !datalist) return;
+
+      try {
+        const response = await performRequest(apiUrl(`/api/fare/geocode?query=${encodeURIComponent(query)}&limit=5`));
+        const result = await safeJson(response);
+        const suggestions = Array.isArray(result?.suggestions) ? result.suggestions : [];
+        datalist.innerHTML = suggestions.map((item) => `<option value="${escapeHtml(item.label || query)}"></option>`).join('');
+
+        const exactMatch = suggestions.find((item) => String(item.label || '').toLowerCase() === query.toLowerCase()) || suggestions[0];
+        if (exactMatch?.coordinates && coordField) {
+          coordField.value = exactMatch.coordinates.join(',');
+        }
+      } catch (error) {
+        console.warn('Location suggestion lookup failed', error);
+      }
+    };
+
+    const debounceQuote = () => {
+      window.clearTimeout(quoteTimer);
+      quoteTimer = window.setTimeout(() => {
+        void calculateQuote();
+      }, 450);
+    };
+
+    const calculateQuote = async () => {
+      const pickupValue = String(pickupLoc?.value || '').trim();
+      const dropValue = String(dropLoc?.value || '').trim();
+      const vehicleId = String(vehicleSelect?.value || '').trim();
+
+      if (!pickupValue || !dropValue || !vehicleId) {
+        updateFarePanel(null);
+        clearRouteMap();
+        return null;
+      }
+
+      const token = ++quoteToken;
+      if (fareSource) fareSource.textContent = 'Calculating...';
+
+      try {
+        const payload = {
+          pickup: {
+            address: pickupValue,
+            coordinates: parseCoords(pickupCoordinates?.value)
+          },
+          drop: {
+            address: dropValue,
+            coordinates: parseCoords(dropCoordinates?.value)
+          },
+          vehicleId,
+          selectedCar: selectedCarName?.value || '',
+          tripType: getTripTypeValue(),
+          pickupDateTime: pickupDate?.value && pickupTime?.value ? `${pickupDate.value}T${pickupTime.value}` : undefined,
+          waitingMinutes: 0,
+          tollCharges: 0
+        };
+
+        const response = await performRequest(apiUrl('/api/fare/calculate'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const result = await safeJson(response);
+
+        if (token !== quoteToken) return null;
+        if (!response.ok || !result?.success) {
+          throw new Error(result?.message || 'Failed to calculate fare');
+        }
+
+        updateFarePanel(result);
+        renderRoutePreview({ ...result, pickup: payload.pickup, drop: payload.drop });
+        return result;
+      } catch (error) {
+        if (token !== quoteToken) return null;
+        updateFarePanel(null);
+        if (routeNote) routeNote.textContent = error.message || 'Unable to calculate fare right now.';
+        clearRouteMap();
+        return null;
+      }
+    };
+
+    const validate = () => validateBookingForm();
+
+    const resetBookingState = () => {
+      pickupCoordinates.value = '';
+      dropCoordinates.value = '';
+      if (pickupSuggestions) pickupSuggestions.innerHTML = '';
+      if (dropSuggestions) dropSuggestions.innerHTML = '';
+      form.querySelectorAll('input, select, textarea').forEach((element) => clearError(element));
+      updateFarePanel(null);
+      clearRouteMap();
     };
 
     form.addEventListener('submit', async (event) => {
@@ -1041,14 +1384,19 @@
         const payload = {
           customerName: fullName.value.trim(),
           email: email.value.trim(),
-          phone: phone.value.trim(),
+          phone: normalizeIndianPhone(phone.value)?.normalized || phone.value.trim(),
           pickupLocation: pickupLoc.value.trim(),
           dropLocation: dropLoc.value.trim(),
           pickupDate: pickupDate.value,
+          dropDate: dropDate.value,
           pickupTime: pickupTime.value,
           passengers: passengers.value,
-          selectedCar: selectedCar.value,
+          selectedCar: selectedCarName?.value || selectedPackage?.value || '',
+          vehicleId: vehicleSelect.value,
+          tripType: getTripTypeValue(),
           selectedPackage: selectedPackage.value,
+          pickupCoordinates: pickupCoordinates.value,
+          dropCoordinates: dropCoordinates.value,
           specialRequirements: form.querySelector('[name="requirements"]')?.value.trim() || ''
         };
 
@@ -1063,16 +1411,20 @@
           throw new Error((bookingResult && bookingResult.message) || 'Failed to create booking');
         }
 
-        const booking = bookingResult.booking;
-        const paymentNote = `Booking request submitted. It is awaiting admin approval and no advance payment is required.`;
-
         form.querySelector('[data-submit-status]')?.remove();
         const status = document.createElement('div');
         status.dataset.submitStatus = '';
-        status.textContent = paymentNote;
+        status.textContent = `Booking request submitted. Estimated total: ${formatMoney(bookingResult.booking?.totalFare || bookingResult.booking?.estimatedFare || 0)}.`;
         status.className = 'submit-status';
         form.appendChild(status);
         form.reset();
+        resetBookingState();
+        if (vehicles.length) {
+          vehicleSelect.value = vehicles[0]._id || vehicles[0].carName || '';
+          updateSelectedCarName();
+        }
+        setBookingDateBounds();
+        updateSubmitState();
         section?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       } catch (error) {
         form.querySelector('[data-submit-status]')?.remove();
@@ -1086,11 +1438,113 @@
       }
     });
 
+    setBookingDateBounds();
+    updateSubmitState();
+
+    if (phone) {
+      phone.placeholder = '+91 9876543210';
+      phone.autocomplete = 'tel-national';
+      phone.inputMode = 'numeric';
+      phone.addEventListener('input', () => {
+        const sanitized = String(phone.value || '').replace(/[\s-]/g, '');
+        if (sanitized !== phone.value) phone.value = sanitized;
+        validateBookingField(phone, true);
+        updateSubmitState();
+      });
+      phone.addEventListener('blur', () => {
+        const normalized = normalizeIndianPhone(phone.value);
+        if (normalized) phone.value = normalized.display;
+        validateBookingField(phone, true);
+        updateSubmitState();
+      });
+    }
+
     form.querySelectorAll('input, select, textarea').forEach((element) => {
       element.addEventListener('focus', () => clearError(element));
-      element.addEventListener('input', () => clearError(element));
-      element.addEventListener('change', () => clearError(element));
+      element.addEventListener('input', () => {
+        validateBookingField(element, true);
+        updateSubmitState();
+      });
+      element.addEventListener('change', () => {
+        validateBookingField(element, true);
+        updateSubmitState();
+      });
+      element.addEventListener('blur', () => {
+        validateBookingField(element, true);
+        updateSubmitState();
+      });
     });
+
+    [pickupDate, dropDate].forEach((dateInput) => {
+      if (!dateInput) return;
+      dateInput.addEventListener('change', () => {
+        setBookingDateBounds();
+        if (dateInput === pickupDate && dropDate?.value) {
+          const pickup = parseDateValue(pickupDate.value);
+          const drop = parseDateValue(dropDate.value);
+          if (pickup && drop && drop < pickup) {
+            dropDate.value = '';
+            showError(dropDate, 'Drop date cannot be earlier than pickup date.');
+          }
+        }
+        validateBookingField(dateInput, true);
+        updateSubmitState();
+      });
+    });
+
+    [fullName, email, pickupTime, pickupLoc, dropLoc, passengers, vehicleSelect, selectedPackage].forEach((element) => {
+      if (!element) return;
+      element.addEventListener('input', () => updateSubmitState());
+      element.addEventListener('change', () => updateSubmitState());
+    });
+
+    [pickupLoc, dropLoc].forEach((input, index) => {
+      const datalist = index === 0 ? pickupSuggestions : dropSuggestions;
+      const coordField = index === 0 ? pickupCoordinates : dropCoordinates;
+      const timerRef = index === 0 ? 'pickupTimer' : 'dropTimer';
+
+      const scheduleAutocomplete = () => {
+        window.clearTimeout(index === 0 ? pickupTimer : dropTimer);
+        if (index === 0) pickupTimer = window.setTimeout(() => void refreshLocationSuggestions(input, datalist, coordField), 350);
+        else dropTimer = window.setTimeout(() => void refreshLocationSuggestions(input, datalist, coordField), 350);
+      };
+
+      input.addEventListener('input', scheduleAutocomplete);
+      input.addEventListener('change', async () => {
+        await refreshLocationSuggestions(input, datalist, coordField);
+        debounceQuote();
+      });
+      input.addEventListener('blur', async () => {
+        await refreshLocationSuggestions(input, datalist, coordField);
+        debounceQuote();
+      });
+    });
+
+    [vehicleSelect, selectedPackage, tripType, pickupDate, pickupTime].forEach((element) => {
+      if (!element) return;
+      element.addEventListener('change', () => {
+        updateSelectedCarName();
+        debounceQuote();
+      });
+      element.addEventListener('input', () => {
+        updateSelectedCarName();
+        debounceQuote();
+      });
+    });
+
+    [pickupLoc, dropLoc].forEach((element) => {
+      if (!element) return;
+      element.addEventListener('change', debounceQuote);
+      element.addEventListener('blur', debounceQuote);
+    });
+
+    void populateVehicles().then(() => {
+      updateSelectedCarName();
+      debounceQuote();
+    });
+    if (window.L) {
+      ensureBookingMap();
+    }
   }
 
   document.querySelectorAll('[data-ripple]').forEach((button) => {

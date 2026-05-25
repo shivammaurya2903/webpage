@@ -724,8 +724,10 @@
         </td>
         <td>${escapeHtml(String(car.seatingCapacity || ''))}</td>
         <td>${escapeHtml(car.fuelType || '')}<div class="helper">${escapeHtml(car.transmission || '')}</div></td>
-        <td>${fmtMoney(car.pricePerDay)}</td>
+        <td>${fmtMoney(car.baseFare || car.pricePerDay)}</td>
+        <td>${fmtMoney(car.pricePerKm || 0)}</td>
         <td>${renderBadge(car.availability ? 'Available' : 'Unavailable')}</td>
+        <td>${escapeHtml(String(car.includedKm || 0))} km<div class="helper">Extra: ${fmtMoney(car.extraKmRate || 0)}/km</div></td>
         <td>${(car.features || []).map((feature) => `<span class="badge">${escapeHtml(feature)}</span>`).join(' ') || '—'}</td>
         <td>
           ${renderButtons([
@@ -743,7 +745,7 @@
           <div class="helper">Cars support image upload and feature lists separated by commas or new lines.</div>
         </section>
         <section class="card table-card">
-          ${tableShell(['Car', 'Seats', 'Fuel', 'Price/day', 'Availability', 'Features', 'Actions'], rows, 'No cars found')}
+          ${tableShell(['Car', 'Seats', 'Fuel', 'Base fare', 'Price/km', 'Availability', 'Included km', 'Features', 'Actions'], rows, 'No cars found')}
         </section>
       </div>
     `;
@@ -940,6 +942,14 @@
             <label class="field wide"><span>Currency</span><input name="currency" value="${escapeHtml(settings.paymentSettings?.currency || 'INR')}" /></label>
             <label class="field wide"><span>Advance percent</span><input name="advancePercent" type="number" value="${escapeHtml(String(settings.paymentSettings?.advancePercent ?? 20))}" /></label>
             <label class="field wide"><span>Payment gateway</span><input name="gatewayName" value="${escapeHtml(settings.paymentSettings?.gatewayName || 'Stripe')}" /></label>
+            <label class="field wide"><span>GST %</span><input name="gstPercent" type="number" value="${escapeHtml(String(settings.pricingSettings?.gstPercent ?? settings.billing?.taxPercent ?? 5))}" /></label>
+            <label class="field wide"><span>Night charge %</span><input name="nightChargePercent" type="number" value="${escapeHtml(String(settings.pricingSettings?.nightChargePercent ?? 10))}" /></label>
+            <label class="field wide"><span>Driver allowance</span><input name="driverAllowance" type="number" value="${escapeHtml(String(settings.pricingSettings?.driverAllowance ?? 0))}" /></label>
+            <label class="field wide"><span>Extra km rate</span><input name="extraKmRate" type="number" value="${escapeHtml(String(settings.pricingSettings?.extraKmRate ?? 0))}" /></label>
+            <label class="field wide"><span>Waiting charge / hour</span><input name="waitingChargePerHour" type="number" value="${escapeHtml(String(settings.pricingSettings?.waitingChargePerHour ?? 0))}" /></label>
+            <label class="field wide"><span>Default included km</span><input name="defaultIncludedKm" type="number" value="${escapeHtml(String(settings.pricingSettings?.defaultIncludedKm ?? 0))}" /></label>
+            <label class="field wide"><span>Default base fare</span><input name="defaultBaseFare" type="number" value="${escapeHtml(String(settings.pricingSettings?.baseFare ?? 0))}" /></label>
+            <label class="field wide"><span>Default price per km</span><input name="defaultPricePerKm" type="number" value="${escapeHtml(String(settings.pricingSettings?.pricePerKm ?? 0))}" /></label>
             <label class="field full"><span>Testimonials (Name::Quote per line)</span><textarea name="testimonials">${escapeHtml((homepage.testimonials || []).map((item) => `${item.name}::${item.quote}`).join('\n'))}</textarea></label>
             <label class="field full"><span>Fleet highlights (Title::Description per line)</span><textarea name="fleetHighlights">${escapeHtml((homepage.fleetHighlights || []).map((item) => `${item.title}::${item.description}`).join('\n'))}</textarea></label>
             <label class="inline-toggle"><input type="checkbox" name="emailEnabled" ${settings.notificationSettings?.emailEnabled !== false ? 'checked' : ''} /><span>Email notifications enabled</span></label>
@@ -1113,7 +1123,12 @@
               <label class="field wide"><span>Category</span><input name="category" value="${escapeHtml(record?.category || '')}" required /></label>
               <label class="field wide"><span>Fuel type</span><input name="fuelType" value="${escapeHtml(record?.fuelType || '')}" required /></label>
               <label class="field wide"><span>Transmission</span><input name="transmission" value="${escapeHtml(record?.transmission || '')}" required /></label>
-              <label class="field wide"><span>Price/day</span><input type="number" name="pricePerDay" value="${escapeHtml(String(record?.pricePerDay || ''))}" required /></label>
+              <label class="field wide"><span>Base fare</span><input type="number" name="baseFare" value="${escapeHtml(String(record?.baseFare || record?.pricePerDay || ''))}" required /></label>
+              <label class="field wide"><span>Price per km</span><input type="number" name="pricePerKm" value="${escapeHtml(String(record?.pricePerKm || ''))}" required /></label>
+              <label class="field wide"><span>Extra km rate</span><input type="number" name="extraKmRate" value="${escapeHtml(String(record?.extraKmRate || record?.pricePerKm || ''))}" /></label>
+              <label class="field wide"><span>Included km</span><input type="number" name="includedKm" value="${escapeHtml(String(record?.includedKm || ''))}" /></label>
+              <label class="field wide"><span>Night charge %</span><input type="number" name="nightChargePercent" value="${escapeHtml(String(record?.nightChargePercent ?? 10))}" /></label>
+              <label class="field wide"><span>Driver allowance</span><input type="number" name="driverAllowance" value="${escapeHtml(String(record?.driverAllowance || ''))}" /></label>
               <label class="field full"><span>Features</span><textarea name="features">${escapeHtml((record?.features || []).join(', '))}</textarea></label>
               <label class="field wide"><span>Car image</span><input name="image" type="file" accept="image/*" /></label>
             </div>
@@ -1191,6 +1206,7 @@
       } else if (entity === 'car') {
         path = id ? `/api/admin/cars/${id}` : '/api/admin/cars';
         method = id ? 'PUT' : 'POST';
+        formData.set('pricePerDay', String(formData.get('baseFare') || formData.get('pricePerDay') || '0'));
       } else if (entity === 'package') {
         path = id ? `/api/admin/packages/${id}` : '/api/admin/packages';
         method = id ? 'PUT' : 'POST';
