@@ -1501,7 +1501,9 @@
         form.querySelector('[data-submit-status]')?.remove();
         const status = document.createElement('div');
         status.dataset.submitStatus = '';
-        status.textContent = `Booking request submitted. Estimated total: ${formatMoney(bookingResult.booking?.totalFare || bookingResult.booking?.estimatedFare || 0)}.`;
+        const bookingId = bookingResult.booking?.bookingId || 'Pending';
+        const bookingStatus = bookingResult.booking?.bookingStatus || 'Pending';
+        status.textContent = `Booking ${bookingId} submitted successfully. Status: ${bookingStatus}. Estimated total: ${formatMoney(bookingResult.booking?.totalFare || bookingResult.booking?.estimatedFare || 0)}.`;
         status.className = 'submit-status';
         form.appendChild(status);
         form.reset();

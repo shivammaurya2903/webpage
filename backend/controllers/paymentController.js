@@ -35,6 +35,8 @@ const refundPayment = asyncHandler(async (req, res) => {
 
   payment.booking.paymentStatus = 'Refunded';
   payment.booking.bookingStatus = 'Cancelled';
+  payment.booking.statusHistory = Array.isArray(payment.booking.statusHistory) ? payment.booking.statusHistory : [];
+  payment.booking.statusHistory.push({ status: 'Cancelled', at: new Date(), note: 'Payment refunded and booking cancelled' });
   await payment.booking.save();
 
   await notifyBookingStatusChange({

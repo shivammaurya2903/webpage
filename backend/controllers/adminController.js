@@ -300,6 +300,13 @@ const setBookingStatus = asyncHandler(async (req, res) => {
     booking.paidAt = new Date();
   }
 
+  booking.statusHistory = Array.isArray(booking.statusHistory) ? booking.statusHistory : [];
+  booking.statusHistory.push({
+    status: booking.bookingStatus,
+    at: new Date(),
+    note: booking.rejectionReason || booking.adminNotes || ''
+  });
+
   await booking.save();
 
   await notifyBookingStatusChange({
@@ -323,6 +330,12 @@ const assignDriverToBooking = asyncHandler(async (req, res) => {
 
   booking.assignedDriver = driver._id;
   booking.bookingStatus = 'Driver Assigned';
+  booking.statusHistory = Array.isArray(booking.statusHistory) ? booking.statusHistory : [];
+  booking.statusHistory.push({
+    status: booking.bookingStatus,
+    at: new Date(),
+    note: `Driver ${driver.driverName} assigned`
+  });
   await booking.save();
 
   driver.availability = false;
@@ -347,6 +360,10 @@ const deleteBooking = asyncHandler(async (req, res) => {
 
   if (booking.assignedDriver) {
     await Driver.updateOne({ _id: booking.assignedDriver }, { $set: { availability: true } });
+  }
+
+  if (booking.invoice) {
+    await Invoice.deleteOne({ _id: booking.invoice }).catch(() => undefined);
   }
 
   await booking.deleteOne();

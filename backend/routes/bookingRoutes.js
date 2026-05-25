@@ -3,6 +3,7 @@ const { body } = require('express-validator');
 const { createBooking, getBookings, getBookingById, updateBookingStatus, assignDriver, downloadBookingInvoice } = require('../controllers/bookingController');
 const { protect, optionalProtect, authorize } = require('../middleware/auth');
 const { validateRequest } = require('../middleware/validate');
+const { deleteBooking } = require('../controllers/bookingController');
 
 function parseLocalDateOnly(value) {
   const match = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(String(value || '').trim());
@@ -87,6 +88,7 @@ const bookingValidators = [
   body('pickupTime').matches(/^([01]\d|2[0-3]):([0-5]\d)$/).withMessage('Valid pickup time is required'),
   body('passengers').trim().notEmpty().withMessage('Passenger count is required'),
   body('selectedCar').trim().notEmpty().withMessage('Selected car is required'),
+  body('vehicleId').trim().notEmpty().withMessage('Vehicle selection is required'),
   body('selectedPackage')
     .customSanitizer((value, { req }) => String(value || req.body.tripType || '').trim())
     .isLength({ min: 2 })
@@ -99,5 +101,6 @@ router.get('/:id', protect, getBookingById);
 router.get('/:id/invoice/download', protect, downloadBookingInvoice);
 router.put('/:id/status', protect, authorize('admin'), [body('status').isIn(['Pending', 'Approved', 'Rejected', 'Driver Assigned', 'Ride Started', 'Ride Completed', 'Invoice Generated', 'Paid', 'Cancelled', 'Accepted', 'Payment Pending', 'Fully Paid'])], validateRequest, updateBookingStatus);
 router.put('/:id/assign-driver', protect, authorize('admin'), [body('driverId').notEmpty().withMessage('driverId is required')], validateRequest, assignDriver);
+router.delete('/:id', protect, authorize('admin'), deleteBooking);
 
 module.exports = router;

@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const Booking = require('../models/Booking');
 const Invoice = require('../models/Invoice');
 const SiteSettings = require('../models/SiteSettings');
@@ -145,6 +146,37 @@ function validationError(field, message) {
   return new ApiError(400, 'Validation failed', [{ field, message }]);
 }
 
+function createBookingSignature(data) {
+  const signatureSource = [
+    String(data.customerName || '').trim().toLowerCase(),
+    String(data.email || '').trim().toLowerCase(),
+    String(data.phone || '').trim(),
+    String(data.pickupLocation || '').trim().toLowerCase(),
+    String(data.dropLocation || '').trim().toLowerCase(),
+    String(data.pickupDate || '').trim(),
+    String(data.pickupTime || '').trim(),
+    String(data.selectedCar || '').trim().toLowerCase(),
+    String(data.selectedPackage || '').trim().toLowerCase(),
+    String(data.tripType || '').trim().toLowerCase(),
+    String(data.vehicleId || '').trim()
+  ].join('|');
+
+  return crypto.createHash('sha256').update(signatureSource).digest('hex');
+}
+
+async function resolveSelectedCar({ vehicleId, selectedCar }) {
+  if (vehicleId) {
+    const carById = await Car.findById(vehicleId);
+    if (carById) return carById;
+  }
+
+  if (selectedCar) {
+    return Car.findOne({ carName: new RegExp(`^${escapeRegExp(selectedCar)}$`, 'i') });
+  }
+
+  return null;
+}
+
 const createBooking = asyncHandler(async (req, res) => {
   const customerName = String(req.body.customerName || req.body.fullName || '').trim();
   if (customerName.length < 2) throw validationError('customerName', 'Customer name is required');
@@ -161,6 +193,8 @@ const createBooking = asyncHandler(async (req, res) => {
   const passengers = String(req.body.passengers || '').trim();
   const selectedCar = String(req.body.selectedCar || '').trim();
   const selectedPackage = String(req.body.selectedPackage || req.body.tripType || '').trim();
+  const tripType = String(req.body.tripType || req.body.selectedPackage || '').trim();
+  const vehicleId = String(req.body.vehicleId || req.body.selectedCarId || '').trim();
 
   if (!email) throw validationError('email', 'Valid email is required');
   if (!pickupLocation) throw validationError('pickupLocation', 'Pickup location is required');
@@ -171,6 +205,7 @@ const createBooking = asyncHandler(async (req, res) => {
   if (!passengers) throw validationError('passengers', 'Passenger count is required');
   if (!selectedCar) throw validationError('selectedCar', 'Selected car is required');
   if (!selectedPackage) throw validationError('selectedPackage', 'Selected package is required');
+  if (!vehicleId) throw validationError('vehicleId', 'Vehicle selection is required');
 
   const dropDateValue = String(req.body.dropDate || '').trim();
   if (dropDateValue) {
@@ -190,20 +225,43 @@ const createBooking = asyncHandler(async (req, res) => {
     passengers,
     selectedCar,
     selectedPackage,
-    tripType: String(req.body.tripType || req.body.selectedPackage || '').trim(),
-    vehicleId: String(req.body.vehicleId || req.body.selectedCarId || '').trim(),
+    tripType,
+    vehicleId,
     pickupCoordinates: parseCoordinates(req.body.pickupCoordinates || req.body.pickupCoords),
     dropCoordinates: parseCoordinates(req.body.dropCoordinates || req.body.dropCoords),
     specialRequirements: String(req.body.specialRequirements || req.body.requirements || '').trim(),
     user: req.user?._id || null
   };
 
+  const bookingSignature = createBookingSignature({
+    customerName: payload.customerName,
+    email: payload.email,
+    phone: payload.phone,
+    pickupLocation: payload.pickupLocation,
+    dropLocation: payload.dropLocation,
+    pickupDate: payload.pickupDate,
+    pickupTime: payload.pickupTime,
+    selectedCar: payload.selectedCar,
+    selectedPackage: payload.selectedPackage,
+    tripType: payload.tripType,
+    vehicleId: payload.vehicleId
+  });
+
+  const recentDuplicate = await Booking.findOne({ bookingSignature });
+  if (recentDuplicate) {
+    throw new ApiError(409, 'This booking request was already submitted. Please wait for confirmation or update the existing booking.');
+  }
+
   const [car, tripPackage, route, settings] = await Promise.all([
-    Car.findOne({ carName: new RegExp(`^${escapeRegExp(payload.selectedCar)}$`, 'i') }),
+    resolveSelectedCar({ vehicleId: payload.vehicleId, selectedCar: payload.selectedCar }),
     Package.findOne({ packageName: new RegExp(`^${escapeRegExp(payload.selectedPackage)}$`, 'i') }),
     findBestRoute(payload.pickupLocation, payload.dropLocation),
     SiteSettings.findOne({}).lean()
   ]);
+
+  if (!car) {
+    throw validationError('selectedCar', 'Selected vehicle could not be resolved');
+  }
 
   const pricing = await calculateFareQuote({
     pickup: {
@@ -223,33 +281,47 @@ const createBooking = asyncHandler(async (req, res) => {
     settings
   });
 
-  const booking = await Booking.create({
-    bookingId: createBookingId(),
-    ...payload,
-    pickupDate,
-    distanceInKm: pricing.distanceInKm,
-    estimatedDuration: pricing.estimatedDuration,
-    baseFare: pricing.fareBreakdown.baseFare,
-    perKmRate: pricing.fareBreakdown.perKmRate,
-    distanceFare: pricing.fareBreakdown.distanceFare,
-    tollCharges: pricing.fareBreakdown.tollCharges,
-    waitingCharges: pricing.fareBreakdown.waitingCharges,
-    nightCharges: pricing.fareBreakdown.nightCharges,
-    gstAmount: pricing.fareBreakdown.gstAmount,
-    estimatedFare: pricing.totalFare,
-    totalFare: pricing.totalFare,
-    finalBill: {
-      ...pricing.fareBreakdown,
-      currency: 'INR',
-      payableAfterRide: true,
-      source: pricing.source,
-      routeGeometry: pricing.routeGeometry,
-      pickupCoordinates: pricing.pickup?.coordinates || null,
-      dropCoordinates: pricing.drop?.coordinates || null
-    },
-    paymentStatus: 'Unpaid',
-    bookingStatus: 'Pending'
-  });
+  let booking;
+  try {
+    booking = await Booking.create({
+      bookingId: createBookingId(),
+      bookingSignature,
+      ...payload,
+      pickupDate,
+      pickupCoordinates: payload.pickupCoordinates,
+      dropCoordinates: payload.dropCoordinates,
+      distanceInKm: pricing.distanceInKm,
+      estimatedDuration: pricing.estimatedDuration,
+      baseFare: pricing.fareBreakdown.baseFare,
+      perKmRate: pricing.fareBreakdown.perKmRate,
+      distanceFare: pricing.fareBreakdown.distanceFare,
+      tollCharges: pricing.fareBreakdown.tollCharges,
+      waitingCharges: pricing.fareBreakdown.waitingCharges,
+      nightCharges: pricing.fareBreakdown.nightCharges,
+      gstAmount: pricing.fareBreakdown.gstAmount,
+      estimatedFare: pricing.totalFare,
+      totalFare: pricing.totalFare,
+      fareBreakdown: pricing.fareBreakdown,
+      routeGeometry: pricing.routeGeometry || [],
+      statusHistory: [{ status: 'Pending', at: new Date(), note: 'Booking created' }],
+      finalBill: {
+        ...pricing.fareBreakdown,
+        currency: 'INR',
+        payableAfterRide: true,
+        source: pricing.source,
+        routeGeometry: pricing.routeGeometry,
+        pickupCoordinates: pricing.pickup?.coordinates || null,
+        dropCoordinates: pricing.drop?.coordinates || null
+      },
+      paymentStatus: 'Unpaid',
+      bookingStatus: 'Pending'
+    });
+  } catch (error) {
+    if (error?.code === 11000 && error?.keyPattern?.bookingSignature) {
+      throw new ApiError(409, 'This booking request was already submitted. Please wait for confirmation or update the existing booking.');
+    }
+    throw error;
+  }
 
   await notifyAdmins('booking:new', {
     bookingId: booking.bookingId,
@@ -361,6 +433,13 @@ const updateBookingStatus = asyncHandler(async (req, res) => {
     booking.paidAt = new Date();
   }
 
+  booking.statusHistory = Array.isArray(booking.statusHistory) ? booking.statusHistory : [];
+  booking.statusHistory.push({
+    status: booking.bookingStatus,
+    at: new Date(),
+    note: booking.rejectionReason || req.body.adminNotes || ''
+  });
+
   await booking.save();
 
   await notifyBookingStatusChange({
@@ -383,6 +462,12 @@ const assignDriver = asyncHandler(async (req, res) => {
 
   booking.assignedDriver = driver._id;
   booking.bookingStatus = 'Driver Assigned';
+  booking.statusHistory = Array.isArray(booking.statusHistory) ? booking.statusHistory : [];
+  booking.statusHistory.push({
+    status: booking.bookingStatus,
+    at: new Date(),
+    note: `Driver ${driver.driverName} has been assigned`
+  });
   await booking.save();
 
   driver.availability = false;
@@ -419,11 +504,28 @@ const downloadBookingInvoice = asyncHandler(async (req, res) => {
   res.send(pdfBuffer);
 });
 
+const deleteBooking = asyncHandler(async (req, res) => {
+  const booking = await Booking.findById(req.params.id);
+  if (!booking) throw new ApiError(404, 'Booking not found');
+
+  if (booking.assignedDriver) {
+    await Driver.updateOne({ _id: booking.assignedDriver }, { $set: { availability: true } });
+  }
+
+  if (booking.invoice) {
+    await Invoice.deleteOne({ _id: booking.invoice }).catch(() => undefined);
+  }
+
+  await booking.deleteOne();
+  res.json({ success: true, message: 'Booking deleted successfully' });
+});
+
 module.exports = {
   createBooking,
   getBookings,
   getBookingById,
   updateBookingStatus,
   assignDriver,
-  downloadBookingInvoice
+  downloadBookingInvoice,
+  deleteBooking
 };
