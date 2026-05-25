@@ -233,6 +233,65 @@ img {
   padding: 12px 14px;
 }
 
+.mobile-account {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(239, 227, 255, .9), rgba(255, 255, 255, .92));
+  border: 1px solid rgba(106, 27, 154, .10);
+  box-shadow: 0 18px 40px rgba(106, 27, 154, .08);
+}
+
+.mobile-account.is-hidden {
+  display: none;
+}
+
+.mobile-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mobile-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--primary), #8e44ad);
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: .04em;
+  flex: 0 0 auto;
+  box-shadow: 0 14px 36px rgba(106, 27, 154, .22);
+}
+
+.mobile-profile strong {
+  display: block;
+  color: #2f073f;
+  font-size: 16px;
+}
+
+.mobile-profile p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.mobile-account-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mobile-action-btn {
+  width: 100%;
+  padding: 12px 14px;
+}
+
 
 /* Utilities */
 .sr-only {
@@ -442,6 +501,10 @@ img {
   display: flex;
   gap: 14px;
   align-items: center;
+}
+
+.desktop-only-action {
+  min-width: 120px;
 }
 
 
@@ -1035,6 +1098,32 @@ td:last-child {
 .check-list i {
   color: var(--primary);
   font-size: 18px;
+}
+
+.policy-card {
+  padding: 26px;
+}
+
+.policy-card__title {
+  font-family: 'Cormorant Garamond', serif;
+  color: #2f073f;
+  font-size: 26px;
+  margin-bottom: 10px;
+}
+
+.policy-card__copy {
+  color: var(--muted);
+  font-weight: 600;
+  line-height: 1.8;
+  font-size: 14px;
+}
+
+.policy-card__list {
+  margin-top: 18px;
+}
+
+.policy-card__footnote {
+  margin-top: 14px;
 }
 
 .terms-card {
@@ -2237,6 +2326,11 @@ section[id] {
     display: none;
   }
 
+  .nav-right .desktop-auth,
+  .nav-right .desktop-only-action {
+    display: none !important;
+  }
+
   .nav-links {
     display: none;
   }
@@ -2274,6 +2368,14 @@ section[id] {
 
   .mobile-menu-inner {
     padding: 18px 0 22px;
+  }
+
+  .mobile-auth {
+    margin-top: 4px;
+  }
+
+  .mobile-account-actions {
+    grid-template-columns: 1fr;
   }
 
   .hero-content,

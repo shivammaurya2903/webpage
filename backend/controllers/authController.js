@@ -7,11 +7,23 @@ function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
+function normalizeIndianPhone(value) {
+  const cleaned = String(value || '').trim().replace(/[\s-]/g, '');
+  if (!cleaned || /[^+0-9]/.test(cleaned)) return '';
+
+  let digits = cleaned.startsWith('+') ? cleaned.slice(1) : cleaned;
+  if (digits.startsWith('91') && digits.length === 12) {
+    digits = digits.slice(2);
+  }
+
+  return /^[6-9][0-9]{9}$/.test(digits) ? `+91${digits}` : '';
+}
+
 const register = asyncHandler(async (req, res) => {
   const { name, email, password, phone, role } = req.body;
 
   const normalizedEmail = normalizeEmail(email);
-  const normalizedPhone = String(phone || '').trim();
+  const normalizedPhone = normalizeIndianPhone(phone);
 
   if (!name?.trim() || !normalizedEmail || !password || !normalizedPhone) {
     throw new ApiError(400, 'All registration fields are required');

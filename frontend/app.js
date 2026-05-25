@@ -392,7 +392,15 @@
   function renderAuthButtons() {
     const loginBtn = document.getElementById('loginOpenBtn');
     const registerBtn = document.getElementById('registerOpenBtn');
+    const mobileLoginBtn = document.getElementById('mobileLoginOpenBtn');
+    const mobileRegisterBtn = document.getElementById('mobileRegisterOpenBtn');
     const navRight = document.querySelector('.nav-right');
+    const mobileAccount = document.querySelector('[data-mobile-account]');
+    const mobileAvatar = document.querySelector('[data-mobile-avatar]');
+    const mobileName = document.querySelector('[data-mobile-name]');
+    const mobileEmail = document.querySelector('[data-mobile-email]');
+    const mobileMyBookingsBtn = document.getElementById('mobileMyBookingsBtn');
+    const mobileLogoutBtn = document.getElementById('mobileLogoutBtn');
     if (!navRight) return;
 
     const existingLogout = document.getElementById('logoutBtn');
@@ -402,11 +410,14 @@
     if (getToken()) {
       if (loginBtn) loginBtn.style.display = 'none';
       if (registerBtn) registerBtn.style.display = 'none';
+      if (mobileLoginBtn) mobileLoginBtn.style.display = 'none';
+      if (mobileRegisterBtn) mobileRegisterBtn.style.display = 'none';
+      if (mobileAccount) mobileAccount.classList.remove('is-hidden');
 
       if (!existingMyBookings) {
         const mb = document.createElement('button');
         mb.id = 'myBookingsBtn';
-        mb.className = 'btn btn-ghost';
+        mb.className = 'btn btn-ghost desktop-only-action';
         mb.type = 'button';
         mb.textContent = 'My Bookings';
         mb.addEventListener('click', async () => {
@@ -422,10 +433,24 @@
         navRight.insertBefore(mb, menuBtn);
       }
 
+      if (mobileMyBookingsBtn) {
+        mobileMyBookingsBtn.onclick = async () => {
+          closeMenu();
+          try {
+            const res = await authFetch(apiUrl('/api/bookings'), {}, { retries: 1 });
+            const body = await safeJson(res);
+            if (!res.ok) throw new Error(body?.message || 'Failed to fetch bookings');
+            showBookingsModal(body.bookings || []);
+          } catch (e) {
+            showGlobalNotification(e.message || 'Failed to fetch bookings');
+          }
+        };
+      }
+
       if (!existingLogout) {
         const lb = document.createElement('button');
         lb.id = 'logoutBtn';
-        lb.className = 'btn btn-ghost';
+        lb.className = 'btn btn-ghost desktop-only-action';
         lb.type = 'button';
         lb.textContent = 'Logout';
         lb.addEventListener('click', () => {
@@ -436,12 +461,21 @@
         navRight.insertBefore(lb, menuBtn);
       }
 
+      if (mobileLogoutBtn) {
+        mobileLogoutBtn.onclick = () => {
+          closeMenu();
+          setToken(null);
+          setUser(null);
+          showGlobalNotification('Logged out', false);
+        };
+      }
+
       // show user label
       let userLabel = document.getElementById('userLabel');
       if (!userLabel && user) {
         userLabel = document.createElement('button');
         userLabel.id = 'userLabel';
-        userLabel.className = 'btn btn-ghost';
+        userLabel.className = 'btn btn-ghost desktop-only-action';
         userLabel.type = 'button';
         userLabel.textContent = user.name || user.email || 'Me';
         navRight.insertBefore(userLabel, menuBtn);
@@ -450,13 +484,25 @@
       } else if (userLabel && !user) {
         userLabel.remove();
       }
+
+      if (mobileAvatar) mobileAvatar.textContent = (user?.name || user?.email || 'Me').slice(0, 2).toUpperCase();
+      if (mobileName) mobileName.textContent = user?.name || user?.email || 'My Account';
+      if (mobileEmail) mobileEmail.textContent = user?.email || 'Manage bookings and profile';
     } else {
       if (loginBtn) loginBtn.style.display = '';
       if (registerBtn) registerBtn.style.display = '';
+      if (mobileLoginBtn) mobileLoginBtn.style.display = '';
+      if (mobileRegisterBtn) mobileRegisterBtn.style.display = '';
       if (existingMyBookings) existingMyBookings.remove();
       if (existingLogout) existingLogout.remove();
       const userLabel = document.getElementById('userLabel');
       if (userLabel) userLabel.remove();
+      if (mobileAccount) mobileAccount.classList.add('is-hidden');
+      if (mobileAvatar) mobileAvatar.textContent = 'Me';
+      if (mobileName) mobileName.textContent = 'Guest';
+      if (mobileEmail) mobileEmail.textContent = 'Sign in to manage your trips';
+      if (mobileMyBookingsBtn) mobileMyBookingsBtn.onclick = null;
+      if (mobileLogoutBtn) mobileLogoutBtn.onclick = null;
     }
   }
 

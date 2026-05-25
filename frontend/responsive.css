@@ -13,6 +13,10 @@
     display: none;
   }
 
+  .nav-right .desktop-only-action {
+    display: none !important;
+  }
+
   .nav-links {
     display: none;
   }
@@ -47,6 +51,10 @@
     opacity: 1;
     transform: translateY(0);
     pointer-events: auto;
+  }
+
+  .mobile-account-actions {
+    grid-template-columns: 1fr;
   }
 
   .hero-content {

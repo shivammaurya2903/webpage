@@ -76,6 +76,21 @@
           <button id="mobileRegisterOpenBtn" class="btn btn-ghost" type="button">Register</button>
         </div>
 
+        <div class="mobile-account is-hidden" data-mobile-account aria-label="Mobile account actions">
+          <div class="mobile-profile">
+            <span class="mobile-avatar" data-mobile-avatar>Me</span>
+            <div>
+              <strong data-mobile-name>Guest</strong>
+              <p data-mobile-email>Sign in to manage your trips</p>
+            </div>
+          </div>
+
+          <div class="mobile-account-actions">
+            <button id="mobileMyBookingsBtn" class="btn btn-ghost mobile-action-btn" type="button">My Bookings</button>
+            <button id="mobileLogoutBtn" class="btn btn-ghost mobile-action-btn" type="button">Logout</button>
+          </div>
+        </div>
+
 
         <!-- <a href="tel:8081181368" class="mobile-call">
 
@@ -886,21 +901,21 @@
         <p class="section-sub">Last updated: 2026</p>
       </div>
 
-      <div class="card" style="padding:26px;">
-        <h3 style="font-family: 'Cormorant Garamond', serif; color:#2f073f; font-size:26px; margin-bottom:10px;">Overview</h3>
-        <p style="color: var(--muted); font-weight:600; line-height:1.8; font-size:14px;">
+      <div class="card policy-card">
+        <h3 class="policy-card__title">Overview</h3>
+        <p class="policy-card__copy">
           We collect and use information that you provide when you request a booking, fare estimate, or support.
           This policy is a template—replace with your actual legal wording.
         </p>
 
-        <ul class="check-list" style="margin-top:18px;">
+        <ul class="check-list policy-card__list">
           <li><i class="fa-solid fa-circle-check"></i> Information you provide: name, phone, email, pickup/drop details, and requirements.</li>
           <li><i class="fa-solid fa-circle-check"></i> Purpose: to process bookings, estimate fares, and respond to support requests.</li>
           <li><i class="fa-solid fa-circle-check"></i> Sharing: only with systems/people necessary for booking fulfillment (drivers/admin).</li>
           <li><i class="fa-solid fa-circle-check"></i> Contact: use the Support section to request information or updates.</li>
         </ul>
 
-        <p style="color: var(--muted); font-weight:600; line-height:1.8; font-size:14px; margin-top:14px;">
+        <p class="policy-card__copy policy-card__footnote">
           Note: If you add analytics/cookies later, update this section accordingly.
         </p>
       </div>
@@ -914,20 +929,20 @@
         <p class="section-sub">Last updated: 2026</p>
       </div>
 
-      <div class="card" style="padding:26px;">
-        <h3 style="font-family: 'Cormorant Garamond', serif; color:#2f073f; font-size:26px; margin-bottom:10px;">Booking Terms (Template)</h3>
-        <p style="color: var(--muted); font-weight:600; line-height:1.8; font-size:14px;">
+      <div class="card policy-card">
+        <h3 class="policy-card__title">Booking Terms (Template)</h3>
+        <p class="policy-card__copy">
           By submitting a booking request, you agree to the operational rules of the service. This text is a template—replace with your actual legal wording.
         </p>
 
-        <ul class="check-list" style="margin-top:18px;">
+        <ul class="check-list policy-card__list">
           <li><i class="fa-solid fa-circle-check"></i> Booking approval: bookings may be confirmed by admin before fulfillment.</li>
           <li><i class="fa-solid fa-circle-check"></i> Pricing: final charges may vary based on distance, tolls, waiting time, and night charges.</li>
           <li><i class="fa-solid fa-circle-check"></i> Payments: as per your published policy (e.g., pay after ride completion once invoiced).</li>
           <li><i class="fa-solid fa-circle-check"></i> Cancellations/rescheduling: defined by your business policy.</li>
         </ul>
 
-        <p style="color: var(--muted); font-weight:600; line-height:1.8; font-size:14px; margin-top:14px;">
+        <p class="policy-card__copy policy-card__footnote">
           For clarifications, contact support or call/WhatsApp from the Support section.
         </p>
       </div>
@@ -974,10 +989,10 @@
           </p>
 
           <div class="social" aria-label="Social links">
-            <a href="#" aria-label="Facebook"><i class="fa-brands fa-facebook-f"></i></a>
-            <a href="#" aria-label="Instagram"><i class="fa-brands fa-instagram"></i></a>
-            <a href="#" aria-label="Twitter"><i class="fa-brands fa-x-twitter"></i></a>
-            <a href="#" aria-label="YouTube"><i class="fa-brands fa-youtube"></i></a>
+            <a href="https://www.facebook.com/" target="_blank" rel="noopener" aria-label="Facebook"><i class="fa-brands fa-facebook-f"></i></a>
+            <a href="https://www.instagram.com/" target="_blank" rel="noopener" aria-label="Instagram"><i class="fa-brands fa-instagram"></i></a>
+            <a href="https://x.com/" target="_blank" rel="noopener" aria-label="Twitter"><i class="fa-brands fa-x-twitter"></i></a>
+            <a href="https://www.youtube.com/" target="_blank" rel="noopener" aria-label="YouTube"><i class="fa-brands fa-youtube"></i></a>
           </div>
         </div>
       </div>
@@ -993,7 +1008,7 @@
 
   <div class="floating-tools" aria-label="Quick contact">
 
-    <a class="floating-tool floating-ai" href="#" aria-label="AI Assistance" title="AI Assistance">
+    <a class="floating-tool floating-ai" href="#support" aria-label="Support assistant" title="Support assistant">
       <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
     </a>
     <a class="floating-tool floating-whatsapp" href="https://wa.me/8081181368" target="_blank" rel="noopener" aria-label="Chat on WhatsApp" title="Chat on WhatsApp">

@@ -34,9 +34,9 @@ function normalizePaymentStatus(status, method) {
   return 'Paid Offline';
 }
 
-function buildFinalBill(estimatedFare) {
+function buildFinalBill(estimatedFare, settings = {}) {
   const baseAmount = Number(estimatedFare || 0);
-  const taxPercent = Number(process.env.INVOICE_TAX_PERCENT || 5);
+  const taxPercent = Number(settings?.pricingSettings?.gstPercent || settings?.billing?.taxPercent || process.env.INVOICE_TAX_PERCENT || 5);
   const taxAmount = Math.max(0, Math.round(baseAmount * (taxPercent / 100)));
   const cgstAmount = Math.round(taxAmount / 2);
   const sgstAmount = Math.max(0, taxAmount - cgstAmount);
@@ -163,7 +163,7 @@ const generateBookingInvoice = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'Invoice cannot be generated for a rejected or cancelled booking');
   }
 
-    const finalBill = booking.finalBill?.totalAmount ? booking.finalBill : buildFinalBill(booking.totalFare || booking.estimatedFare || 0);
+    const finalBill = booking.finalBill?.totalAmount ? booking.finalBill : buildFinalBill(booking.totalFare || booking.estimatedFare || 0, settings);
   const existingInvoice = booking.invoice || await Invoice.findOne({ booking: booking._id });
   const invoice = existingInvoice || new Invoice({ invoiceId: booking.invoiceId || createInvoiceId(), booking: booking._id });
 
@@ -215,7 +215,7 @@ const resendBookingInvoice = asyncHandler(async (req, res) => {
   const invoice = booking.invoice || await Invoice.findOne({ booking: booking._id });
   if (!invoice) throw new ApiError(404, 'Invoice not found');
 
-  const finalBill = buildFinalBill(booking.totalFare || booking.estimatedFare || invoice.totalFare || 0);
+  const finalBill = buildFinalBill(booking.totalFare || booking.estimatedFare || invoice.totalFare || 0, settings);
   const model = buildInvoiceModel({ booking, invoice, driver: booking.assignedDriver, settings });
   syncInvoiceFromModel(booking, invoice, model, finalBill, invoice.paymentStatus || booking.paymentStatus || 'Pending');
 

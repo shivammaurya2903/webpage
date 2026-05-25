@@ -44,6 +44,10 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function hasOwnValue(target, key) {
+  return Object.prototype.hasOwnProperty.call(target || {}, key);
+}
+
 function getStripe() {
   if (!process.env.STRIPE_SECRET_KEY) return null;
   return new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -399,15 +403,15 @@ const updateCar = asyncHandler(async (req, res) => {
   if (!car) throw new ApiError(404, 'Car not found');
 
   const payload = { ...req.body };
-  if (payload.seatingCapacity) payload.seatingCapacity = toNumber(payload.seatingCapacity, car.seatingCapacity);
-  if (payload.pricePerDay || payload.baseFare) payload.pricePerDay = toNumber(payload.pricePerDay, toNumber(payload.baseFare, car.pricePerDay));
-  if (payload.baseFare) payload.baseFare = toNumber(payload.baseFare, car.baseFare || car.pricePerDay);
-  if (payload.pricePerKm) payload.pricePerKm = toNumber(payload.pricePerKm, car.pricePerKm || 0);
-  if (payload.extraKmRate) payload.extraKmRate = toNumber(payload.extraKmRate, car.extraKmRate || car.pricePerKm || 0);
-  if (payload.nightChargePercent) payload.nightChargePercent = toNumber(payload.nightChargePercent, car.nightChargePercent || 10);
-  if (payload.driverAllowance) payload.driverAllowance = toNumber(payload.driverAllowance, car.driverAllowance || 0);
-  if (payload.includedKm) payload.includedKm = toNumber(payload.includedKm, car.includedKm || 0);
-  if (payload.features) payload.features = parseList(payload.features);
+  if (hasOwnValue(req.body, 'seatingCapacity')) payload.seatingCapacity = toNumber(payload.seatingCapacity, car.seatingCapacity);
+  if (hasOwnValue(req.body, 'pricePerDay') || hasOwnValue(req.body, 'baseFare')) payload.pricePerDay = toNumber(payload.pricePerDay, toNumber(payload.baseFare, car.pricePerDay));
+  if (hasOwnValue(req.body, 'baseFare')) payload.baseFare = toNumber(payload.baseFare, car.baseFare || car.pricePerDay);
+  if (hasOwnValue(req.body, 'pricePerKm')) payload.pricePerKm = toNumber(payload.pricePerKm, car.pricePerKm || 0);
+  if (hasOwnValue(req.body, 'extraKmRate')) payload.extraKmRate = toNumber(payload.extraKmRate, car.extraKmRate || car.pricePerKm || 0);
+  if (hasOwnValue(req.body, 'nightChargePercent')) payload.nightChargePercent = toNumber(payload.nightChargePercent, car.nightChargePercent || 10);
+  if (hasOwnValue(req.body, 'driverAllowance')) payload.driverAllowance = toNumber(payload.driverAllowance, car.driverAllowance || 0);
+  if (hasOwnValue(req.body, 'includedKm')) payload.includedKm = toNumber(payload.includedKm, car.includedKm || 0);
+  if (hasOwnValue(req.body, 'features')) payload.features = parseList(payload.features);
 
   Object.assign(car, payload);
   if (req.file) car.image = `/uploads/${req.file.filename}`;
@@ -442,10 +446,10 @@ const updatePackage = asyncHandler(async (req, res) => {
   if (!tripPackage) throw new ApiError(404, 'Package not found');
 
   const payload = { ...req.body };
-  if (payload.price) payload.price = toNumber(payload.price, tripPackage.price);
-  if (payload.destinations) payload.destinations = parseList(payload.destinations);
-  if (payload.inclusions) payload.inclusions = parseList(payload.inclusions);
-  if (payload.exclusions) payload.exclusions = parseList(payload.exclusions);
+  if (hasOwnValue(req.body, 'price')) payload.price = toNumber(payload.price, tripPackage.price);
+  if (hasOwnValue(req.body, 'destinations')) payload.destinations = parseList(payload.destinations);
+  if (hasOwnValue(req.body, 'inclusions')) payload.inclusions = parseList(payload.inclusions);
+  if (hasOwnValue(req.body, 'exclusions')) payload.exclusions = parseList(payload.exclusions);
 
   Object.assign(tripPackage, payload);
   if (req.file) tripPackage.image = `/uploads/${req.file.filename}`;
@@ -472,7 +476,9 @@ const createRoute = asyncHandler(async (req, res) => {
 const updateRoute = asyncHandler(async (req, res) => {
   const route = await Route.findById(req.params.id);
   if (!route) throw new ApiError(404, 'Route not found');
-  Object.assign(route, { ...req.body, price: req.body.price ? toNumber(req.body.price, route.price) : route.price });
+  const payload = { ...req.body };
+  if (hasOwnValue(req.body, 'price')) payload.price = toNumber(payload.price, route.price);
+  Object.assign(route, payload);
   await route.save();
   res.json({ success: true, route });
 });
@@ -704,6 +710,8 @@ const updateSettings = asyncHandler(async (req, res) => {
   if (payload.logoText) settings.logoText = payload.logoText;
   if (payload.socialLinks) settings.socialLinks = { ...(settings.socialLinks?.toObject ? settings.socialLinks.toObject() : settings.socialLinks || {}), ...payload.socialLinks };
   if (payload.paymentSettings) settings.paymentSettings = { ...(settings.paymentSettings?.toObject ? settings.paymentSettings.toObject() : settings.paymentSettings || {}), ...payload.paymentSettings };
+  if (payload.billing) settings.billing = { ...(settings.billing?.toObject ? settings.billing.toObject() : settings.billing || {}), ...payload.billing };
+  if (payload.pricingSettings) settings.pricingSettings = { ...(settings.pricingSettings?.toObject ? settings.pricingSettings.toObject() : settings.pricingSettings || {}), ...payload.pricingSettings };
   if (payload.notificationSettings) settings.notificationSettings = { ...(settings.notificationSettings?.toObject ? settings.notificationSettings.toObject() : settings.notificationSettings || {}), ...payload.notificationSettings };
   if (payload.homepage) {
     settings.homepage = {

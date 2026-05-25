@@ -1134,12 +1134,12 @@
               <label class="field wide"><span>Category</span><input name="category" value="${escapeHtml(record?.category || '')}" required /></label>
               <label class="field wide"><span>Fuel type</span><input name="fuelType" value="${escapeHtml(record?.fuelType || '')}" required /></label>
               <label class="field wide"><span>Transmission</span><input name="transmission" value="${escapeHtml(record?.transmission || '')}" required /></label>
-              <label class="field wide"><span>Base fare</span><input type="number" name="baseFare" value="${escapeHtml(String(record?.baseFare || record?.pricePerDay || ''))}" required /></label>
-              <label class="field wide"><span>Price per km</span><input type="number" name="pricePerKm" value="${escapeHtml(String(record?.pricePerKm || ''))}" required /></label>
-              <label class="field wide"><span>Extra km rate</span><input type="number" name="extraKmRate" value="${escapeHtml(String(record?.extraKmRate || record?.pricePerKm || ''))}" /></label>
-              <label class="field wide"><span>Included km</span><input type="number" name="includedKm" value="${escapeHtml(String(record?.includedKm || ''))}" /></label>
+              <label class="field wide"><span>Base fare</span><input type="number" name="baseFare" value="${escapeHtml(String(record?.baseFare ?? record?.pricePerDay ?? ''))}" required /></label>
+              <label class="field wide"><span>Price per km</span><input type="number" name="pricePerKm" value="${escapeHtml(String(record?.pricePerKm ?? ''))}" required /></label>
+              <label class="field wide"><span>Extra km rate</span><input type="number" name="extraKmRate" value="${escapeHtml(String(record?.extraKmRate ?? record?.pricePerKm ?? ''))}" /></label>
+              <label class="field wide"><span>Included km</span><input type="number" name="includedKm" value="${escapeHtml(String(record?.includedKm ?? ''))}" /></label>
               <label class="field wide"><span>Night charge %</span><input type="number" name="nightChargePercent" value="${escapeHtml(String(record?.nightChargePercent ?? 10))}" /></label>
-              <label class="field wide"><span>Driver allowance</span><input type="number" name="driverAllowance" value="${escapeHtml(String(record?.driverAllowance || ''))}" /></label>
+              <label class="field wide"><span>Driver allowance</span><input type="number" name="driverAllowance" value="${escapeHtml(String(record?.driverAllowance ?? ''))}" /></label>
               <label class="field full"><span>Features</span><textarea name="features">${escapeHtml((record?.features || []).join(', '))}</textarea></label>
               <label class="field wide"><span>Car image</span><input name="image" type="file" accept="image/*" /></label>
             </div>
@@ -1156,7 +1156,7 @@
             <div class="form-grid">
               <label class="field wide"><span>Package name</span><input name="packageName" value="${escapeHtml(record?.packageName || '')}" required /></label>
               <label class="field wide"><span>Duration</span><input name="duration" value="${escapeHtml(record?.duration || '')}" required /></label>
-              <label class="field wide"><span>Price</span><input type="number" name="price" value="${escapeHtml(String(record?.price || ''))}" required /></label>
+              <label class="field wide"><span>Price</span><input type="number" name="price" value="${escapeHtml(String(record?.price ?? ''))}" required /></label>
               <label class="field full"><span>Description</span><textarea name="description">${escapeHtml(record?.description || '')}</textarea></label>
               <label class="field full"><span>Destinations</span><textarea name="destinations">${escapeHtml((record?.destinations || []).join(', '))}</textarea></label>
               <label class="field full"><span>Inclusions</span><textarea name="inclusions">${escapeHtml((record?.inclusions || []).join(', '))}</textarea></label>
@@ -1178,7 +1178,7 @@
               <label class="field wide"><span>To</span><input name="to" value="${escapeHtml(record?.to || '')}" required /></label>
               <label class="field wide"><span>Distance</span><input name="distance" value="${escapeHtml(record?.distance || '')}" /></label>
               <label class="field wide"><span>Estimated time</span><input name="estimatedTime" value="${escapeHtml(record?.estimatedTime || '')}" /></label>
-              <label class="field wide"><span>Price</span><input type="number" name="price" value="${escapeHtml(String(record?.price || ''))}" required /></label>
+              <label class="field wide"><span>Price</span><input type="number" name="price" value="${escapeHtml(String(record?.price ?? ''))}" required /></label>
             </div>
             <input type="hidden" name="id" value="${escapeHtml(record?._id || '')}" />
             <div class="form-actions"><button class="primary-btn" type="submit">Save route</button><button class="secondary-btn" type="button" data-close-modal>Cancel</button></div>
@@ -1217,7 +1217,9 @@
       } else if (entity === 'car') {
         path = id ? `/api/admin/cars/${id}` : '/api/admin/cars';
         method = id ? 'PUT' : 'POST';
-        formData.set('pricePerDay', String(formData.get('baseFare') || formData.get('pricePerDay') || '0'));
+        const baseFareValue = formData.get('baseFare');
+        const pricePerDayValue = baseFareValue !== null && baseFareValue !== '' ? baseFareValue : formData.get('pricePerDay');
+        formData.set('pricePerDay', String(pricePerDayValue ?? '0'));
       } else if (entity === 'package') {
         path = id ? `/api/admin/packages/${id}` : '/api/admin/packages';
         method = id ? 'PUT' : 'POST';
@@ -1419,7 +1421,7 @@
     if (!form) return;
     try {
       const formData = new FormData();
-      [...form.elements].forEach((input) => {
+      form.querySelectorAll('input, textarea, select').forEach((input) => {
         if (!input.name) return;
         if (input.type === 'file') {
           if (input.files[0]) formData.append(input.name, input.files[0]);
