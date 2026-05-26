@@ -1,7 +1,9 @@
 const Booking = require('../models/Booking');
+const Invoice = require('../models/Invoice');
 const Payment = require('../models/Payment');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
+const { normalizePaymentMethod: normalizeBillingPaymentMethod, normalizePaymentStatus: normalizeBillingPaymentStatus } = require('../utils/billingWorkflow');
 const { notifyBookingStatusChange, notifyCustomer } = require('../services/notificationService');
 const { sendEmail } = require('../services/emailService');
 const { paymentReceipt } = require('../services/emailTemplates');
@@ -31,10 +33,25 @@ const refundPayment = asyncHandler(async (req, res) => {
 
   payment.status = 'Refunded';
   payment.refundedAt = new Date();
+  payment.paymentStatus = 'Refunded';
   await payment.save();
 
   payment.booking.paymentStatus = 'Refunded';
   payment.booking.bookingStatus = 'Cancelled';
+  payment.booking.paymentDate = new Date();
+  payment.booking.paidAt = null;
+  payment.booking.transactionId = payment.transactionId || payment.receiptId || payment.booking.transactionId || '';
+  payment.booking.balanceAmount = Number(payment.booking.totalFare || payment.booking.estimatedFare || payment.amount || 0);
+  if (payment.booking.invoice) {
+    const linkedInvoice = await Invoice.findById(payment.booking.invoice);
+    if (linkedInvoice) {
+      linkedInvoice.paymentStatus = 'Refunded';
+      linkedInvoice.balanceAmount = Number(linkedInvoice.totalFare || payment.amount || 0);
+      linkedInvoice.paidAmount = 0;
+      linkedInvoice.paymentDate = new Date();
+      await linkedInvoice.save();
+    }
+  }
   payment.booking.statusHistory = Array.isArray(payment.booking.statusHistory) ? payment.booking.statusHistory : [];
   payment.booking.statusHistory.push({ status: 'Cancelled', at: new Date(), note: 'Payment refunded and booking cancelled' });
   await payment.booking.save();

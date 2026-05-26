@@ -129,10 +129,12 @@
         </div>
 
         <div class="topbar-actions">
-          <label class="search-pill" aria-label="Search current view">
-            <i class="fa-solid fa-magnifying-glass"></i>
-            <input id="globalSearch" type="search" placeholder="Search current view" />
-          </label>
+          <div class="topbar-search-slot" id="topbarSearchSlot">
+            <label class="search-pill" aria-label="Search current view">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input id="globalSearch" type="search" placeholder="Search current view" />
+            </label>
+          </div>
           <div class="status-chip" id="socketStatus"><span></span>Live</div>
           <details class="topbar-dropdown" id="notificationDropdown">
             <summary class="icon-button icon-button--soft" aria-label="Notifications">

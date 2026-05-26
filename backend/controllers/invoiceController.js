@@ -6,34 +6,12 @@ const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { createInvoiceId } = require('../utils/invoiceId');
 const { buildInvoicePdf, buildInvoiceModel } = require('../utils/invoicePdf');
+const { calculateBillingDraft, normalizePaymentMethod, normalizePaymentStatus, normalizeChargeItems, sumCharges } = require('../utils/billingWorkflow');
 const { calculateFareQuote } = require('../services/fareCalculator');
 const { notifyAdmins, notifyCustomer } = require('../services/notificationService');
 const { sendEmail } = require('../services/emailService');
 const { invoiceGenerated, paymentReceipt } = require('../services/emailTemplates');
 const { sendWhatsApp } = require('../services/whatsappService');
-
-function normalizePaymentMethod(method) {
-  const value = String(method || '').trim().toLowerCase();
-  const aliases = {
-    cash: 'Cash',
-    upi: 'UPI',
-    card: 'Card',
-    online: 'Online payment link',
-    'online payment link': 'Online payment link',
-    bank: 'Bank transfer',
-    'bank transfer': 'Bank transfer'
-  };
-
-  return aliases[value] || method || 'Cash';
-}
-
-function normalizePaymentStatus(status, method) {
-  const value = String(status || '').trim();
-  if (value) return value;
-  if (['Cash', 'UPI'].includes(method)) return 'Paid Offline';
-  if (['Card', 'Online payment link'].includes(method)) return 'Paid Online';
-  return 'Paid Offline';
-}
 
 async function loadSettings() {
   return SiteSettings.findOne({}).lean();
@@ -62,17 +40,17 @@ async function buildBillingQuoteFromBooking(booking, settings) {
     pickupDateTime: booking.pickupDate && booking.pickupTime ? `${new Date(booking.pickupDate).toISOString().slice(0, 10)}T${booking.pickupTime}` : null,
     waitingMinutes: booking.fareBreakdown?.waitingMinutes || booking.finalBill?.waitingMinutes || 0,
     tollCharges: booking.fareBreakdown?.tollCharges || booking.finalBill?.tollCharges || booking.tollCharges || 0,
-    extraCharges: booking.fareBreakdown?.extraTravelCharges || booking.finalBill?.extraTravelCharges || booking.extraCharges || 0,
+    extraCharges: booking.fareBreakdown?.extraTravelCharges || booking.finalBill?.extraTravelCharges || sumCharges(normalizeChargeItems(booking.extraCharges)) || 0,
     tripDays: booking.fareBreakdown?.driverAllowanceDays || booking.finalBill?.driverAllowanceDays || 0,
     settings
   });
 }
 
-function syncInvoiceFromModel(booking, invoice, model, finalBill, paymentStatus) {
+function syncInvoiceFromModel(booking, invoice, model, finalBill, paymentStatus, billing = {}) {
   booking.invoiceId = invoice.invoiceId;
   booking.invoiceGenerated = true;
-  booking.bookingStatus = 'Invoice Generated';
-  booking.paymentStatus = paymentStatus || 'Pending';
+  booking.bookingStatus = billing.paymentStatus === 'Paid' ? 'Paid' : 'Invoice Generated';
+  booking.paymentStatus = billing.paymentStatus || paymentStatus || 'Pending';
   booking.distanceInKm = finalBill.distanceInKm || booking.distanceInKm || 0;
   booking.duration = finalBill.estimatedDuration || booking.duration || booking.estimatedDuration || 0;
   booking.estimatedDuration = finalBill.estimatedDuration || booking.estimatedDuration || 0;
@@ -84,14 +62,38 @@ function syncInvoiceFromModel(booking, invoice, model, finalBill, paymentStatus)
   booking.waitingCharges = finalBill.waitingCharges || booking.waitingCharges || 0;
   booking.nightCharges = finalBill.nightCharges || booking.nightCharges || 0;
   booking.driverAllowance = finalBill.driverAllowance || booking.driverAllowance || 0;
-  booking.extraCharges = finalBill.extraTravelCharges || booking.extraCharges || 0;
-  booking.gstAmount = finalBill.gstAmount || booking.gstAmount || 0;
-  booking.subtotal = finalBill.subtotalAmount || finalBill.subtotal || booking.subtotal || 0;
-  booking.totalFare = finalBill.totalAmount;
+  booking.extraDistanceCharges = finalBill.extraDistanceCharges || booking.extraDistanceCharges || 0;
+  booking.parkingCharges = finalBill.parkingCharges || booking.parkingCharges || 0;
+  booking.statePermitCharges = finalBill.statePermitCharges || booking.statePermitCharges || 0;
+  booking.miscellaneousCharges = finalBill.miscellaneousCharges || booking.miscellaneousCharges || 0;
+  booking.extraCharges = billing.extraCharges || booking.extraCharges || [];
+  booking.discountType = billing.discountType || booking.discountType || 'flat';
+  booking.discountValue = billing.discountValue ?? booking.discountValue ?? 0;
+  booking.discountAmount = billing.discountAmount ?? booking.discountAmount ?? 0;
+    booking.gstAmount = billing.gstAmount ?? finalBill.gstAmount ?? booking.gstAmount ?? 0;
+    booking.subtotal = billing.subtotal ?? finalBill.subtotalAmount ?? finalBill.subtotal ?? booking.subtotal ?? 0;
+    booking.grandTotal = billing.grandTotal ?? finalBill.totalAmount ?? booking.grandTotal ?? 0;
+    booking.totalFare = billing.totalFare ?? finalBill.totalAmount ?? booking.totalFare ?? 0;
+  booking.paidAmount = billing.paidAmount ?? booking.paidAmount ?? 0;
+  booking.balanceAmount = billing.balanceAmount ?? booking.balanceAmount ?? 0;
+  booking.paymentDate = billing.paymentDate || booking.paymentDate || null;
+  booking.transactionId = billing.transactionId || booking.transactionId || '';
   booking.finalBill = {
     ...finalBill,
+    extraCharges: billing.extraCharges || booking.extraCharges || [],
+    discountType: billing.discountType || booking.discountType || 'flat',
+    discountValue: billing.discountValue ?? booking.discountValue ?? 0,
+    discountAmount: billing.discountAmount ?? booking.discountAmount ?? 0,
+    subtotal: billing.subtotal ?? finalBill.subtotalAmount ?? finalBill.subtotal ?? booking.subtotal ?? 0,
+    grandTotal: billing.grandTotal ?? finalBill.totalAmount ?? booking.grandTotal ?? 0,
+    totalAmount: billing.totalFare ?? finalBill.totalAmount ?? booking.totalFare ?? 0,
+    paidAmount: billing.paidAmount ?? booking.paidAmount ?? 0,
+    balanceAmount: billing.balanceAmount ?? booking.balanceAmount ?? 0,
+    paymentDate: billing.paymentDate || booking.paymentDate || null,
+    transactionId: billing.transactionId || booking.transactionId || '',
     payableAfterRide: true,
-    paymentStatus: paymentStatus || 'Pending'
+    paymentStatus: billing.paymentStatus || paymentStatus || 'Pending',
+    paymentMethod: billing.paymentMethod || booking.paymentMethod || 'Cash'
   };
 
   invoice.booking = booking._id;
@@ -116,35 +118,67 @@ function syncInvoiceFromModel(booking, invoice, model, finalBill, paymentStatus)
   invoice.waitingCharges = booking.waitingCharges || invoice.waitingCharges || 0;
   invoice.nightCharges = booking.nightCharges || invoice.nightCharges || 0;
   invoice.driverAllowance = booking.driverAllowance || invoice.driverAllowance || 0;
-  invoice.extraCharges = booking.extraCharges || invoice.extraCharges || 0;
+  invoice.extraDistanceCharges = booking.extraDistanceCharges || invoice.extraDistanceCharges || 0;
+  invoice.parkingCharges = booking.parkingCharges || invoice.parkingCharges || 0;
+  invoice.statePermitCharges = booking.statePermitCharges || invoice.statePermitCharges || 0;
+  invoice.miscellaneousCharges = booking.miscellaneousCharges || invoice.miscellaneousCharges || 0;
+  invoice.extraCharges = booking.extraCharges || invoice.extraCharges || [];
   invoice.businessSnapshot = model.business;
   invoice.customerSnapshot = model.customer;
   invoice.rideSnapshot = model.ride;
-  invoice.lineItems = model.lineItems;
+  invoice.lineItems = billing.lineItems || model.lineItems;
   invoice.paymentSummary = model.payment;
   invoice.terms = model.terms;
   invoice.fareBreakdown = {
     ...finalBill,
+    ...billing.fareBreakdown,
+    extraCharges: billing.extraCharges || booking.extraCharges || [],
     currency: finalBill.currency || 'INR'
   };
-  invoice.subtotalAmount = finalBill.subtotalAmount || finalBill.subtotal || finalBill.baseAmount || 0;
+  invoice.subtotalAmount = billing.subtotal ?? finalBill.subtotalAmount ?? finalBill.subtotal ?? finalBill.baseAmount ?? 0;
   invoice.subtotal = invoice.subtotalAmount;
-  invoice.taxAmount = finalBill.taxAmount || finalBill.gstAmount || 0;
+  invoice.grandTotal = billing.grandTotal ?? finalBill.totalAmount ?? invoice.grandTotal ?? 0;
+  invoice.taxAmount = billing.gstAmount ?? finalBill.taxAmount ?? finalBill.gstAmount ?? 0;
   invoice.cgstAmount = finalBill.cgstAmount;
   invoice.sgstAmount = finalBill.sgstAmount;
-  invoice.taxPercent = finalBill.taxPercent || finalBill.gstPercent || 5;
-  invoice.discountAmount = finalBill.discountAmount;
-  invoice.totalFare = finalBill.totalAmount;
-  invoice.paymentMethod = booking.paymentMethod || invoice.paymentMethod || '';
-  invoice.paymentStatus = paymentStatus || invoice.paymentStatus || 'Pending';
+  invoice.taxPercent = billing.fareBreakdown?.gstPercent || finalBill.taxPercent || finalBill.gstPercent || 5;
+  invoice.discountAmount = billing.discountAmount ?? finalBill.discountAmount ?? invoice.discountAmount ?? 0;
+  invoice.discountType = billing.discountType || invoice.discountType || 'flat';
+  invoice.discountValue = billing.discountValue ?? invoice.discountValue ?? 0;
+  invoice.totalFare = billing.totalFare ?? finalBill.totalAmount ?? invoice.totalFare ?? 0;
+  invoice.paymentMethod = billing.paymentMethod || booking.paymentMethod || invoice.paymentMethod || '';
+  invoice.paymentStatus = billing.paymentStatus || paymentStatus || invoice.paymentStatus || 'Pending';
+  invoice.paymentDate = billing.paymentDate || invoice.paymentDate || booking.paymentDate || null;
+  invoice.paidAmount = billing.paidAmount ?? invoice.paidAmount ?? 0;
+  invoice.balanceAmount = billing.balanceAmount ?? invoice.balanceAmount ?? 0;
+  invoice.transactionId = billing.transactionId || invoice.transactionId || '';
   invoice.finalBill = {
     ...finalBill,
+    ...billing.fareBreakdown,
+    extraCharges: billing.extraCharges || booking.extraCharges || [],
+    discountType: billing.discountType || invoice.discountType || 'flat',
+    discountValue: billing.discountValue ?? invoice.discountValue ?? 0,
+    discountAmount: billing.discountAmount ?? invoice.discountAmount ?? 0,
+    grandTotal: billing.grandTotal ?? finalBill.totalAmount ?? invoice.grandTotal ?? 0,
+    paidAmount: billing.paidAmount ?? invoice.paidAmount ?? 0,
+    balanceAmount: billing.balanceAmount ?? invoice.balanceAmount ?? 0,
+    paymentDate: billing.paymentDate || invoice.paymentDate || null,
+    transactionId: billing.transactionId || invoice.transactionId || '',
     payableAfterRide: true,
     paymentStatus: invoice.paymentStatus
   };
-  invoice.amountPaid = model.payment.amountPaid;
-  invoice.remainingAmount = model.payment.balanceDue;
-  invoice.transactionId = model.payment.transactionId;
+  invoice.amountPaid = billing.paidAmount ?? model.payment.amountPaid;
+  invoice.remainingAmount = billing.balanceAmount ?? model.payment.balanceDue;
+  invoice.paymentSummary = {
+    ...model.payment,
+    ...billing.paymentSummary,
+    amountPaid: billing.paidAmount ?? model.payment.amountPaid,
+    balanceDue: billing.balanceAmount ?? model.payment.balanceDue,
+    transactionId: billing.transactionId || model.payment.transactionId,
+    paymentDate: billing.paymentDate || model.payment.paymentDate || null,
+    paymentMethod: billing.paymentMethod || model.payment.paymentMethod || 'Cash',
+    paymentStatus: billing.paymentStatus || model.payment.status || 'Pending'
+  };
   invoice.businessSnapshot = {
     ...invoice.businessSnapshot,
     businessName: model.business.businessName,
@@ -187,6 +221,207 @@ async function loadBookingWithInvoice(id) {
   return booking;
 }
 
+function buildInvoiceDraftSnapshot(booking, invoice = null) {
+  const source = invoice?.invoiceDraft || booking.invoiceDraft || {};
+  const extraCharges = Array.isArray(source.extraCharges)
+    ? source.extraCharges
+    : normalizeChargeItems(source.extraCharges || booking.extraCharges || invoice?.extraCharges);
+
+  return {
+    baseFare: Number(source.baseFare ?? booking.baseFare ?? invoice?.subtotalAmount ?? 0),
+    distanceFare: Number(source.distanceFare ?? booking.distanceFare ?? invoice?.distanceFare ?? 0),
+    tollCharges: Number(source.tollCharges ?? booking.tollCharges ?? invoice?.tollCharges ?? 0),
+    parkingCharges: Number(source.parkingCharges ?? booking.parkingCharges ?? invoice?.parkingCharges ?? 0),
+    waitingCharges: Number(source.waitingCharges ?? booking.waitingCharges ?? invoice?.waitingCharges ?? 0),
+    nightCharges: Number(source.nightCharges ?? booking.nightCharges ?? invoice?.nightCharges ?? 0),
+    statePermitCharges: Number(source.statePermitCharges ?? booking.statePermitCharges ?? invoice?.statePermitCharges ?? 0),
+    extraDistanceCharges: Number(source.extraDistanceCharges ?? booking.extraDistanceCharges ?? invoice?.extraDistanceCharges ?? 0),
+    miscellaneousCharges: Number(source.miscellaneousCharges ?? booking.miscellaneousCharges ?? invoice?.miscellaneousCharges ?? 0),
+    extraCharges,
+    discountType: source.discountType ?? booking.discountType ?? invoice?.discountType ?? 'flat',
+    discountValue: Number(source.discountValue ?? booking.discountValue ?? invoice?.discountValue ?? 0),
+    discountAmount: Number(source.discountAmount ?? booking.discountAmount ?? invoice?.discountAmount ?? 0),
+      grandTotal: Number(source.grandTotal ?? booking.grandTotal ?? invoice?.grandTotal ?? 0),
+    paymentStatus: source.paymentStatus ?? booking.paymentStatus ?? invoice?.paymentStatus ?? 'Pending',
+    paymentMethod: source.paymentMethod ?? booking.paymentMethod ?? invoice?.paymentMethod ?? '',
+    paymentDate: source.paymentDate ?? booking.paymentDate ?? invoice?.paymentDate ?? null,
+    transactionId: source.transactionId ?? booking.transactionId ?? invoice?.transactionId ?? '',
+    paidAmount: Number(source.paidAmount ?? booking.paidAmount ?? invoice?.paidAmount ?? 0),
+    balanceAmount: Number(source.balanceAmount ?? booking.balanceAmount ?? invoice?.balanceAmount ?? 0),
+    subtotal: Number(source.subtotal ?? booking.subtotal ?? invoice?.subtotalAmount ?? 0),
+    gstAmount: Number(source.gstAmount ?? booking.gstAmount ?? invoice?.taxAmount ?? 0)
+  };
+}
+
+function getBillingDraftInput(reqBody = {}) {
+  return {
+    ...reqBody,
+    extraCharges: Array.isArray(reqBody.extraCharges) ? reqBody.extraCharges : normalizeChargeItems(reqBody.extraCharges)
+  };
+}
+
+const getBookingInvoiceDraft = asyncHandler(async (req, res) => {
+  const booking = await loadBookingWithInvoice(req.params.id);
+  const invoice = booking.invoice || await Invoice.findOne({ booking: booking._id });
+
+  res.json({
+    success: true,
+    booking,
+    invoice,
+    draft: buildInvoiceDraftSnapshot(booking, invoice)
+  });
+});
+
+const saveBookingInvoiceDraft = asyncHandler(async (req, res) => {
+  const booking = await loadBookingWithInvoice(req.params.id);
+  const settings = await loadSettings();
+  const invoice = booking.invoice || await Invoice.findOne({ booking: booking._id });
+  const billing = calculateBillingDraft({ booking, invoice: invoice || {}, settings, draft: getBillingDraftInput(req.body || {}) });
+
+  const draftSnapshot = {
+    ...buildInvoiceDraftSnapshot(booking, invoice),
+    ...getBillingDraftInput(req.body || {}),
+    extraCharges: billing.extraCharges,
+    discountType: billing.discountType,
+    discountValue: billing.discountValue,
+    discountAmount: billing.discountAmount,
+    subtotal: billing.subtotal,
+    gstAmount: billing.gstAmount,
+    grandTotal: billing.grandTotal,
+    paymentStatus: billing.paymentStatus,
+    paymentMethod: billing.paymentMethod,
+    paymentDate: billing.paymentDate,
+    transactionId: billing.transactionId,
+    paidAmount: billing.paidAmount,
+    balanceAmount: billing.balanceAmount
+  };
+
+  booking.extraCharges = billing.extraCharges;
+  booking.invoiceDraft = draftSnapshot;
+  booking.discountType = billing.discountType;
+  booking.discountValue = billing.discountValue;
+  booking.discountAmount = billing.discountAmount;
+  booking.subtotal = billing.subtotal;
+  booking.grandTotal = billing.grandTotal;
+  booking.totalFare = billing.totalFare;
+  booking.paidAmount = billing.paidAmount;
+  booking.balanceAmount = billing.balanceAmount;
+  booking.paymentMethod = billing.paymentMethod;
+  booking.paymentStatus = billing.paymentStatus;
+  booking.paymentDate = billing.paymentDate;
+  booking.transactionId = billing.transactionId;
+  booking.finalBill = {
+    ...(booking.finalBill || {}),
+    ...billing.fareBreakdown,
+    payableAfterRide: true,
+    paymentStatus: billing.paymentStatus,
+    paymentMethod: billing.paymentMethod,
+    paidAmount: billing.paidAmount,
+    balanceAmount: billing.balanceAmount,
+    paymentDate: billing.paymentDate,
+    transactionId: billing.transactionId
+  };
+
+  booking.statusHistory = Array.isArray(booking.statusHistory) ? booking.statusHistory : [];
+  booking.statusHistory.push({
+    status: booking.bookingStatus || 'Ride Completed',
+    at: new Date(),
+    note: 'Invoice draft updated'
+  });
+
+  await booking.save();
+
+  if (invoice) {
+    invoice.invoiceDraft = draftSnapshot;
+    invoice.extraCharges = billing.extraCharges;
+    invoice.discountType = billing.discountType;
+    invoice.discountValue = billing.discountValue;
+    invoice.discountAmount = billing.discountAmount;
+    invoice.subtotalAmount = billing.subtotal;
+    invoice.subtotal = billing.subtotal;
+    invoice.grandTotal = billing.grandTotal;
+    invoice.totalFare = billing.totalFare;
+    invoice.paidAmount = billing.paidAmount;
+    invoice.balanceAmount = billing.balanceAmount;
+    invoice.paymentMethod = billing.paymentMethod;
+    invoice.paymentStatus = billing.paymentStatus;
+    invoice.paymentDate = billing.paymentDate;
+    invoice.transactionId = billing.transactionId;
+    invoice.fareBreakdown = {
+      ...(invoice.fareBreakdown || {}),
+      ...billing.fareBreakdown,
+      currency: invoice.fareBreakdown?.currency || 'INR'
+    };
+    invoice.lineItems = billing.lineItems;
+    invoice.paymentSummary = billing.paymentSummary;
+    invoice.finalBill = {
+      ...(invoice.finalBill || {}),
+      ...billing.fareBreakdown,
+      payableAfterRide: true,
+      paymentStatus: billing.paymentStatus,
+      paymentMethod: billing.paymentMethod,
+      paidAmount: billing.paidAmount,
+      balanceAmount: billing.balanceAmount,
+      paymentDate: billing.paymentDate,
+      transactionId: billing.transactionId
+    };
+
+    await invoice.save();
+  }
+
+  await notifyAdmins('invoice:updated', {
+    title: 'Invoice draft updated',
+    message: `${booking.bookingId} invoice draft saved`,
+    bookingId: booking.bookingId,
+    customerId: booking.user || null,
+    invoiceId: invoice?.invoiceId || booking.invoiceId || '',
+    customerName: booking.customerName,
+    tripType: booking.tripType,
+    vehicle: booking.selectedCar,
+    paymentStatus: billing.paymentStatus,
+    totalFare: billing.totalFare
+  });
+
+  await notifyCustomer({
+    userId: booking.user || null,
+    email: booking.email,
+    phone: booking.phone,
+    socketEvent: 'invoice:updated',
+    payload: {
+      title: 'Invoice updated',
+      message: `${booking.bookingId} invoice draft was updated`,
+      bookingId: booking.bookingId,
+      invoiceId: invoice?.invoiceId || booking.invoiceId || '',
+      bookingStatus: booking.bookingStatus,
+      paymentStatus: billing.paymentStatus,
+      paymentMethod: billing.paymentMethod,
+      totalFare: billing.totalFare,
+      balanceAmount: billing.balanceAmount,
+      tripType: booking.tripType,
+      vehicle: booking.selectedCar
+    }
+  });
+
+  res.json({
+    success: true,
+    message: 'Invoice draft saved successfully',
+    booking,
+    invoice,
+    preview: {
+      lineItems: billing.lineItems,
+      subtotal: billing.subtotal,
+      discountAmount: billing.discountAmount,
+      gstAmount: billing.gstAmount,
+      grandTotal: billing.grandTotal,
+      paymentStatus: billing.paymentStatus,
+      paymentMethod: billing.paymentMethod,
+      paymentDate: billing.paymentDate,
+      paidAmount: billing.paidAmount,
+      balanceAmount: billing.balanceAmount
+    }
+  });
+});
+
 const generateBookingInvoice = asyncHandler(async (req, res) => {
   const booking = await loadBookingWithInvoice(req.params.id);
   const settings = await loadSettings();
@@ -196,6 +431,7 @@ const generateBookingInvoice = asyncHandler(async (req, res) => {
   }
 
   const billing = await buildBillingQuoteFromBooking(booking, settings);
+  const billingState = calculateBillingDraft({ booking, invoice: booking.invoice || {}, settings, draft: buildInvoiceDraftSnapshot(booking, booking.invoice) });
   const finalBill = billing.fareBreakdown;
   const existingInvoice = booking.invoice || await Invoice.findOne({ booking: booking._id });
   const invoice = existingInvoice || new Invoice({ invoiceId: booking.invoiceId || createInvoiceId(), booking: booking._id });
@@ -207,7 +443,7 @@ const generateBookingInvoice = asyncHandler(async (req, res) => {
   }
 
   const model = buildInvoiceModel({ booking, invoice, driver: booking.assignedDriver, settings });
-  syncInvoiceFromModel(booking, invoice, model, finalBill, 'Pending');
+  syncInvoiceFromModel(booking, invoice, model, finalBill, billingState.paymentStatus, billingState);
   booking.statusHistory = Array.isArray(booking.statusHistory) ? booking.statusHistory : [];
   booking.statusHistory.push({ status: 'Invoice Generated', at: new Date(), note: 'Invoice generated by admin' });
 
@@ -274,9 +510,10 @@ const resendBookingInvoice = asyncHandler(async (req, res) => {
   if (!invoice) throw new ApiError(404, 'Invoice not found');
 
   const billing = await buildBillingQuoteFromBooking(booking, settings);
+  const billingState = calculateBillingDraft({ booking, invoice, settings, draft: buildInvoiceDraftSnapshot(booking, invoice) });
   const finalBill = billing.fareBreakdown;
   const model = buildInvoiceModel({ booking, invoice, driver: booking.assignedDriver, settings });
-  syncInvoiceFromModel(booking, invoice, model, finalBill, invoice.paymentStatus || booking.paymentStatus || 'Pending');
+  syncInvoiceFromModel(booking, invoice, model, finalBill, billingState.paymentStatus || invoice.paymentStatus || booking.paymentStatus || 'Pending', billingState);
   booking.statusHistory = Array.isArray(booking.statusHistory) ? booking.statusHistory : [];
   booking.statusHistory.push({ status: booking.bookingStatus || 'Invoice Generated', at: new Date(), note: 'Invoice resent' });
 
@@ -323,10 +560,15 @@ const markBookingPaid = asyncHandler(async (req, res) => {
   const invoice = booking.invoice || await Invoice.findOne({ booking: booking._id });
   if (!invoice) throw new ApiError(400, 'Generate an invoice before marking payment');
 
-  const paymentMethod = normalizePaymentMethod(req.body.paymentMethod || booking.paymentMethod || 'Cash');
-  const paymentStatus = normalizePaymentStatus(req.body.paymentStatus, paymentMethod);
-  const amount = Math.max(0, Number(req.body.amount || invoice.totalFare || booking.totalFare || booking.estimatedFare || 0));
-  const isPartial = paymentStatus === 'Partially Paid' || amount < Number(invoice.totalFare || booking.totalFare || 0);
+  const billingState = calculateBillingDraft({ booking, invoice, settings, draft: { ...buildInvoiceDraftSnapshot(booking, invoice), ...getBillingDraftInput(req.body || {}) } });
+  const paymentMethod = billingState.paymentMethod;
+  const paymentStatus = billingState.paymentStatus === 'Partial' || billingState.paymentStatus === 'Refunded' ? billingState.paymentStatus : 'Paid';
+  const amount = Math.max(0, Number(req.body.amount || billingState.totalFare || invoice.totalFare || booking.totalFare || booking.estimatedFare || 0));
+  const isPartial = paymentStatus === 'Partial' || amount < Number(billingState.totalFare || invoice.totalFare || booking.totalFare || 0);
+  const paidAmount = isPartial ? amount : billingState.totalFare;
+  const balanceAmount = Math.max(0, Number(billingState.totalFare || invoice.totalFare || booking.totalFare || 0) - paidAmount);
+  const paymentDate = req.body.paymentDate || new Date();
+  const transactionId = String(req.body.transactionId || req.body.reference || req.body.transactionReference || '').trim() || `RCPT-${invoice.invoiceId}`;
 
   const payment = await Payment.create({
     booking: booking._id,
@@ -335,7 +577,10 @@ const markBookingPaid = asyncHandler(async (req, res) => {
     provider: 'manual',
     paymentType: paymentMethod || 'manual',
     paymentMethod,
-    amount: isPartial ? amount : Number(invoice.totalFare || amount),
+    paymentStatus: isPartial ? 'Partial' : 'Paid',
+    amount: isPartial ? amount : Number(billingState.totalFare || amount),
+    paidAmount,
+    balanceAmount,
     currency: 'inr',
     status: isPartial ? 'Partially Paid' : 'Completed',
     metadata: {
@@ -345,14 +590,20 @@ const markBookingPaid = asyncHandler(async (req, res) => {
     notes: req.body.notes || '',
     proofUrl: req.body.proofUrl || '',
     collectedBy: req.user?._id || null,
-    receiptId: `RCPT-${invoice.invoiceId}`,
-    paidAt: new Date()
+    receiptId: transactionId,
+    paymentDate,
+    transactionId,
+    paidAt: paymentDate
   });
 
   booking.paymentMethod = paymentMethod;
-  booking.paymentStatus = isPartial ? 'Partially Paid' : paymentStatus;
+  booking.paymentStatus = isPartial ? 'Partial' : 'Paid';
   booking.bookingStatus = isPartial ? 'Invoice Generated' : 'Paid';
-  booking.paidAt = new Date();
+  booking.paidAt = paymentDate;
+  booking.paymentDate = paymentDate;
+  booking.transactionId = transactionId;
+  booking.paidAmount = paidAmount;
+  booking.balanceAmount = balanceAmount;
   booking.statusHistory = Array.isArray(booking.statusHistory) ? booking.statusHistory : [];
   booking.statusHistory.push({
     status: booking.bookingStatus,
@@ -361,16 +612,31 @@ const markBookingPaid = asyncHandler(async (req, res) => {
   });
   invoice.paymentMethod = paymentMethod;
   invoice.paymentStatus = booking.paymentStatus;
-  invoice.paidAt = isPartial ? null : new Date();
-  invoice.amountPaid = payment.amount;
-  invoice.remainingAmount = Math.max(0, Number(invoice.totalFare || booking.totalFare || 0) - payment.amount);
-  invoice.transactionId = payment.receiptId;
+  invoice.paidAt = paymentDate;
+  invoice.paymentDate = paymentDate;
+  invoice.amountPaid = paidAmount;
+  invoice.paidAmount = paidAmount;
+  invoice.balanceAmount = balanceAmount;
+  invoice.remainingAmount = balanceAmount;
+  invoice.transactionId = transactionId;
+  invoice.paymentSummary = {
+    ...(invoice.paymentSummary || {}),
+    amountPaid: paidAmount,
+    balanceDue: balanceAmount,
+    paymentDate,
+    paymentMethod,
+    paymentStatus: booking.paymentStatus,
+    transactionId
+  };
   booking.finalBill = {
     ...(booking.finalBill || {}),
     paymentStatus: booking.paymentStatus,
     paymentMethod,
-    paidAmount: payment.amount,
-    paidAt: booking.paidAt
+    paidAmount,
+    balanceAmount,
+    paidAt: booking.paidAt,
+    paymentDate,
+    transactionId
   };
 
   await booking.save();
@@ -451,6 +717,8 @@ const downloadBookingInvoice = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+  getBookingInvoiceDraft,
+  saveBookingInvoiceDraft,
   generateBookingInvoice,
   regenerateBookingInvoice,
   resendBookingInvoice,

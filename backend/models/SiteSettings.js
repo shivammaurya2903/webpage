@@ -32,12 +32,22 @@ const siteSettingsSchema = new mongoose.Schema(
     pricingSettings: {
       gstPercent: { type: Number, default: 5 },
       nightChargePercent: { type: Number, default: 10 },
+      localPackagePrice: { type: Number, default: 6500 },
+      halfDayPrice: { type: Number, default: 3500 },
+      extraKmCharge: { type: Number, default: 28 },
+      extraHourCharge: { type: Number, default: 500 },
+      airportTransferMinCharge: { type: Number, default: 2500 },
+      airportTransferMaxCharge: { type: Number, default: 3500 },
+      outstationMinCharge: { type: Number, default: 8500 },
+      outstationMaxCharge: { type: Number, default: 10500 },
+      weddingVipCharge: { type: Number, default: 12000 },
       driverAllowance: { type: Number, default: 0 },
-      extraKmRate: { type: Number, default: 0 },
+      extraKmRate: { type: Number, default: 28 },
       waitingChargePerHour: { type: Number, default: 0 },
-      defaultIncludedKm: { type: Number, default: 0 },
-      baseFare: { type: Number, default: 0 },
-      pricePerKm: { type: Number, default: 0 }
+      defaultIncludedKm: { type: Number, default: 80 },
+      defaultIncludedHours: { type: Number, default: 8 },
+      baseFare: { type: Number, default: 6500 },
+      pricePerKm: { type: Number, default: 28 }
     },
     notificationSettings: {
       emailEnabled: { type: Boolean, default: true },

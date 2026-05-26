@@ -24,31 +24,51 @@ const invoiceSchema = new mongoose.Schema(
     waitingCharges: { type: Number, default: 0 },
     nightCharges: { type: Number, default: 0 },
     driverAllowance: { type: Number, default: 0 },
-    extraCharges: { type: Number, default: 0 },
+    parkingCharges: { type: Number, default: 0 },
+    statePermitCharges: { type: Number, default: 0 },
+    extraDistanceCharges: { type: Number, default: 0 },
+    miscellaneousCharges: { type: Number, default: 0 },
     businessSnapshot: { type: Object, default: {} },
     customerSnapshot: { type: Object, default: {} },
     rideSnapshot: { type: Object, default: {} },
     distance: { type: String, default: '' },
     fareBreakdown: { type: Object, default: {} },
     lineItems: { type: Array, default: [] },
+    extraCharges: {
+      type: [
+        {
+          name: { type: String, trim: true },
+          amount: { type: Number, default: 0 }
+        }
+      ],
+      default: []
+    },
+    discountType: { type: String, enum: ['flat', 'percentage', ''], default: 'flat' },
+    discountValue: { type: Number, default: 0 },
+    invoiceDraft: { type: Object, default: {} },
     paymentMethod: {
       type: String,
-      enum: ['Cash', 'UPI', 'Card', 'Online payment link', 'Bank transfer', 'Partially Paid', 'Pending', ''],
+      enum: ['Cash', 'UPI', 'Card', 'Online payment link', 'Bank transfer', ''],
       default: ''
     },
     paymentStatus: {
       type: String,
-      enum: ['Unpaid', 'Pending', 'Paid Online', 'Paid Offline', 'Partially Paid', 'Paid', ''],
+      enum: ['Pending', 'Partial', 'Paid', 'Refunded'],
       default: 'Pending'
     },
     totalFare: { type: Number, required: true },
     subtotalAmount: { type: Number, default: 0 },
     subtotal: { type: Number, default: 0 },
+    grandTotal: { type: Number, default: 0 },
     taxAmount: { type: Number, default: 0 },
     cgstAmount: { type: Number, default: 0 },
     sgstAmount: { type: Number, default: 0 },
     taxPercent: { type: Number, default: 0 },
     discountAmount: { type: Number, default: 0 },
+    paidAmount: { type: Number, default: 0 },
+    balanceAmount: { type: Number, default: 0 },
+    paymentDate: { type: Date, default: null },
+    transactionId: { type: String, default: '' },
     finalBill: { type: Object, default: {} },
     paymentSummary: { type: Object, default: {} },
     terms: { type: Array, default: [] },

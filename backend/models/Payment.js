@@ -15,12 +15,21 @@ const paymentSchema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ['Cash', 'UPI', 'Card', 'Online payment link', 'Bank transfer', 'Partially Paid', ''],
+      enum: ['Cash', 'UPI', 'Card', 'Online payment link', 'Bank transfer', ''],
       default: ''
+    },
+    paymentStatus: {
+      type: String,
+      enum: ['Pending', 'Partial', 'Paid', 'Refunded'],
+      default: 'Pending'
     },
     amount: { type: Number, required: true },
     currency: { type: String, default: 'inr' },
     status: { type: String, enum: ['Pending', 'Completed', 'Partially Paid', 'Failed', 'Refunded'], default: 'Pending' },
+    paymentDate: { type: Date, default: null },
+    transactionId: { type: String, default: '' },
+    paidAmount: { type: Number, default: 0 },
+    balanceAmount: { type: Number, default: 0 },
     metadata: { type: Object, default: {} },
     notes: { type: String, default: '' },
     proofUrl: { type: String, default: '' },

@@ -32,12 +32,29 @@ const bookingSchema = new mongoose.Schema(
     waitingCharges: { type: Number, default: 0 },
     nightCharges: { type: Number, default: 0 },
     driverAllowance: { type: Number, default: 0 },
-    extraCharges: { type: Number, default: 0 },
+    parkingCharges: { type: Number, default: 0 },
+    statePermitCharges: { type: Number, default: 0 },
+    extraDistanceCharges: { type: Number, default: 0 },
+    miscellaneousCharges: { type: Number, default: 0 },
     gstAmount: { type: Number, default: 0 },
     subtotal: { type: Number, default: 0 },
+    grandTotal: { type: Number, default: 0 },
     estimatedFare: { type: Number, required: true },
     totalFare: { type: Number, default: 0 },
     fareBreakdown: { type: Object, default: {} },
+    extraCharges: {
+      type: [
+        {
+          name: { type: String, trim: true },
+          amount: { type: Number, default: 0 }
+        }
+      ],
+      default: []
+    },
+    discountType: { type: String, enum: ['flat', 'percentage', ''], default: 'flat' },
+    discountValue: { type: Number, default: 0 },
+    discountAmount: { type: Number, default: 0 },
+    invoiceDraft: { type: Object, default: {} },
     routeGeometry: { type: Array, default: [] },
     finalBill: { type: Object, default: {} },
     invoiceId: { type: String, default: '' },
@@ -50,9 +67,13 @@ const bookingSchema = new mongoose.Schema(
     },
     paymentStatus: {
       type: String,
-      enum: ['Unpaid', 'Pending', 'Paid Online', 'Paid Offline', 'Partially Paid', 'Advance Paid', 'Fully Paid', 'Failed', 'Refunded'],
-      default: 'Unpaid'
+      enum: ['Pending', 'Partial', 'Paid', 'Refunded'],
+      default: 'Pending'
     },
+    paymentDate: { type: Date, default: null },
+    transactionId: { type: String, default: '' },
+    paidAmount: { type: Number, default: 0 },
+    balanceAmount: { type: Number, default: 0 },
     bookingStatus: {
       type: String,
       enum: ['Pending', 'Approved', 'Rejected', 'Driver Assigned', 'Ride Started', 'Ride Completed', 'Invoice Generated', 'Paid', 'Cancelled', 'Accepted', 'Payment Pending', 'Fully Paid'],

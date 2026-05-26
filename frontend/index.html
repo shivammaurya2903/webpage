@@ -180,7 +180,7 @@
         <h3 id="authTitle" class="auth-modal__title">Login</h3>
       </div>
 
-      <form id="loginForm" class="auth-form" aria-label="Login form">
+      <form id="loginForm" class="auth-form" aria-label="Login form" novalidate>
         <div class="field"><input name="email" type="email" placeholder="Email" required /></div>
         <div class="field"><input name="password" type="password" placeholder="Password" required /></div>
 
@@ -190,7 +190,7 @@
         </div>
       </form>
 
-      <form id="registerForm" class="auth-form is-hidden" aria-label="Register form">
+      <form id="registerForm" class="auth-form is-hidden" aria-label="Register form" novalidate>
         <div class="field"><input name="name" type="text" placeholder="Full name" required /></div>
         <div class="field"><input name="email" type="email" placeholder="Email" required /></div>
         <div class="field"><input name="phone" type="tel" placeholder="Phone (+919xxxxxxxxx)" required /></div>
@@ -273,27 +273,39 @@
               <tbody>
                 <tr>
                   <td>Local Package</td>
-                  <td>₹6500</td>
+                  <td>₹6,500</td>
                 </tr>
                 <tr>
                   <td>Half Day Package</td>
-                  <td>₹3200</td>
+                  <td>₹3,500</td>
                 </tr>
                 <tr>
                   <td>Extra KM Charges</td>
-                  <td>₹18/KM</td>
+                  <td>₹28/KM</td>
                 </tr>
                 <tr>
-                  <td>Airport Pickup</td>
-                  <td>₹2500</td>
+                  <td>Extra Hour Charges</td>
+                  <td>₹500 / Hour</td>
+                </tr>
+                <tr>
+                  <td>Airport Pickup / Drop</td>
+                  <td>₹2,500 - ₹3,500</td>
                 </tr>
                 <tr>
                   <td>Outstation Package</td>
-                  <td>₹9500</td>
+                  <td>₹8,500 - ₹10,500</td>
                 </tr>
                 <tr>
-                  <td>Wedding Events</td>
-                  <td>₹12000</td>
+                  <td>Driver Allowance</td>
+                  <td>Included</td>
+                </tr>
+                <tr>
+                  <td>Wedding / VIP Events</td>
+                  <td>₹12,000 onwards</td>
+                </tr>
+                <tr>
+                  <td>Night Charges</td>
+                  <td>Extra Applicable</td>
                 </tr>
               </tbody>
             </table>
@@ -326,19 +338,23 @@
               <tbody>
                 <tr>
                   <td>Lucknow → Ayodhya</td>
-                  <td>₹9500</td>
+                  <td>₹9,500</td>
                 </tr>
                 <tr>
                   <td>Lucknow → Prayagraj</td>
-                  <td>₹12500</td>
+                  <td>₹12,500</td>
                 </tr>
                 <tr>
                   <td>Lucknow → Varanasi</td>
-                  <td>₹16500</td>
+                  <td>₹16,500</td>
+                </tr>
+                <tr>
+                  <td>Lucknow → Gorakhpur</td>
+                  <td>₹13,500</td>
                 </tr>
                 <tr>
                   <td>Lucknow → Delhi</td>
-                  <td>₹28000</td>
+                  <td>₹28,000 - ₹32,000</td>
                 </tr>
               </tbody>
             </table>
@@ -541,7 +557,10 @@
                   <option value="one-way">One-way</option>
                   <option value="round-trip">Round trip</option>
                   <option value="local-package">Local package</option>
+                  <option value="half-day-package">Half day package</option>
                   <option value="airport-transfer">Airport transfer</option>
+                  <option value="outstation-package">Outstation package</option>
+                  <option value="wedding-vip-event">Wedding / VIP events</option>
                   <option value="multi-day-tour">Multi-day tour</option>
                 </select>
               </div>

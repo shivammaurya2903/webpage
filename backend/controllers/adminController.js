@@ -15,6 +15,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { attachAdminToken } = require('../utils/generateToken');
 const { sanitizeImageUrl } = require('../utils/imageUrl');
+const { normalizePaymentMethod: normalizeBillingPaymentMethod, normalizePaymentStatus: normalizeBillingPaymentStatus } = require('../utils/billingWorkflow');
 const { notifyAdmins, notifyBookingStatusChange } = require('../services/notificationService');
 const { sendEmail } = require('../services/emailService');
 const { sendWhatsApp } = require('../services/whatsappService');
@@ -94,12 +95,22 @@ function mapSettingsPayload(body) {
     pricingSettings: {
       gstPercent: toNumber(body.gstPercent, 5),
       nightChargePercent: toNumber(body.nightChargePercent, 10),
+      localPackagePrice: toNumber(body.localPackagePrice ?? body.defaultBaseFare, 6500),
+      halfDayPrice: toNumber(body.halfDayPrice, 3500),
+      extraKmCharge: toNumber(body.extraKmCharge ?? body.extraKmRate, 28),
+      extraHourCharge: toNumber(body.extraHourCharge, 500),
+      airportTransferMinCharge: toNumber(body.airportTransferMinCharge ?? body.airportTransferCharge, 2500),
+      airportTransferMaxCharge: toNumber(body.airportTransferMaxCharge, 3500),
+      outstationMinCharge: toNumber(body.outstationMinCharge ?? body.outstationCharge, 8500),
+      outstationMaxCharge: toNumber(body.outstationMaxCharge, 10500),
+      weddingVipCharge: toNumber(body.weddingVipCharge, 12000),
       driverAllowance: toNumber(body.driverAllowance, 0),
-      extraKmRate: toNumber(body.extraKmRate, 0),
+      extraKmRate: toNumber(body.extraKmRate ?? body.extraKmCharge, 28),
       waitingChargePerHour: toNumber(body.waitingChargePerHour, 0),
-      defaultIncludedKm: toNumber(body.defaultIncludedKm, 0),
-      baseFare: toNumber(body.defaultBaseFare, 0),
-      pricePerKm: toNumber(body.defaultPricePerKm, 0)
+      defaultIncludedKm: toNumber(body.defaultIncludedKm, 80),
+      defaultIncludedHours: toNumber(body.defaultIncludedHours, 8),
+      baseFare: toNumber(body.defaultBaseFare ?? body.localPackagePrice, 6500),
+      pricePerKm: toNumber(body.defaultPricePerKm ?? body.extraKmCharge, 28)
     },
     notificationSettings: {
       emailEnabled: toBoolean(body.emailEnabled, true),
@@ -230,29 +241,77 @@ const getDashboard = asyncHandler(async (req, res) => {
 
 const listBookings = asyncHandler(async (req, res) => {
   const page = Math.max(1, Number(req.query.page || 1));
-  const limit = Math.min(50, Math.max(1, Number(req.query.limit || 10)));
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit || 10)));
   const skip = (page - 1) * limit;
+  const exportMode = toBoolean(req.query.export, false);
   const search = String(req.query.search || '').trim();
   const status = String(req.query.status || '').trim();
   const paymentStatus = String(req.query.paymentStatus || '').trim();
+  const vehicle = String(req.query.vehicle || '').trim();
+  const fromDate = String(req.query.fromDate || '').trim();
+  const toDate = String(req.query.toDate || '').trim();
   const sort = String(req.query.sort || '-createdAt');
 
   const filters = [];
   if (status) filters.push({ bookingStatus: status });
   if (paymentStatus) filters.push({ paymentStatus });
+  if (vehicle) {
+    const escapedVehicle = escapeRegExp(vehicle);
+    filters.push({
+      $or: [
+        { selectedCar: { $regex: escapedVehicle, $options: 'i' } },
+        { vehicleId: { $regex: escapedVehicle, $options: 'i' } }
+      ]
+    });
+  }
+  if (fromDate || toDate) {
+    const pickupDateRange = {};
+    if (fromDate) {
+      const from = new Date(fromDate);
+      if (!Number.isNaN(from.getTime())) pickupDateRange.$gte = from;
+    }
+    if (toDate) {
+      const to = new Date(toDate);
+      if (!Number.isNaN(to.getTime())) {
+        to.setHours(23, 59, 59, 999);
+        pickupDateRange.$lte = to;
+      }
+    }
+    if (Object.keys(pickupDateRange).length) {
+      filters.push({ pickupDate: pickupDateRange });
+    }
+  }
   if (search) {
     const escaped = escapeRegExp(search);
+    const [driverMatches, invoiceMatches] = await Promise.all([
+      Driver.find({ driverName: { $regex: escaped, $options: 'i' } }).select('_id').lean(),
+      Invoice.find({ invoiceId: { $regex: escaped, $options: 'i' } }).select('_id').lean()
+    ]);
+    const driverIds = driverMatches.map((driver) => driver._id);
+    const invoiceIds = invoiceMatches.map((invoice) => invoice._id);
     filters.push({
       $or: [
         { customerName: { $regex: escaped, $options: 'i' } },
         { bookingId: { $regex: escaped, $options: 'i' } },
         { phone: { $regex: escaped, $options: 'i' } },
-        { email: { $regex: escaped, $options: 'i' } }
+        { email: { $regex: escaped, $options: 'i' } },
+        { pickupLocation: { $regex: escaped, $options: 'i' } },
+        { dropLocation: { $regex: escaped, $options: 'i' } },
+        { selectedCar: { $regex: escaped, $options: 'i' } },
+        { vehicleId: { $regex: escaped, $options: 'i' } },
+        { invoiceId: { $regex: escaped, $options: 'i' } },
+        ...(driverIds.length ? [{ assignedDriver: { $in: driverIds } }] : []),
+        ...(invoiceIds.length ? [{ invoice: { $in: invoiceIds } }] : [])
       ]
     });
   }
 
   const query = filters.length ? { $and: filters } : {};
+
+  if (exportMode) {
+    const bookings = await Booking.find(query).sort(sort).populate('assignedDriver').populate('invoice').lean();
+    return res.json({ success: true, page: 1, limit: bookings.length || 0, total: bookings.length, pages: 1, bookings, export: true });
+  }
 
   const [bookings, total] = await Promise.all([
     Booking.find(query).sort(sort).skip(skip).limit(limit).populate('assignedDriver').populate('invoice').lean(),
@@ -278,13 +337,13 @@ const setBookingStatus = asyncHandler(async (req, res) => {
 
   if (normalizedStatus === 'Approved') {
     booking.approvedAt = booking.approvedAt || new Date();
-    if (booking.paymentStatus === 'Unpaid') booking.paymentStatus = 'Pending';
+    booking.paymentStatus = normalizeBillingPaymentStatus(booking.paymentStatus || 'Pending');
   }
 
   if (normalizedStatus === 'Rejected' || normalizedStatus === 'Cancelled') {
     booking.rejectedAt = new Date();
     booking.rejectionReason = rejectionReason || booking.rejectionReason || 'Rejected by admin';
-    booking.paymentStatus = 'Unpaid';
+    booking.paymentStatus = normalizeBillingPaymentStatus(booking.paymentStatus || 'Pending');
   }
 
   if (normalizedStatus === 'Ride Started') booking.rideStartedAt = new Date();
@@ -292,13 +351,17 @@ const setBookingStatus = asyncHandler(async (req, res) => {
 
   if (normalizedStatus === 'Invoice Generated') {
     booking.invoiceGenerated = true;
-    booking.paymentStatus = 'Pending';
+    booking.paymentStatus = normalizeBillingPaymentStatus(booking.paymentStatus || 'Pending');
   }
 
   if (normalizedStatus === 'Paid') {
-    booking.paymentStatus = req.body.paymentStatus || booking.paymentStatus || 'Paid Offline';
-    booking.paymentMethod = req.body.paymentMethod || booking.paymentMethod || 'Cash';
-    booking.paidAt = new Date();
+    booking.paymentStatus = normalizeBillingPaymentStatus(req.body.paymentStatus || 'Paid');
+    booking.paymentMethod = normalizeBillingPaymentMethod(req.body.paymentMethod || booking.paymentMethod || 'Cash');
+    booking.paymentDate = req.body.paymentDate || new Date();
+    booking.paidAt = booking.paymentDate;
+    booking.transactionId = String(req.body.transactionId || req.body.reference || booking.transactionId || '').trim();
+    booking.paidAmount = Math.max(0, Number(req.body.paidAmount || booking.totalFare || booking.estimatedFare || 0));
+    booking.balanceAmount = Math.max(0, Number(req.body.balanceAmount || 0));
   }
 
   booking.statusHistory = Array.isArray(booking.statusHistory) ? booking.statusHistory : [];
@@ -366,6 +429,8 @@ const deleteBooking = asyncHandler(async (req, res) => {
   if (booking.invoice) {
     await Invoice.deleteOne({ _id: booking.invoice }).catch(() => undefined);
   }
+
+  await Payment.deleteMany({ booking: booking._id }).catch(() => undefined);
 
   await booking.deleteOne();
   res.json({ success: true, message: 'Booking deleted successfully' });
@@ -638,6 +703,30 @@ const refundPayment = asyncHandler(async (req, res) => {
   if (payment.booking) {
     payment.booking.paymentStatus = 'Refunded';
     payment.booking.bookingStatus = 'Cancelled';
+    payment.booking.paymentDate = new Date();
+    payment.booking.balanceAmount = Number(payment.booking.totalFare || payment.booking.estimatedFare || payment.amount || 0);
+    if (payment.booking.invoice) {
+      const linkedInvoice = await Invoice.findById(payment.booking.invoice);
+      if (linkedInvoice) {
+        linkedInvoice.paymentStatus = 'Refunded';
+        linkedInvoice.balanceAmount = Number(linkedInvoice.totalFare || payment.amount || 0);
+        linkedInvoice.paidAmount = 0;
+        linkedInvoice.paymentDate = new Date();
+        await linkedInvoice.save();
+      }
+    }
+    payment.booking.paymentDate = new Date();
+    payment.booking.balanceAmount = Number(payment.booking.totalFare || payment.booking.estimatedFare || payment.amount || 0);
+    if (payment.booking.invoice) {
+      const linkedInvoice = await Invoice.findById(payment.booking.invoice);
+      if (linkedInvoice) {
+        linkedInvoice.paymentStatus = 'Refunded';
+        linkedInvoice.balanceAmount = Number(linkedInvoice.totalFare || payment.amount || 0);
+        linkedInvoice.paidAmount = 0;
+        linkedInvoice.paymentDate = new Date();
+        await linkedInvoice.save();
+      }
+    }
     await payment.booking.save();
   }
 

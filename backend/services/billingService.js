@@ -34,9 +34,12 @@ function trimText(value) {
 function normalizeTripType(tripType = '') {
   const value = trimText(tripType).toLowerCase();
   if (value.includes('round')) return 'round-trip';
+  if (value.includes('half')) return 'half-day-package';
   if (value.includes('local')) return 'local-package';
   if (value.includes('airport')) return 'airport-transfer';
+  if (value.includes('outstation')) return 'outstation-package';
   if (value.includes('multi')) return 'multi-day-tour';
+  if (value.includes('wedding') || value.includes('vip')) return 'wedding-vip-event';
   return 'one-way';
 }
 
@@ -65,6 +68,27 @@ function normalizeCoordinates(input) {
   return null;
 }
 
+function buildLocationLabel(properties = {}, fallbackLabel = '') {
+  const parts = [
+    properties.label,
+    properties.name,
+    properties.locality,
+    properties.district,
+    properties.county,
+    properties.region,
+    properties.state,
+    properties.country
+  ]
+    .map((part) => trimText(part))
+    .filter(Boolean);
+
+  if (parts.length) {
+    return Array.from(new Set(parts)).join(', ');
+  }
+
+  return trimText(fallbackLabel);
+}
+
 function estimateDurationMinutes(distanceInKm) {
   const kilometers = Math.max(0, toNumber(distanceInKm, 0));
   if (kilometers <= 0) return 0;
@@ -89,8 +113,11 @@ function haversineDistanceKm(fromCoordinates, toCoordinates) {
 
 function formatGeoPoint(feature, fallbackLabel = '') {
   if (!feature) return null;
+  const label = buildLocationLabel(feature.properties || {}, fallbackLabel);
   return {
-    label: feature.properties?.label || feature.properties?.name || fallbackLabel,
+    label,
+    address: label,
+    displayName: label,
     coordinates: normalizeCoordinates(feature.geometry?.coordinates || feature.coordinates || null),
     raw: feature
   };
@@ -169,12 +196,19 @@ async function resolveVehiclePricing({ vehicle, vehicleId, selectedCar, settings
 
   return {
     car: resolvedVehicle,
-    baseFare: clampMinimum(resolvedVehicle?.baseFare, clampMinimum(pricingSettings.baseFare, clampMinimum(resolvedVehicle?.pricePerDay, 0))),
-    pricePerKm: clampMinimum(resolvedVehicle?.pricePerKm, clampMinimum(pricingSettings.pricePerKm, 0)),
-    extraKmRate: clampMinimum(resolvedVehicle?.extraKmRate, clampMinimum(pricingSettings.extraKmRate, clampMinimum(resolvedVehicle?.pricePerKm, 0))),
-    includedKm: clampMinimum(resolvedVehicle?.includedKm, clampMinimum(pricingSettings.defaultIncludedKm, 0)),
+    localPackagePrice: clampMinimum(pricingSettings.localPackagePrice, clampMinimum(pricingSettings.baseFare, clampMinimum(resolvedVehicle?.baseFare, clampMinimum(resolvedVehicle?.pricePerDay, 6500)))),
+    halfDayPrice: clampMinimum(pricingSettings.halfDayPrice, 3500),
+    airportTransferMinCharge: clampMinimum(pricingSettings.airportTransferMinCharge, 2500),
+    airportTransferMaxCharge: clampMinimum(pricingSettings.airportTransferMaxCharge, 3500),
+    outstationMinCharge: clampMinimum(pricingSettings.outstationMinCharge, 8500),
+    outstationMaxCharge: clampMinimum(pricingSettings.outstationMaxCharge, 10500),
+    weddingVipCharge: clampMinimum(pricingSettings.weddingVipCharge, 12000),
+    baseFare: clampMinimum(resolvedVehicle?.baseFare, clampMinimum(pricingSettings.baseFare, clampMinimum(resolvedVehicle?.pricePerDay, 6500))),
+    pricePerKm: clampMinimum(resolvedVehicle?.pricePerKm, clampMinimum(pricingSettings.pricePerKm, clampMinimum(pricingSettings.extraKmRate, 28))),
+    extraKmRate: clampMinimum(resolvedVehicle?.extraKmRate, clampMinimum(pricingSettings.extraKmCharge, clampMinimum(pricingSettings.extraKmRate, clampMinimum(resolvedVehicle?.pricePerKm, 28)))),
+    includedKm: clampMinimum(resolvedVehicle?.includedKm, clampMinimum(pricingSettings.defaultIncludedKm, 80)),
     includedHours: clampMinimum(resolvedVehicle?.includedHours, clampMinimum(pricingSettings.defaultIncludedHours, 8)),
-    extraHourRate: clampMinimum(resolvedVehicle?.extraHourRate, clampMinimum(pricingSettings.extraHourRate, 0)),
+    extraHourRate: clampMinimum(resolvedVehicle?.extraHourRate, clampMinimum(pricingSettings.extraHourCharge, 500)),
     nightChargePercent: clampMinimum(resolvedVehicle?.nightChargePercent, clampMinimum(pricingSettings.nightChargePercent, 10)),
     driverAllowance: clampMinimum(resolvedVehicle?.driverAllowance, clampMinimum(pricingSettings.driverAllowance, 0)),
     waitingChargePerHour: clampMinimum(pricingSettings.waitingChargePerHour, 0),
@@ -190,6 +224,117 @@ async function resolveVehiclePricing({ vehicle, vehicleId, selectedCar, settings
     nightSurchargePercent: clampMinimum(pricingSettings.nightChargePercent, 10),
     perDayIncludedKm: clampMinimum(pricingSettings.defaultIncludedKm, 80),
     perDayIncludedHours: clampMinimum(pricingSettings.defaultIncludedHours, 8)
+  };
+}
+
+function resolvePackageProfile({ tripType, tripPackage, routeEstimate, pricing }) {
+  const packageName = trimText(tripPackage?.packageName || '').toLowerCase();
+  const activeTripType = normalizeTripType(tripType || tripPackage?.packageName || 'one-way');
+  const routePrice = routeEstimate?.raw?.price ? roundCurrency(toNumber(routeEstimate.raw.price, 0)) : 0;
+  const roundTripMultiplier = activeTripType === 'round-trip' ? 2 : 1;
+  const flatRouteFare = routePrice > 0 ? roundCurrency(routePrice * roundTripMultiplier) : 0;
+
+  if (flatRouteFare > 0 && ['one-way', 'round-trip'].includes(activeTripType)) {
+    return {
+      activeTripType,
+      packageLabel: 'Route Fare',
+      packageBaseFare: flatRouteFare,
+      includedKm: 0,
+      includedHours: 0,
+      extraKmRate: pricing.extraKmRate,
+      extraHourRate: pricing.extraHourRate,
+      billableDistance: 0,
+      distanceFare: 0,
+      extraHourCharge: 0
+    };
+  }
+
+  if (activeTripType === 'half-day-package' || packageName.includes('half')) {
+    return {
+      activeTripType: 'half-day-package',
+      packageLabel: 'Half Day Package',
+      packageBaseFare: roundCurrency(tripPackage?.price || pricing.halfDayPrice),
+      includedKm: 40,
+      includedHours: 4,
+      extraKmRate: pricing.extraKmRate,
+      extraHourRate: pricing.extraHourRate,
+      billableDistance: 0,
+      distanceFare: 0,
+      extraHourCharge: 0
+    };
+  }
+
+  if (activeTripType === 'local-package' || packageName.includes('local')) {
+    return {
+      activeTripType: 'local-package',
+      packageLabel: 'Local Package',
+      packageBaseFare: roundCurrency(tripPackage?.price || pricing.localPackagePrice),
+      includedKm: 80,
+      includedHours: 8,
+      extraKmRate: pricing.extraKmRate,
+      extraHourRate: pricing.extraHourRate,
+      billableDistance: 0,
+      distanceFare: 0,
+      extraHourCharge: 0
+    };
+  }
+
+  if (activeTripType === 'airport-transfer' || packageName.includes('airport')) {
+    return {
+      activeTripType: 'airport-transfer',
+      packageLabel: 'Airport Pickup / Drop',
+      packageBaseFare: roundCurrency(tripPackage?.price || pricing.airportTransferMinCharge),
+      includedKm: 0,
+      includedHours: 0,
+      extraKmRate: pricing.extraKmRate,
+      extraHourRate: pricing.extraHourRate,
+      billableDistance: 0,
+      distanceFare: 0,
+      extraHourCharge: 0
+    };
+  }
+
+  if (activeTripType === 'wedding-vip-event' || packageName.includes('wedding') || packageName.includes('vip')) {
+    return {
+      activeTripType: 'wedding-vip-event',
+      packageLabel: 'Wedding / VIP Events',
+      packageBaseFare: roundCurrency(tripPackage?.price || pricing.weddingVipCharge),
+      includedKm: 0,
+      includedHours: 0,
+      extraKmRate: pricing.extraKmRate,
+      extraHourRate: pricing.extraHourRate,
+      billableDistance: 0,
+      distanceFare: 0,
+      extraHourCharge: 0
+    };
+  }
+
+  if (activeTripType === 'outstation-package' || activeTripType === 'multi-day-tour' || packageName.includes('outstation')) {
+    return {
+      activeTripType: 'outstation-package',
+      packageLabel: 'Outstation Package',
+      packageBaseFare: roundCurrency(tripPackage?.price || pricing.outstationMinCharge),
+      includedKm: 300,
+      includedHours: 24,
+      extraKmRate: pricing.extraKmRate,
+      extraHourRate: pricing.extraHourRate,
+      billableDistance: 0,
+      distanceFare: 0,
+      extraHourCharge: 0
+    };
+  }
+
+  return {
+    activeTripType,
+    packageLabel: 'Base Fare',
+    packageBaseFare: roundCurrency(tripPackage?.price || pricing.baseFare),
+    includedKm: pricing.includedKm,
+    includedHours: pricing.includedHours,
+    extraKmRate: pricing.extraKmRate,
+    extraHourRate: pricing.extraHourRate,
+    billableDistance: 0,
+    distanceFare: 0,
+    extraHourCharge: 0
   };
 }
 
@@ -330,7 +475,7 @@ async function resolveRouteEstimate({ pickup, drop }) {
   };
 }
 
-function calculateDistanceFare({ tripType, distanceInKm, durationMinutes, pricePerKm, extraKmRate, includedKm, includedHours, tripPackage, roundTripMultiplier = 1 }) {
+function calculateDistanceFare({ tripType, distanceInKm, durationMinutes, pricePerKm, extraKmRate, extraHourRate, includedKm, includedHours, tripPackage, roundTripMultiplier = 1 }) {
   const activeTripType = normalizeTripType(tripType || tripPackage?.packageName || 'one-way');
   const tripDistance = Math.max(0, toNumber(distanceInKm, 0) * Math.max(1, toNumber(roundTripMultiplier, 1)));
   const tripDuration = Math.max(0, toNumber(durationMinutes, 0) * Math.max(1, toNumber(roundTripMultiplier, 1)));
@@ -339,9 +484,9 @@ function calculateDistanceFare({ tripType, distanceInKm, durationMinutes, priceP
   const packageBaseFare = clampMinimum(tripPackage?.price, 0);
   const packageIncludedKm = clampMinimum(tripPackage?.includedKm, includedKm);
   const packageIncludedHours = clampMinimum(tripPackage?.includedHours, includedHours);
-  const packageExtraHourRate = clampMinimum(tripPackage?.extraHourRate, 0);
+  const packageExtraHourRate = clampMinimum(tripPackage?.extraHourRate, clampMinimum(extraHourRate, 0));
 
-  if (activeTripType === 'local-package') {
+  if (activeTripType === 'local-package' || activeTripType === 'half-day-package') {
     const billableKm = Math.max(0, tripDistance - packageIncludedKm);
     const billableHours = Math.max(0, tripDuration / 60 - packageIncludedHours);
     const distanceFare = roundCurrency(billableKm * rateForExtraKm);
@@ -355,6 +500,22 @@ function calculateDistanceFare({ tripType, distanceInKm, durationMinutes, priceP
       includedHours: packageIncludedHours,
       distanceFare,
       extraHourCharge,
+      packageBaseFare
+    };
+  }
+
+  if (activeTripType === 'airport-transfer' || activeTripType === 'wedding-vip-event' || activeTripType === 'outstation-package') {
+    const billableKm = Math.max(0, tripDistance - packageIncludedKm);
+    const distanceFare = roundCurrency(billableKm * rateForExtraKm);
+
+    return {
+      tripType: activeTripType,
+      tripDistance: Number(tripDistance.toFixed(2)),
+      billableDistance: Number(billableKm.toFixed(2)),
+      includedKm: packageIncludedKm,
+      includedHours: packageIncludedHours,
+      distanceFare,
+      extraHourCharge: 0,
       packageBaseFare
     };
   }
@@ -413,10 +574,12 @@ function calculateRoundTripFare(breakdown) {
 
 function buildBillingLineItems(breakdown = {}) {
   const rows = [];
+  const packageLabel = breakdown.packageLabel || (breakdown.tripType === 'local-package' ? 'Local Package' : breakdown.tripType === 'half-day-package' ? 'Half Day Package' : breakdown.tripType === 'airport-transfer' ? 'Airport Pickup / Drop' : breakdown.tripType === 'outstation-package' ? 'Outstation Package' : breakdown.tripType === 'wedding-vip-event' ? 'Wedding / VIP Events' : 'Base Fare');
+  const distanceLabel = breakdown.tripType === 'local-package' || breakdown.tripType === 'half-day-package' ? 'Extra KM Charges' : breakdown.tripType === 'airport-transfer' ? 'Airport Charges' : breakdown.tripType === 'outstation-package' ? 'Extra KM Charges' : breakdown.tripType === 'wedding-vip-event' ? 'Wedding / VIP Charges' : 'Distance Fare';
 
   if (breakdown.packageBaseFare > 0) {
     rows.push({
-      description: 'Package / Base Fare',
+      description: packageLabel,
       quantity: 1,
       unitPrice: breakdown.packageBaseFare,
       tax: 0,
@@ -433,7 +596,7 @@ function buildBillingLineItems(breakdown = {}) {
   }
 
   rows.push({
-    description: breakdown.tripType === 'local-package' ? 'Extra Distance Charge' : 'Distance Fare',
+    description: distanceLabel,
     quantity: Number(breakdown.billableDistance || breakdown.tripDistance || 0) > 0 ? 1 : 0,
     unitPrice: breakdown.billableDistance || breakdown.tripDistance || 0,
     tax: 0,
@@ -611,26 +774,30 @@ async function calculateFareQuote({
   const additionalChargeBundle = normalizeAdditionalCharges(extraCharges);
   const tripDistance = Math.max(0, toNumber(routeEstimate.distanceInKm, 0) * roundTripMultiplier);
   const durationMinutes = Math.max(0, toNumber(routeEstimate.estimatedDuration, 0) * roundTripMultiplier);
-  const localIncludedKm = activeTripType === 'local-package' ? Math.max(pricing.perDayIncludedKm, toNumber(tripPackage?.includedKm, 0) || 80) : pricing.includedKm;
-  const localIncludedHours = activeTripType === 'local-package' ? Math.max(pricing.perDayIncludedHours, toNumber(tripPackage?.includedHours, 0) || 8) : pricing.includedHours;
+  const packageProfile = resolvePackageProfile({ tripType: activeTripType, tripPackage, routeEstimate, pricing });
+  const localIncludedKm = packageProfile.includedKm || pricing.perDayIncludedKm;
+  const localIncludedHours = packageProfile.includedHours || pricing.perDayIncludedHours;
   const distanceQuote = calculateDistanceFare({
-    tripType: activeTripType,
+    tripType: packageProfile.activeTripType,
     distanceInKm: tripDistance,
     durationMinutes,
-    pricePerKm: pricing.pricePerKm,
-    extraKmRate: pricing.extraKmRate,
+    pricePerKm: packageProfile.extraKmRate || pricing.pricePerKm,
+    extraKmRate: packageProfile.extraKmRate || pricing.extraKmRate,
+    extraHourRate: packageProfile.extraHourRate || pricing.extraHourRate,
     includedKm: localIncludedKm,
     includedHours: localIncludedHours,
     tripPackage,
     roundTripMultiplier
   });
 
-  const distanceFare = roundCurrency(distanceQuote.distanceFare);
-  const packageBaseFare = roundCurrency(distanceQuote.packageBaseFare);
-  const baseFare = activeTripType === 'local-package' || activeTripType === 'airport-transfer' ? packageBaseFare || pricing.baseFare : pricing.baseFare;
+  const distanceFare = routeSource === 'route-table' || ['airport-transfer', 'wedding-vip-event'].includes(packageProfile.activeTripType)
+    ? 0
+    : roundCurrency(distanceQuote.distanceFare || packageProfile.distanceFare || 0);
+  const packageBaseFare = roundCurrency(packageProfile.packageBaseFare || distanceQuote.packageBaseFare || pricing.baseFare);
+  const baseFare = packageBaseFare || pricing.baseFare;
   const tripDaysCount = Math.max(1, toNumber(tripDays, 0) || (activeTripType === 'multi-day-tour' ? 2 : activeTripType === 'round-trip' ? 2 : 1));
-  const isLongDistance = activeTripType !== 'local-package' && activeTripType !== 'airport-transfer';
-  const driverAllowance = isLongDistance ? roundCurrency(pricing.driverAllowance * (activeTripType === 'multi-day-tour' ? tripDaysCount : activeTripType === 'round-trip' ? 2 : 1)) : 0;
+  const isLongDistance = !['local-package', 'half-day-package', 'airport-transfer', 'wedding-vip-event'].includes(packageProfile.activeTripType);
+  const driverAllowance = isLongDistance ? roundCurrency(pricing.driverAllowance * (packageProfile.activeTripType === 'outstation-package' ? tripDaysCount : packageProfile.activeTripType === 'round-trip' ? 2 : 1)) : 0;
   const tollChargesAmount = calculateTollCharges({ tollCharges, adminAdjustment: additionalChargeBundle.breakdown.manualAdjustment, routeTollCharges: pricing.tollCharges });
   const waitingChargesAmount = calculateWaitingCharges({
     waitingMinutes,
@@ -654,7 +821,8 @@ async function calculateFareQuote({
   const cgstAmount = roundCurrency(gstAmount / 2);
   const sgstAmount = roundCurrency(gstAmount - cgstAmount);
   const lineItems = buildBillingLineItems({
-    tripType: activeTripType,
+    tripType: packageProfile.activeTripType,
+    packageLabel: packageProfile.packageLabel,
     packageBaseFare,
     baseFare,
     tripDistance,
@@ -673,7 +841,8 @@ async function calculateFareQuote({
   });
 
   const fareBreakdown = {
-    tripType: activeTripType,
+    tripType: packageProfile.activeTripType,
+    packageLabel: packageProfile.packageLabel,
     source: routeSource,
     baseFare,
     packageBaseFare,

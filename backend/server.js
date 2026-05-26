@@ -11,6 +11,12 @@ const cookieParser = require('cookie-parser');
 const morgan = require('morgan');
 require('dotenv').config();
 
+const orsApiKey = process.env.ORS_API_KEY || process.env.OPENROUTESERVICE_API_KEY || '';
+if (process.env.NODE_ENV !== 'production') {
+  // eslint-disable-next-line no-console
+  console.log(`[config] OpenRouteService API key ${orsApiKey ? 'loaded' : 'missing'}`);
+}
+
 const { connectDB } = require('./config/db');
 const { initSocket } = require('./config/socket');
 const { notFound, errorHandler } = require('./middleware/errorHandlers');

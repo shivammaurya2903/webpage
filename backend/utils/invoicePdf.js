@@ -211,7 +211,7 @@ function buildInvoiceModel({ booking, invoice, driver, settings }) {
   const sgstAmount = Number(invoice.sgstAmount || fare.sgstAmount || Math.max(0, taxAmount - cgstAmount));
   const totalAmount = Number(invoice.totalFare || booking.totalFare || fare.totalAmount || booking.finalBill?.totalAmount || Math.max(0, subtotal + taxAmount));
   const paymentStatus = invoice.paymentStatus || booking.paymentStatus || 'Pending';
-  const amountPaid = Number(invoice.amountPaid || booking.finalBill?.paidAmount || (['Paid', 'Paid Offline', 'Paid Online', 'Fully Paid'].includes(paymentStatus) ? totalAmount : 0));
+  const amountPaid = Number(invoice.amountPaid || booking.finalBill?.paidAmount || (paymentStatus === 'Paid' ? totalAmount : 0));
   const balanceDue = Math.max(0, totalAmount - amountPaid);
   const lineItems = buildFinancialRows({
     fare: {

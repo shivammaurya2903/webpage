@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const Car = require('../models/Car');
@@ -31,7 +32,11 @@ const calculateFare = asyncHandler(async (req, res) => {
   }
 
   const [vehicle, settings] = await Promise.all([
-    vehicleId ? Car.findById(vehicleId).lean() : selectedCar ? Car.findOne({ carName: new RegExp(`^${String(selectedCar).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }).lean() : null,
+    vehicleId && mongoose.isValidObjectId(vehicleId)
+      ? Car.findById(vehicleId).lean()
+      : selectedCar
+        ? Car.findOne({ carName: new RegExp(`^${String(selectedCar).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }).lean()
+        : null,
     SiteSettings.findOne({}).lean()
   ]);
 

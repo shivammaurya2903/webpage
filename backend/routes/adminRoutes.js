@@ -28,6 +28,8 @@ router.patch(
 	adminController.setBookingStatus
 );
 router.patch('/bookings/:id/assign-driver', [body('driverId').notEmpty().withMessage('driverId is required')], validateRequest, adminController.assignDriverToBooking);
+router.get('/bookings/:id/invoice-draft', invoiceController.getBookingInvoiceDraft);
+router.patch('/bookings/:id/invoice-draft', invoiceController.saveBookingInvoiceDraft);
 router.post('/bookings/:id/generate-invoice', invoiceController.generateBookingInvoice);
 router.post('/bookings/:id/regenerate-invoice', invoiceController.regenerateBookingInvoice);
 router.post('/bookings/:id/send-invoice', invoiceController.resendBookingInvoice);

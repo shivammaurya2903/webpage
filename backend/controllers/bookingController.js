@@ -11,7 +11,9 @@ const ApiError = require('../utils/ApiError');
 const { createBookingId } = require('../utils/bookingId');
 const { createInvoiceId } = require('../utils/invoiceId');
 const { buildInvoicePdf } = require('../utils/invoicePdf');
+const { normalizePaymentMethod: normalizeBillingPaymentMethod, normalizePaymentStatus: normalizeBillingPaymentStatus } = require('../utils/billingWorkflow');
 const { calculateFareQuote } = require('../services/fareCalculator');
+const { normalizeChargeItems } = require('../utils/billingWorkflow');
 const { notifyBookingCreated, notifyBookingStatusChange } = require('../services/notificationService');
 const { bookingConfirmation } = require('../services/emailTemplates');
 const { sendEmail } = require('../services/emailService');
@@ -35,12 +37,18 @@ function normalizeBookingStatus(status) {
 function normalizePaymentStatus(status) {
   const value = String(status || '').trim();
   const aliases = {
-    'Advance Paid': 'Paid Offline',
-    'Fully Paid': 'Paid Offline',
-    Paid: 'Paid Offline'
+    'Advance Paid': 'Partial',
+    'Partially Paid': 'Partial',
+    'Fully Paid': 'Paid',
+    'Paid Online': 'Paid',
+    'Paid Offline': 'Paid',
+    Paid: 'Paid',
+    Unpaid: 'Pending',
+    'Payment Pending': 'Pending',
+    'Invoice Generated': 'Pending'
   };
 
-  return aliases[value] || value;
+  return aliases[value] || value || 'Pending';
 }
 
 function normalizePaymentMethod(method) {
@@ -305,7 +313,7 @@ const createBooking = asyncHandler(async (req, res) => {
       waitingCharges: pricing.fareBreakdown.waitingCharges,
       nightCharges: pricing.fareBreakdown.nightCharges,
       driverAllowance: pricing.fareBreakdown.driverAllowance,
-      extraCharges: pricing.fareBreakdown.extraTravelCharges || 0,
+      extraCharges: normalizeChargeItems(req.body.extraCharges || req.body.extraChargeItems),
       gstAmount: pricing.fareBreakdown.gstAmount,
       subtotal: pricing.fareBreakdown.subtotalAmount,
       estimatedFare: pricing.totalFare,
@@ -323,7 +331,7 @@ const createBooking = asyncHandler(async (req, res) => {
         dropCoordinates: pricing.drop?.coordinates || null,
         destinationCoordinates: pricing.drop?.coordinates || null
       },
-      paymentStatus: 'Unpaid',
+      paymentStatus: 'Pending',
       bookingStatus: 'Pending'
     });
   } catch (error) {
@@ -413,24 +421,28 @@ const updateBookingStatus = asyncHandler(async (req, res) => {
   if (!booking) throw new ApiError(404, 'Booking not found');
 
   booking.bookingStatus = status;
-  if (status === 'Approved') {
+    if (status === 'Approved') {
     booking.approvedAt = booking.approvedAt || new Date();
-    if (booking.paymentStatus === 'Unpaid') booking.paymentStatus = 'Pending';
+    booking.paymentStatus = normalizeBillingPaymentStatus(booking.paymentStatus || 'Pending');
   }
 
   if (status === 'Rejected') {
     booking.rejectedAt = new Date();
     booking.rejectionReason = req.body.rejectionReason || booking.rejectionReason || 'Rejected by admin';
-    booking.paymentStatus = 'Unpaid';
+    booking.paymentStatus = normalizeBillingPaymentStatus(booking.paymentStatus || 'Pending');
   }
 
   if (status === 'Ride Started') booking.rideStartedAt = new Date();
   if (status === 'Ride Completed') booking.rideCompletedAt = new Date();
 
   if (status === 'Paid') {
-    booking.paymentMethod = normalizePaymentMethod(req.body.paymentMethod || booking.paymentMethod || 'Cash');
-    booking.paymentStatus = normalizePaymentStatus(req.body.paymentStatus || 'Paid Offline');
-    booking.paidAt = new Date();
+    booking.paymentMethod = normalizeBillingPaymentMethod(req.body.paymentMethod || booking.paymentMethod || 'Cash');
+    booking.paymentStatus = normalizeBillingPaymentStatus(req.body.paymentStatus || 'Paid');
+    booking.paymentDate = req.body.paymentDate || new Date();
+    booking.paidAt = booking.paymentDate;
+    booking.transactionId = String(req.body.transactionId || req.body.reference || booking.transactionId || '').trim();
+    booking.paidAmount = Math.max(0, Number(req.body.paidAmount || booking.totalFare || booking.estimatedFare || 0));
+    booking.balanceAmount = Math.max(0, Number(req.body.balanceAmount || 0));
   }
 
   booking.statusHistory = Array.isArray(booking.statusHistory) ? booking.statusHistory : [];

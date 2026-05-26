@@ -114,7 +114,27 @@ async function seedDefaults() {
 
   await seedCollection(Package, [
     {
-      packageName: 'Airport Transfer',
+      packageName: 'Local Package',
+      image: 'https://images.unsplash.com/photo-1559767947-0d3a3b4be6e5?auto=format&fit=crop&w=1200&q=80',
+      destinations: ['Lucknow City', 'Local Sightseeing'],
+      duration: '8 Hours / 80 KM',
+      price: 6500,
+      inclusions: ['Driver allowance included', 'Local city travel', 'Standard waiting time'],
+      exclusions: ['Extra KM', 'Extra Hour', 'Tolls', 'Parking'],
+      description: 'Local city package for up to 8 hours and 80 KM.'
+    },
+    {
+      packageName: 'Half Day Package',
+      image: 'https://images.unsplash.com/photo-1559767947-0d3a3b4be6e5?auto=format&fit=crop&w=1200&q=80',
+      destinations: ['Lucknow City', 'Quick Transfers'],
+      duration: '4 Hours / 40 KM',
+      price: 3500,
+      inclusions: ['Driver allowance included', 'Quick city trip'],
+      exclusions: ['Extra KM', 'Extra Hour', 'Tolls', 'Parking'],
+      description: 'Short-duration local package for quick trips.'
+    },
+    {
+      packageName: 'Airport Pickup / Drop',
       image: 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1200&q=80',
       destinations: ['Airport', 'Hotel', 'City Center'],
       duration: 'One Way',
@@ -124,17 +144,17 @@ async function seedDefaults() {
       description: 'Premium airport pickup and drop service with punctual chauffeur support.'
     },
     {
-      packageName: 'Luxury Outstation Tour',
+      packageName: 'Outstation Package',
       image: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80',
       destinations: ['Ayodhya', 'Prayagraj', 'Varanasi', 'Delhi'],
-      duration: '2-5 Days',
-      price: 9500,
-      inclusions: ['Chauffeur', 'Fuel', 'Route planning'],
+      duration: '300 KM / Day',
+      price: 8500,
+      inclusions: ['Chauffeur', 'Fuel', 'Route planning', 'Driver allowance included'],
       exclusions: ['Tolls', 'Parking', 'State tax'],
       description: 'Ideal for intercity and spiritual tours with a luxury first approach.'
     },
     {
-      packageName: 'Wedding & VIP Event',
+      packageName: 'Wedding / VIP Events',
       image: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1200&q=80',
       destinations: ['Venue transfers', 'Guest movement'],
       duration: 'Custom',
@@ -149,6 +169,7 @@ async function seedDefaults() {
     { from: 'Lucknow', to: 'Ayodhya', distance: '135 KM', estimatedTime: '3 hr', price: 9500 },
     { from: 'Lucknow', to: 'Prayagraj', distance: '200 KM', estimatedTime: '4.5 hr', price: 12500 },
     { from: 'Lucknow', to: 'Varanasi', distance: '315 KM', estimatedTime: '6 hr', price: 16500 },
+    { from: 'Lucknow', to: 'Gorakhpur', distance: '275 KM', estimatedTime: '5.5 hr', price: 13500 },
     { from: 'Lucknow', to: 'Delhi', distance: '520 KM', estimatedTime: '8.5 hr', price: 28000 }
   ]);
 
@@ -173,6 +194,25 @@ async function seedDefaults() {
       bankBranch: 'Lucknow Main',
       paymentLink: '',
       footerNote: 'Thank you for choosing our premium chauffeur and travel services.'
+    },
+    pricingSettings: {
+      gstPercent: 5,
+      nightChargePercent: 10,
+      localPackagePrice: 6500,
+      halfDayPrice: 3500,
+      extraKmCharge: 28,
+      extraHourCharge: 500,
+      airportTransferMinCharge: 2500,
+      airportTransferMaxCharge: 3500,
+      outstationMinCharge: 8500,
+      outstationMaxCharge: 10500,
+      weddingVipCharge: 12000,
+      driverAllowance: 0,
+      waitingChargePerHour: 0,
+      defaultIncludedKm: 80,
+      defaultIncludedHours: 8,
+      baseFare: 6500,
+      pricePerKm: 28
     },
     homepage: {
       heroTitle: 'Travel in luxury, arrive in style',

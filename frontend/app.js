@@ -221,7 +221,7 @@
     const message = notification?.message || payload.message || 'Your booking has been updated.';
     showGlobalNotification(message, false);
 
-    if (['booking:created', 'booking:status-updated', 'booking:driver-assigned', 'booking:cancelled', 'invoice:generated', 'payment:received', 'payment:refunded', 'booking:updated'].includes(eventName)) {
+    if (['booking:created', 'booking:status-updated', 'booking:driver-assigned', 'booking:cancelled', 'invoice:generated', 'invoice:updated', 'payment:received', 'payment:updated', 'payment:refunded', 'booking:updated'].includes(eventName)) {
       void refreshBookingsModalIfOpen();
     }
   }
@@ -406,7 +406,7 @@
     const fare = formatBookingMoney(booking.totalFare || booking.estimatedFare || booking.finalBill?.totalAmount || 0);
     const pickupDate = formatBookingDateTime(booking.pickupDate, booking.pickupTime);
     const status = String(booking.bookingStatus || 'Pending');
-    const paymentStatus = String(booking.paymentStatus || 'Unpaid');
+    const paymentStatus = String(booking.paymentStatus || 'Pending');
     const driver = getBookingDriver(booking);
 
     return `
@@ -493,7 +493,7 @@
     const estimatedFare = formatBookingMoney(booking.estimatedFare || booking.totalFare || booking.finalBill?.totalAmount || 0);
     const finalFare = formatBookingMoney(booking.finalBill?.totalAmount || booking.totalFare || booking.estimatedFare || 0);
     const status = String(booking.bookingStatus || 'Pending');
-    const paymentStatus = String(booking.paymentStatus || 'Unpaid');
+    const paymentStatus = String(booking.paymentStatus || 'Pending');
     const driver = getBookingDriver(booking);
     const fareBreakdown = getBookingFareBreakdown(booking);
     const invoiceId = booking.invoiceId || booking.invoice?.invoiceId || 'Pending';
@@ -967,9 +967,6 @@
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     let index = 0;
-    let autoplayId = null;
-    let isPointerDown = false;
-    let startX = 0;
 
     const getGap = () => {
       const style = window.getComputedStyle(track);
@@ -1015,14 +1012,11 @@
     };
 
     const startAutoplay = () => {
-      if (prefersReducedMotion || cards.length < 2 || autoplayId) return;
-      autoplayId = window.setInterval(advance, 4500);
+      return;
     };
 
     const stopAutoplay = () => {
-      if (!autoplayId) return;
-      window.clearInterval(autoplayId);
-      autoplayId = null;
+      return;
     };
 
     prevBtn?.addEventListener('click', () => update(index - 1, { loop: true }));
@@ -1054,33 +1048,8 @@
     }
 
 
-    carousel.addEventListener('pointerdown', (event) => {
-      isPointerDown = true;
-      startX = event.clientX;
-      stopAutoplay();
-    });
-
-    carousel.addEventListener('pointerup', (event) => {
-      if (!isPointerDown) return;
-      isPointerDown = false;
-      const delta = event.clientX - startX;
-      if (Math.abs(delta) > 50) {
-        update(delta < 0 ? index + 1 : index - 1, { loop: true });
-      }
-      startAutoplay();
-    });
-
-    carousel.addEventListener('pointerleave', () => {
-      isPointerDown = false;
-      startAutoplay();
-    });
-
-    carousel.addEventListener('focusin', stopAutoplay);
-    carousel.addEventListener('focusout', startAutoplay);
-
     window.addEventListener('resize', () => update(index));
     update(0);
-    startAutoplay();
   }
 
   // --- Auth modal behavior and form handlers ---
@@ -1611,6 +1580,28 @@
       });
     });
 
+    const describeGeolocationError = (error) => {
+      const code = Number(error?.code);
+      if (code === 1) return 'Location permission denied. You can enter the pickup manually.';
+      if (code === 2) return 'Location unavailable right now. You can enter the pickup manually.';
+      if (code === 3) return 'Location lookup timed out. You can enter the pickup manually.';
+      return error?.message || 'Unable to use current location. You can still enter the pickup manually.';
+    };
+
+    const extractReverseGeocodeLabel = (location) => {
+      if (!location) return '';
+      const candidates = [
+        location.label,
+        location.address,
+        location.displayName,
+        location.name,
+        location.formattedAddress,
+        location.text,
+        location.placeName
+      ];
+      return String(candidates.find((value) => String(value || '').trim()) || '').trim();
+    };
+
     const getTripTypeValue = () => tripType?.value || selectedPackage?.value || 'one-way';
 
     const updateSelectedCarName = () => {
@@ -1766,15 +1757,20 @@
         }
 
         setPickupCoordinatesValue([longitude, latitude]);
+        logBookingDiagnostics('current location coordinates', { latitude, longitude, serialized: pickupCoordinates?.value || '' });
 
         let resolvedLabel = '';
         try {
           const response = await performRequest(apiUrl(`/api/fare/reverse-geocode?lng=${encodeURIComponent(longitude)}&lat=${encodeURIComponent(latitude)}`));
           const result = await safeJson(response);
-          resolvedLabel = String(result?.location?.label || '').trim();
+          resolvedLabel = extractReverseGeocodeLabel(result?.location);
           logBookingDiagnostics('reverse geocode result', { longitude, latitude, resolvedLabel, result });
         } catch (reverseError) {
           console.warn('Reverse geocoding failed, keeping GPS coordinates only.', reverseError);
+        }
+
+        if (!resolvedLabel) {
+          resolvedLabel = `Current Location (${latitude.toFixed(6)}, ${longitude.toFixed(6)})`;
         }
 
         if (resolvedLabel) {
@@ -1783,10 +1779,10 @@
 
         validateBookingField(pickupLoc, true);
         updateSubmitState();
-        debounceQuote();
+        void calculateQuote();
       } catch (error) {
         console.warn('Current location lookup failed', error);
-        showGlobalNotification(error?.message || 'Unable to use current location. You can still enter the pickup manually.');
+        showGlobalNotification(describeGeolocationError(error));
       } finally {
         useCurrentLocationBtn.disabled = false;
         useCurrentLocationBtn.textContent = originalText;

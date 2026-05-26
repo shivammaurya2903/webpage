@@ -32,6 +32,7 @@
     viewLabel: document.getElementById('viewLabel'),
     viewTitle: document.getElementById('viewTitle'),
     globalSearch: document.getElementById('globalSearch'),
+    topbarSearchSlot: document.getElementById('topbarSearchSlot'),
     refreshButton: document.getElementById('refreshButton'),
     adminName: document.getElementById('adminName'),
     adminChip: document.getElementById('adminChip'),
@@ -59,6 +60,15 @@
     admin: readJSON(STORAGE_ADMIN),
     view: 'dashboard',
     search: '',
+    bookingFilters: {
+      search: '',
+      status: '',
+      paymentStatus: '',
+      vehicle: '',
+      fromDate: '',
+      toDate: ''
+    },
+    bookingReloadTimer: null,
     dashboard: null,
     bookings: null,
     drivers: null,
@@ -405,6 +415,220 @@
     el.topbar.classList.toggle('is-scrolled', window.scrollY > 8);
   }
 
+  function getActiveBookingFilters() {
+    return {
+      search: '',
+      status: '',
+      paymentStatus: '',
+      vehicle: '',
+      fromDate: '',
+      toDate: '',
+      ...(state.bookingFilters || {})
+    };
+  }
+
+  function getBookingVehicleOptions() {
+    const values = new Set();
+    (state.bookings || []).forEach((booking) => {
+      const vehicle = String(booking.selectedCar || booking.vehicleId || '').trim();
+      if (vehicle) values.add(vehicle);
+    });
+    return [...values].sort((left, right) => left.localeCompare(right, 'en', { sensitivity: 'base' }));
+  }
+
+  function buildBookingQueryParams({ exportMode = false } = {}) {
+    const filters = getActiveBookingFilters();
+    const query = new URLSearchParams();
+    if (filters.search) query.set('search', filters.search);
+    if (filters.status) query.set('status', filters.status);
+    if (filters.paymentStatus) query.set('paymentStatus', filters.paymentStatus);
+    if (filters.vehicle) query.set('vehicle', filters.vehicle);
+    if (filters.fromDate) query.set('fromDate', filters.fromDate);
+    if (filters.toDate) query.set('toDate', filters.toDate);
+    query.set('limit', '50');
+    query.set('sort', '-createdAt');
+    if (exportMode) query.set('export', '1');
+    return query;
+  }
+
+  function setBookingFilters(partialFilters = {}, { replace = false } = {}) {
+    const current = replace ? {} : getActiveBookingFilters();
+    state.bookingFilters = {
+      ...current,
+      ...partialFilters
+    };
+  }
+
+  function resetBookingFilters() {
+    state.bookingFilters = {
+      search: '',
+      status: '',
+      paymentStatus: '',
+      vehicle: '',
+      fromDate: '',
+      toDate: ''
+    };
+  }
+
+  function getBookingFilterChips(filters = getActiveBookingFilters()) {
+    const chips = [];
+    if (filters.search) chips.push({ key: 'search', label: `Search: ${filters.search}` });
+    if (filters.status) chips.push({ key: 'status', label: `Status: ${filters.status}` });
+    if (filters.paymentStatus) chips.push({ key: 'paymentStatus', label: `Payment: ${filters.paymentStatus}` });
+    if (filters.vehicle) chips.push({ key: 'vehicle', label: `Vehicle: ${filters.vehicle}` });
+    if (filters.fromDate || filters.toDate) {
+      const from = filters.fromDate ? fmtDate(filters.fromDate) : 'Any';
+      const to = filters.toDate ? fmtDate(filters.toDate) : 'Any';
+      chips.push({ key: 'date', label: `Date: ${from} → ${to}` });
+    }
+    return chips;
+  }
+
+  function renderBookingFilterControls(filters = getActiveBookingFilters(), compact = false) {
+    const statusOptions = ['', 'Pending', 'Approved', 'Rejected', 'Driver Assigned', 'Ride Started', 'Ride Completed', 'Invoice Generated', 'Paid', 'Cancelled'];
+    const paymentOptions = ['', 'Pending', 'Partial', 'Paid', 'Refunded'];
+    const vehicleOptions = getBookingVehicleOptions();
+    const fieldClass = compact ? 'field wide booking-filter-field' : 'field booking-filter-field';
+
+    return `
+      <label class="${fieldClass}">
+        <span>Status</span>
+        <select data-booking-filter-field="status">
+          <option value="">All statuses</option>
+          ${statusOptions.filter(Boolean).map((status) => `<option value="${escapeHtml(status)}" ${filters.status === status ? 'selected' : ''}>${escapeHtml(status)}</option>`).join('')}
+        </select>
+      </label>
+      <label class="${fieldClass}">
+        <span>Payment</span>
+        <select data-booking-filter-field="paymentStatus">
+          <option value="">All payment states</option>
+          ${paymentOptions.filter(Boolean).map((paymentStatus) => `<option value="${escapeHtml(paymentStatus)}" ${filters.paymentStatus === paymentStatus ? 'selected' : ''}>${escapeHtml(paymentStatus)}</option>`).join('')}
+        </select>
+      </label>
+      <label class="${fieldClass}">
+        <span>Vehicle</span>
+        <select data-booking-filter-field="vehicle">
+          <option value="">All vehicles</option>
+          ${vehicleOptions.map((vehicle) => `<option value="${escapeHtml(vehicle)}" ${filters.vehicle === vehicle ? 'selected' : ''}>${escapeHtml(vehicle)}</option>`).join('')}
+        </select>
+      </label>
+      <label class="${fieldClass}">
+        <span>From</span>
+        <input type="date" data-booking-filter-field="fromDate" value="${escapeHtml(filters.fromDate || '')}" />
+      </label>
+      <label class="${fieldClass}">
+        <span>To</span>
+        <input type="date" data-booking-filter-field="toDate" value="${escapeHtml(filters.toDate || '')}" />
+      </label>
+    `;
+  }
+
+  function renderBookingToolbar() {
+    if (!el.topbarSearchSlot) return;
+    if (state.view !== 'bookings') {
+      el.topbarSearchSlot.innerHTML = `
+        <label class="search-pill" aria-label="Search current view">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input id="globalSearch" type="search" placeholder="Search current view" value="${escapeHtml(state.search)}" />
+        </label>
+      `;
+      return;
+    }
+
+    // Keep topbar clean for bookings; booking filters are rendered in the page content.
+    el.topbarSearchSlot.innerHTML = '';
+  }
+
+  function getBookingToolbarMarkup() {
+    const filters = getActiveBookingFilters();
+    return `
+      <div class="booking-toolbar" data-booking-toolbar>
+        <label class="search-pill booking-search-pill" aria-label="Search bookings">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input id="bookingSearchInput" data-booking-filter-field="search" type="search" placeholder="Search bookings" value="${escapeHtml(filters.search)}" />
+        </label>
+        <div class="booking-toolbar__filters booking-toolbar__filters--inline">
+          ${renderBookingFilterControls(filters, false)}
+        </div>
+        <div class="booking-toolbar__actions">
+          <button type="button" class="secondary-btn" data-booking-clear-filters>Clear filters</button>
+          <button type="button" class="primary-btn" data-booking-export>Export</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderTopbarSurface() {
+    syncTopbarSurface();
+    renderBookingToolbar();
+  }
+
+  function downloadTextFile(content, filename, mimeType) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  }
+
+  function bookingsToCsv(bookings = []) {
+    const headers = ['Booking ID', 'Customer', 'Email', 'Phone', 'Pickup', 'Drop', 'Pickup Date', 'Vehicle', 'Driver', 'Status', 'Payment Status', 'Invoice', 'Total Fare', 'Created At'];
+    const rows = bookings.map((booking) => [
+      booking.bookingId,
+      booking.customerName,
+      booking.email,
+      booking.phone,
+      booking.pickupLocation,
+      booking.dropLocation,
+      booking.pickupDate ? fmtDate(booking.pickupDate) : '',
+      booking.selectedCar || booking.vehicleId || '',
+      booking.assignedDriver?.driverName || '',
+      booking.bookingStatus || '',
+      booking.paymentStatus || '',
+      booking.invoiceId || booking.invoice?.invoiceId || '',
+      booking.totalFare ?? booking.estimatedFare ?? '',
+      booking.createdAt ? fmtDateTime(booking.createdAt) : ''
+    ]);
+
+    const escapeCell = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    return [headers.map(escapeCell).join(','), ...rows.map((row) => row.map(escapeCell).join(','))].join('\n');
+  }
+
+  async function exportFilteredBookings() {
+    const query = buildBookingQueryParams({ exportMode: true });
+    const body = await apiFetch(`/api/admin/bookings?${query.toString()}`);
+    const bookings = body.bookings || [];
+    downloadTextFile(bookingsToCsv(bookings), `bookings-${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv;charset=utf-8;');
+    toast('Export started', `${bookings.length} booking${bookings.length === 1 ? '' : 's'} exported`);
+  }
+
+  async function reloadBookings({ debounce = false } = {}) {
+    if (state.bookingReloadTimer) {
+      window.clearTimeout(state.bookingReloadTimer);
+      state.bookingReloadTimer = null;
+    }
+
+    const run = async () => {
+      state.bookings = null;
+      await loadBookings(true);
+      if (state.view === 'bookings') renderCurrentView();
+    };
+
+    if (debounce) {
+      state.bookingReloadTimer = window.setTimeout(() => {
+        state.bookingReloadTimer = null;
+        run().catch((error) => toast('Load failed', error.message, 'error'));
+      }, 260);
+      return;
+    }
+
+    await run();
+  }
+
   function syncSidebarMode() {
     if (!el.appShell) return;
     const isMobile = window.matchMedia('(max-width: 980px)').matches;
@@ -429,7 +653,7 @@
       upsertRealtimeNotification(notification);
     }
 
-    const shouldRefreshBookings = ['booking:new', 'booking:status-updated', 'booking:driver-assigned', 'booking:cancelled', 'invoice:generated', 'invoice:resent', 'payment:completed', 'payment:received'].includes(eventName);
+    const shouldRefreshBookings = ['booking:new', 'booking:status-updated', 'booking:driver-assigned', 'booking:cancelled', 'invoice:generated', 'invoice:resent', 'invoice:updated', 'payment:completed', 'payment:received', 'payment:updated'].includes(eventName);
     const shouldRefreshDashboard = shouldRefreshBookings || ['payment:refunded'].includes(eventName);
 
     if (shouldRefreshBookings) state.bookings = null;
@@ -574,6 +798,325 @@
     if (Array.isArray(value)) return value;
     if (!value) return [];
     return String(value).split(/\n|,/).map((item) => item.trim()).filter(Boolean);
+  }
+
+  function toNumber(value, fallback = 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
+  function getBookingChargeItems(booking) {
+    if (!booking) return [];
+    const builtIns = [
+      ['Toll Charges', booking.tollCharges],
+      ['Parking Charges', booking.parkingCharges],
+      ['Driver Allowance', booking.driverAllowance],
+      ['Waiting Charges', booking.waitingCharges],
+      ['Night Charges', booking.nightCharges],
+      ['State Permit Charges', booking.statePermitCharges],
+      ['Extra Distance Charges', booking.extraDistanceCharges],
+      ['Miscellaneous Charges', booking.miscellaneousCharges]
+    ];
+
+    const charges = builtIns
+      .map(([name, amount]) => ({ name, amount: toNumber(amount, 0) }))
+      .filter((item) => item.amount > 0);
+
+    (Array.isArray(booking.extraCharges) ? booking.extraCharges : []).forEach((item) => {
+      const name = String(item?.name || item?.label || item?.title || '').trim();
+      const amount = toNumber(item?.amount, 0);
+      if (name && amount > 0) charges.push({ name, amount });
+    });
+
+    return charges;
+  }
+
+  function renderChargeRow(charge = {}, index = 0) {
+    return `
+      <div class="invoice-charge-row" data-charge-row>
+        <label class="field wide"><span>Charge name</span><input name="chargeName" value="${escapeHtml(charge.name || '')}" placeholder="Airport Parking" /></label>
+        <label class="field wide"><span>Amount</span><input name="chargeAmount" type="number" min="0" step="1" value="${escapeHtml(String(charge.amount || 0))}" /></label>
+        <button class="small-btn danger invoice-charge-remove" type="button" data-charge-remove data-index="${index}">Remove</button>
+      </div>
+    `;
+  }
+
+  function renderChargeRows(chargeItems = []) {
+    const rows = chargeItems.length ? chargeItems.map((item, index) => renderChargeRow(item, index)).join('') : renderChargeRow({}, 0);
+    return `<div class="invoice-charge-list" data-charge-list>${rows}</div>`;
+  }
+
+  function readChargeRows(container) {
+    return Array.from(container.querySelectorAll('[data-charge-row]')).map((row) => {
+      const name = String(row.querySelector('[name="chargeName"]')?.value || '').trim();
+      const amount = toNumber(row.querySelector('[name="chargeAmount"]')?.value, 0);
+      if (!name || amount <= 0) return null;
+      return { name, amount };
+    }).filter(Boolean);
+  }
+
+  function calculateInvoicePreview(booking, draft = {}) {
+    const taxPercent = toNumber(booking.gstAmount ? 5 : (booking.fareBreakdown?.gstPercent || 5), 5);
+    const baseFare = toNumber(booking.baseFare || booking.fareBreakdown?.baseFare || booking.estimatedFare || 0);
+    const distanceFare = toNumber(booking.distanceFare || booking.fareBreakdown?.distanceFare || 0);
+    const tripType = String(booking.fareBreakdown?.tripType || booking.tripType || '').toLowerCase();
+    const packageLabel = booking.fareBreakdown?.packageLabel || (tripType === 'local-package' ? 'Local Package' : tripType === 'half-day-package' ? 'Half Day Package' : tripType === 'airport-transfer' ? 'Airport Pickup / Drop' : tripType === 'outstation-package' ? 'Outstation Package' : tripType === 'wedding-vip-event' ? 'Wedding / VIP Events' : 'Base Fare');
+    const distanceLabel = tripType === 'local-package' || tripType === 'half-day-package' ? 'Extra KM Charges' : tripType === 'airport-transfer' ? 'Airport Charges' : tripType === 'outstation-package' ? 'Extra KM Charges' : tripType === 'wedding-vip-event' ? 'Wedding / VIP Charges' : 'Distance Fare';
+    const builtInCharges = [
+      ['Toll Charges', toNumber(draft.tollCharges ?? booking.tollCharges, 0)],
+      ['Parking Charges', toNumber(draft.parkingCharges ?? booking.parkingCharges, 0)],
+      ['Driver Allowance', toNumber(draft.driverAllowance ?? booking.driverAllowance, 0)],
+      ['Waiting Charges', toNumber(draft.waitingCharges ?? booking.waitingCharges, 0)],
+      ['Night Charges', toNumber(draft.nightCharges ?? booking.nightCharges, 0)],
+      ['State Permit Charges', toNumber(draft.statePermitCharges ?? booking.statePermitCharges, 0)],
+      ['Extra Distance Charges', toNumber(draft.extraDistanceCharges ?? booking.extraDistanceCharges, 0)],
+      ['Miscellaneous Charges', toNumber(draft.miscellaneousCharges ?? booking.miscellaneousCharges, 0)]
+    ].filter(([, amount]) => amount > 0).map(([name, amount]) => ({ name, amount }));
+
+    const extraCharges = Array.isArray(draft.extraCharges) ? draft.extraCharges : getBookingChargeItems(booking).filter((item) => !builtInCharges.some((builtIn) => builtIn.name === item.name && builtIn.amount === item.amount));
+    const extraChargesTotal = extraCharges.reduce((total, item) => total + toNumber(item.amount, 0), 0);
+    const builtInTotal = builtInCharges.reduce((total, item) => total + toNumber(item.amount, 0), 0);
+    const subtotalBeforeDiscount = baseFare + distanceFare + builtInTotal + extraChargesTotal;
+
+    const discountType = String(draft.discountType || booking.discountType || 'flat').toLowerCase();
+    const discountValue = toNumber(draft.discountValue ?? booking.discountValue ?? booking.discountAmount ?? 0, 0);
+    let discountAmount = toNumber(draft.discountAmount ?? booking.discountAmount ?? 0, 0);
+    if (!discountAmount && discountValue > 0) {
+      discountAmount = discountType === 'percentage' ? Math.round((subtotalBeforeDiscount * discountValue) / 100) : discountValue;
+    }
+
+    const subtotal = Math.max(0, subtotalBeforeDiscount - discountAmount);
+    const gstAmount = Math.max(0, Math.round(subtotal * (taxPercent / 100)));
+    const manualGrandTotal = toNumber(draft.grandTotal, 0);
+    const grandTotal = manualGrandTotal > 0 ? manualGrandTotal : subtotal + gstAmount;
+    const paymentStatus = String(draft.paymentStatus || booking.paymentStatus || 'Pending');
+    const paidAmount = toNumber(draft.paidAmount ?? (paymentStatus === 'Paid' ? grandTotal : 0), 0);
+    const balanceAmount = Math.max(0, grandTotal - paidAmount);
+    const paymentDate = draft.paymentDate || (paymentStatus === 'Paid' ? new Date().toISOString().slice(0, 10) : '');
+
+    const rows = [
+      { description: packageLabel, quantity: 1, rate: baseFare, amount: baseFare },
+      { description: distanceLabel, quantity: 1, rate: distanceFare, amount: distanceFare }
+    ];
+
+    builtInCharges.forEach((item) => rows.push({ description: item.name, quantity: 1, rate: item.amount, amount: item.amount }));
+    extraCharges.forEach((item) => rows.push({ description: item.name, quantity: 1, rate: item.amount, amount: item.amount }));
+    if (discountAmount > 0) rows.push({ description: discountType === 'percentage' ? `Discount (${discountValue}%)` : 'Discount', quantity: 1, rate: discountAmount, amount: -discountAmount, isDiscount: true });
+    rows.push({ description: `GST (${taxPercent}%)`, quantity: 1, rate: subtotal, amount: gstAmount, isTax: true });
+
+    return {
+      baseFare,
+      distanceFare,
+      builtInCharges,
+      extraCharges,
+      subtotalBeforeDiscount,
+      discountType,
+      discountValue,
+      discountAmount,
+      subtotal,
+      gstAmount,
+      grandTotal,
+      paymentStatus,
+      paidAmount,
+      balanceAmount,
+      paymentDate,
+      rows
+    };
+  }
+
+  function renderInvoicePreviewHtml(booking, draft = {}) {
+    const preview = calculateInvoicePreview(booking, draft);
+    const rows = preview.rows.map((row) => `
+      <tr class="${row.isDiscount ? 'is-discount' : row.isTax ? 'is-tax' : ''}">
+        <td>${escapeHtml(row.description)}</td>
+        <td>${escapeHtml(String(row.quantity || 1))}</td>
+        <td>${fmtMoney(row.rate || 0)}</td>
+        <td>${fmtMoney(row.amount || 0)}</td>
+      </tr>
+    `).join('');
+
+    return {
+      preview,
+      html: `
+        <div class="invoice-preview-stack">
+          <table class="data-table invoice-preview-table">
+            <thead>
+              <tr><th>Description</th><th>Qty</th><th>Rate</th><th>Amount</th></tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <div class="invoice-preview-summary">
+            <div><span>Subtotal</span><strong>${fmtMoney(preview.subtotal)}</strong></div>
+            <div><span>Extra charges</span><strong>${fmtMoney(preview.extraCharges.reduce((total, item) => total + toNumber(item.amount, 0), 0) + preview.builtInCharges.reduce((total, item) => total + toNumber(item.amount, 0), 0))}</strong></div>
+            <div><span>Discount</span><strong>${fmtMoney(preview.discountAmount)}</strong></div>
+            <div><span>GST</span><strong>${fmtMoney(preview.gstAmount)}</strong></div>
+            <div class="grand-total"><span>Grand total</span><strong>${fmtMoney(preview.grandTotal)}</strong></div>
+          </div>
+        </div>
+      `
+    };
+  }
+
+  async function getBookingForInvoiceEditor(id) {
+    const existing = (state.bookings || []).find((booking) => booking._id === id);
+    if (existing) return existing;
+
+    await loadBookings(true);
+    const loaded = (state.bookings || []).find((booking) => booking._id === id);
+    if (loaded) return loaded;
+
+    throw new Error('Booking not found');
+  }
+
+  function buildInvoiceEditorMarkup(booking) {
+    const preview = renderInvoicePreviewHtml(booking, {
+      extraCharges: getBookingChargeItems(booking),
+      discountType: booking.discountType || 'flat',
+      discountValue: booking.discountValue || 0,
+      discountAmount: booking.discountAmount || 0,
+      grandTotal: booking.grandTotal || booking.totalFare || 0,
+      paymentStatus: booking.paymentStatus || 'Pending',
+      paidAmount: booking.paidAmount || 0,
+      paymentDate: booking.paymentDate ? String(booking.paymentDate).slice(0, 10) : ''
+    });
+
+    const paymentStatuses = ['Pending', 'Partial', 'Paid', 'Refunded'];
+    const paymentMethods = ['Cash', 'UPI', 'Card', 'Bank transfer', 'Online payment link'];
+    const chargeMarkup = renderChargeRows((booking.extraCharges || []).length ? booking.extraCharges : getBookingChargeItems(booking).filter((item) => !['Toll Charges', 'Parking Charges', 'Driver Allowance', 'Waiting Charges', 'Night Charges', 'State Permit Charges', 'Extra Distance Charges', 'Miscellaneous Charges'].includes(item.name)));
+
+    return `
+      <form class="auth-form invoice-editor-form" data-invoice-editor-form data-booking-id="${escapeHtml(booking._id)}">
+        <div class="invoice-editor-grid">
+          <section class="card invoice-editor-card">
+            <div class="card-header"><div><h3>Invoice editor</h3><p>${escapeHtml(booking.bookingId)} · ${escapeHtml(booking.customerName)}</p></div></div>
+            <div class="form-grid">
+              <label class="field wide"><span>Discount type</span>
+                <select name="discountType">
+                  <option value="flat" ${String(booking.discountType || 'flat') === 'flat' ? 'selected' : ''}>Flat amount</option>
+                  <option value="percentage" ${String(booking.discountType || '') === 'percentage' ? 'selected' : ''}>Percentage</option>
+                </select>
+              </label>
+              <label class="field wide"><span>Discount value</span><input type="number" min="0" name="discountValue" value="${escapeHtml(String(booking.discountValue || 0))}" /></label>
+              <label class="field wide"><span>Manual final fare</span><input type="number" min="0" name="grandTotal" value="${escapeHtml(String(booking.grandTotal || booking.totalFare || 0))}" /></label>
+              <label class="field wide"><span>Payment status</span>
+                <select name="paymentStatus">
+                  ${paymentStatuses.map((status) => `<option value="${status}" ${String(booking.paymentStatus || 'Pending') === status ? 'selected' : ''}>${status}</option>`).join('')}
+                </select>
+              </label>
+              <label class="field wide"><span>Payment method</span>
+                <select name="paymentMethod">
+                  ${paymentMethods.map((method) => `<option value="${method}" ${String(booking.paymentMethod || 'Cash') === method ? 'selected' : ''}>${method}</option>`).join('')}
+                </select>
+              </label>
+              <label class="field wide"><span>Payment date</span><input type="date" name="paymentDate" value="${escapeHtml(booking.paymentDate ? String(new Date(booking.paymentDate).toISOString()).slice(0, 10) : '')}" /></label>
+              <label class="field wide"><span>Transaction reference</span><input name="transactionId" value="${escapeHtml(booking.transactionId || '')}" placeholder="UPI reference, receipt number, etc." /></label>
+            </div>
+          </section>
+
+          <section class="card invoice-editor-card">
+            <div class="card-header"><div><h3>Charges</h3><p>Add, remove, and edit billing items before generating the invoice</p></div><button class="small-btn primary" type="button" data-add-charge>Add charge</button></div>
+            ${chargeMarkup}
+          </section>
+
+          <section class="card invoice-editor-card invoice-preview-card">
+            <div class="card-header"><div><h3>Live preview</h3><p>Updated as you type</p></div></div>
+            <div data-invoice-preview>${preview.html}</div>
+          </section>
+        </div>
+
+        <div class="form-actions invoice-editor-actions">
+          <button class="primary-btn" type="submit" data-save-draft>Save draft</button>
+          <button class="secondary-btn" type="button" data-generate-invoice>Generate invoice</button>
+          <button class="secondary-btn" type="button" data-close-modal>Cancel</button>
+        </div>
+      </form>
+    `;
+  }
+
+  async function saveInvoiceEditorDraft(form, shouldGenerate = false) {
+    const bookingId = form.dataset.bookingId;
+    const draft = {
+      discountType: form.querySelector('[name="discountType"]')?.value || 'flat',
+      discountValue: toNumber(form.querySelector('[name="discountValue"]')?.value, 0),
+      grandTotal: toNumber(form.querySelector('[name="grandTotal"]')?.value, 0),
+      paymentStatus: form.querySelector('[name="paymentStatus"]')?.value || 'Pending',
+      paymentMethod: form.querySelector('[name="paymentMethod"]')?.value || 'Cash',
+      paymentDate: form.querySelector('[name="paymentDate"]')?.value || '',
+      transactionId: form.querySelector('[name="transactionId"]')?.value || '',
+      extraCharges: readChargeRows(form.querySelector('[data-charge-list]'))
+    };
+
+    const body = await apiFetch(`/api/admin/bookings/${bookingId}/invoice-draft`, {
+      method: 'PATCH',
+      body: JSON.stringify(draft)
+    });
+
+    state.bookings = null;
+    state.invoices = null;
+    state.dashboard = null;
+
+    if (shouldGenerate) {
+      await apiFetch(`/api/admin/bookings/${bookingId}/generate-invoice`, { method: 'POST' });
+    }
+
+    closeModal();
+    await refreshView();
+    toast('Invoice updated', body.message || 'Draft saved');
+  }
+
+  async function openInvoiceEditor(id) {
+    const booking = await getBookingForInvoiceEditor(id);
+    const markup = buildInvoiceEditorMarkup(booking);
+    openModal('Invoice editor', markup, 'Billing workflow');
+
+    const form = el.modalBody.querySelector('[data-invoice-editor-form]');
+    const previewRoot = el.modalBody.querySelector('[data-invoice-preview]');
+    const chargeList = el.modalBody.querySelector('[data-charge-list]');
+    const addChargeButton = el.modalBody.querySelector('[data-add-charge]');
+    const generateButton = el.modalBody.querySelector('[data-generate-invoice]');
+
+    function refreshPreview() {
+      const preview = renderInvoicePreviewHtml(booking, {
+        discountType: form.querySelector('[name="discountType"]')?.value || 'flat',
+        discountValue: toNumber(form.querySelector('[name="discountValue"]')?.value, 0),
+        grandTotal: toNumber(form.querySelector('[name="grandTotal"]')?.value, 0),
+        paymentStatus: form.querySelector('[name="paymentStatus"]')?.value || 'Pending',
+        paymentMethod: form.querySelector('[name="paymentMethod"]')?.value || 'Cash',
+        paymentDate: form.querySelector('[name="paymentDate"]')?.value || '',
+        transactionId: form.querySelector('[name="transactionId"]')?.value || '',
+        extraCharges: readChargeRows(chargeList)
+      });
+      previewRoot.innerHTML = preview.html;
+    }
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      await saveInvoiceEditorDraft(form, false);
+    });
+
+    generateButton?.addEventListener('click', async () => {
+      await saveInvoiceEditorDraft(form, true);
+    });
+
+    addChargeButton?.addEventListener('click', () => {
+      const currentCharges = readChargeRows(chargeList);
+      chargeList.insertAdjacentHTML('beforeend', renderChargeRow({}, currentCharges.length));
+      refreshPreview();
+    });
+
+    chargeList?.addEventListener('click', (event) => {
+      const removeButton = event.target.closest('[data-charge-remove]');
+      if (!removeButton) return;
+      const row = removeButton.closest('[data-charge-row]');
+      if (row) row.remove();
+      if (!chargeList.querySelector('[data-charge-row]')) {
+        chargeList.insertAdjacentHTML('beforeend', renderChargeRow({}, 0));
+      }
+      refreshPreview();
+    });
+
+    form.addEventListener('input', refreshPreview);
+    form.addEventListener('change', refreshPreview);
   }
 
   function renderBadge(value) {
@@ -754,8 +1297,7 @@
 
   async function loadBookings(force = false) {
     if (state.bookings && !force) return state.bookings;
-    const query = new URLSearchParams();
-    if (state.search) query.set('search', state.search);
+    const query = buildBookingQueryParams();
     const body = await apiFetch(`/api/admin/bookings?${query.toString()}`);
     state.bookings = body.bookings || [];
     return state.bookings;
@@ -836,88 +1378,77 @@
   }
 
   function renderBookingsView() {
+    renderTopbarSurface();
     const bookings = state.bookings || [];
-    const bookingStats = {
-      total: bookings.length,
-      pending: bookings.filter((booking) => String(booking.bookingStatus || '').toLowerCase().includes('pending')).length,
-      approved: bookings.filter((booking) => String(booking.bookingStatus || '').toLowerCase().includes('approved')).length,
-      paid: bookings.filter((booking) => String(booking.paymentStatus || '').toLowerCase().includes('paid')).length
-    };
     const rows = bookings.map((booking) => `
-      <tr>
-        <td><strong>${escapeHtml(booking.bookingId)}</strong><div class="helper">${escapeHtml(fmtDateTime(booking.createdAt))}</div></td>
-        <td>${escapeHtml(booking.customerName)}<div class="helper">${escapeHtml(booking.email || '')}<br>${escapeHtml(booking.phone || '')}</div></td>
-        <td>${escapeHtml(booking.pickupLocation)} → ${escapeHtml(booking.dropLocation)}<div class="helper">${escapeHtml(booking.pickupDate ? fmtDate(booking.pickupDate) : '')} ${escapeHtml(booking.pickupTime || '')}</div></td>
-        <td>${escapeHtml(booking.selectedCar || '')}<div class="helper">${escapeHtml(booking.selectedPackage || '')}</div></td>
-        <td>${renderBadge(booking.bookingStatus)}<div class="helper">${renderBadge(booking.paymentStatus)}</div></td>
-        <td>${fmtMoney(booking.totalFare || booking.estimatedFare)}<div class="helper">Invoice: ${escapeHtml(booking.invoiceId || booking.invoice?.invoiceId || '—')}<br>Payment: ${renderBadge(booking.paymentStatus)}</div></td>
-        <td>${booking.assignedDriver?.driverName ? escapeHtml(booking.assignedDriver.driverName) : '—'}</td>
-        <td>
-          ${renderButtons([
-            `<button class="small-btn gold" data-action="booking-status" data-id="${booking._id}" data-status="Approved">Approve</button>`,
-            `<button class="small-btn gold" data-action="booking-assign" data-id="${booking._id}">Assign</button>`,
-            `<button class="small-btn" data-action="booking-status" data-id="${booking._id}" data-status="Ride Started">Start</button>`,
-            `<button class="small-btn" data-action="booking-status" data-id="${booking._id}" data-status="Ride Completed">Complete</button>`,
-            `<button class="small-btn primary" data-action="booking-generate-invoice" data-id="${booking._id}">Generate invoice</button>`,
-            `${booking.invoiceId || booking.invoice?.invoiceId ? `<button class="small-btn" data-action="booking-regenerate-invoice" data-id="${booking._id}">Regenerate</button>` : ''}`,
-            `${booking.invoiceId || booking.invoice?.invoiceId ? `<button class="small-btn gold" data-action="booking-send-invoice" data-id="${booking._id}">Resend</button>` : ''}`,
-            `<button class="small-btn gold" data-action="booking-mark-paid" data-id="${booking._id}">Mark paid</button>`,
-            `<button class="small-btn danger" data-action="booking-reject" data-id="${booking._id}">Reject</button>`,
-            `${booking.invoiceId || booking.invoice?.invoiceId ? `<button class="small-btn" data-action="booking-download-invoice" data-id="${booking._id}">Download invoice</button>` : ''}`,
-            `<button class="small-btn danger" data-action="booking-delete" data-id="${booking._id}">Delete</button>`
-          ])}
+      <tr class="booking-row">
+        <td data-label="Booking">
+          <strong>${escapeHtml(booking.bookingId)}</strong>
+          <div class="helper">${escapeHtml(fmtDateTime(booking.createdAt))}</div>
+        </td>
+        <td data-label="Customer">
+          ${escapeHtml(booking.customerName)}
+          <div class="helper">${escapeHtml(booking.email || '')}<br>${escapeHtml(booking.phone || '')}</div>
+        </td>
+        <td data-label="Route">
+          ${escapeHtml(booking.pickupLocation)} → ${escapeHtml(booking.dropLocation)}
+          <div class="helper">${escapeHtml(booking.pickupDate ? fmtDate(booking.pickupDate) : '')} ${escapeHtml(booking.pickupTime || '')}</div>
+        </td>
+        <td data-label="Vehicle">
+          ${escapeHtml(booking.selectedCar || '')}
+          <div class="helper">${escapeHtml(booking.selectedPackage || '')}</div>
+        </td>
+        <td data-label="Status">
+          ${renderBadge(booking.bookingStatus)}
+          <div class="helper">${renderBadge(booking.paymentStatus)}</div>
+        </td>
+        <td data-label="Payment">
+          ${fmtMoney(booking.totalFare || booking.estimatedFare)}
+          <div class="helper">Invoice: ${escapeHtml(booking.invoiceId || booking.invoice?.invoiceId || '—')}<br>Payment: ${renderBadge(booking.paymentStatus)}</div>
+        </td>
+        <td data-label="Driver">${booking.assignedDriver?.driverName ? escapeHtml(booking.assignedDriver.driverName) : '—'}</td>
+        <td data-label="Actions">
+          <div class="booking-actions-cluster">
+            <div class="booking-actions-primary">
+              <button class="small-btn gold" data-action="booking-status" data-id="${booking._id}" data-status="Approved">Approve</button>
+              <button class="small-btn gold" data-action="booking-assign" data-id="${booking._id}">Assign</button>
+              <button class="small-btn" data-action="booking-status" data-id="${booking._id}" data-status="Ride Started">Start</button>
+              <button class="small-btn" data-action="booking-status" data-id="${booking._id}" data-status="Ride Completed">Complete</button>
+            </div>
+            <details class="booking-more-menu">
+              <summary class="small-btn booking-more-trigger" aria-label="More booking actions">
+                <i class="fa-solid fa-ellipsis-vertical"></i>
+                <span>More</span>
+              </summary>
+              <div class="booking-more-panel">
+                <button class="small-btn primary" data-action="booking-edit-invoice" data-id="${booking._id}">Invoice editor</button>
+                ${booking.invoiceId || booking.invoice?.invoiceId ? `<button class="small-btn" data-action="booking-regenerate-invoice" data-id="${booking._id}">Regenerate</button>` : ''}
+                ${booking.invoiceId || booking.invoice?.invoiceId ? `<button class="small-btn gold" data-action="booking-send-invoice" data-id="${booking._id}">Resend</button>` : ''}
+                <button class="small-btn gold" data-action="booking-mark-paid" data-id="${booking._id}">Mark paid</button>
+                <button class="small-btn danger" data-action="booking-reject" data-id="${booking._id}">Reject</button>
+                ${booking.invoiceId || booking.invoice?.invoiceId ? `<button class="small-btn" data-action="booking-download-invoice" data-id="${booking._id}">Download invoice</button>` : ''}
+                <button class="small-btn danger" data-action="booking-delete" data-id="${booking._id}">Delete</button>
+              </div>
+            </details>
+          </div>
         </td>
       </tr>
     `).join('');
 
     el.viewRoot.innerHTML = `
       <div class="view booking-view">
-        <section class="booking-hero">
-          <div class="card-header booking-header">
-            <div>
-              <p class="eyebrow">Booking section</p>
-              <h3>Booking control</h3>
-              <p>Search, filter, accept, reject, assign driver, and delete</p>
-            </div>
-            <div class="action-row booking-actions">
-              <input class="search-pill" id="bookingSearch" type="search" placeholder="Search bookings" value="${escapeHtml(state.search)}" />
-              <button class="primary-btn" id="bookingRefreshBtn" type="button">Refresh</button>
-            </div>
-          </div>
-
-          <ul class="booking-summary">
-            <li class="booking-stat">
-              <span class="booking-stat__label">Total bookings</span>
-              <strong>${bookingStats.total}</strong>
-            </li>
-            <li class="booking-stat">
-              <span class="booking-stat__label">Pending</span>
-              <strong>${bookingStats.pending}</strong>
-            </li>
-            <li class="booking-stat">
-              <span class="booking-stat__label">Approved</span>
-              <strong>${bookingStats.approved}</strong>
-            </li>
-            <li class="booking-stat">
-              <span class="booking-stat__label">Paid</span>
-              <strong>${bookingStats.paid}</strong>
-            </li>
-          </ul>
-
-          <div class="filter-row booking-filters">
-            <button class="secondary-btn" data-filter-status="">All</button>
-            <button class="secondary-btn" data-filter-status="Pending">Pending</button>
-            <button class="secondary-btn" data-filter-status="Approved">Approved</button>
-            <button class="secondary-btn" data-filter-status="Rejected">Rejected</button>
-            <button class="secondary-btn" data-filter-status="Driver Assigned">Driver Assigned</button>
-            <button class="secondary-btn" data-filter-status="Ride Completed">Completed</button>
-            <button class="secondary-btn" data-filter-status="Invoice Generated">Invoice Generated</button>
-            <button class="secondary-btn" data-filter-status="Paid">Paid</button>
-            <button class="secondary-btn" data-filter-status="Cancelled">Cancelled</button>
-          </div>
+        <section class="page-header">
+          <h3>Booking Management</h3>
+          <p>Manage bookings, approvals, drivers, payments and invoices.</p>
         </section>
+
+        <section class="booking-toolbar-container">
+          ${getBookingToolbarMarkup()}
+        </section>
+
         <section class="card table-card booking-table-card">
-          ${tableShell(['Booking', 'Customer', 'Route', 'Vehicle', 'Status', 'Payment', 'Driver', 'Actions'], rows)}
+          <div class="card-header booking-table-head"><div><h3>Booking Table</h3></div></div>
+          ${tableShell(['Booking', 'Customer', 'Route', 'Vehicle', 'Status', 'Payment', 'Driver', 'Actions'], rows, 'No bookings found')}
         </section>
       </div>
     `;
@@ -1114,6 +1645,7 @@
         <td>${escapeHtml(fmtDateTime(invoice.createdAt))}</td>
         <td>
           ${bookingId ? renderButtons([
+            `<button class="small-btn primary" data-action="booking-edit-invoice" data-id="${bookingId}">Edit</button>`,
             `<button class="small-btn" data-action="booking-download-invoice" data-id="${bookingId}">Download</button>`,
             `<button class="small-btn gold" data-action="booking-send-invoice" data-id="${bookingId}">Resend</button>`,
             `<button class="small-btn primary" data-action="booking-regenerate-invoice" data-id="${bookingId}">Regenerate</button>`
@@ -1193,12 +1725,21 @@
             <label class="field wide"><span>Payment gateway</span><input name="gatewayName" value="${escapeHtml(settings.paymentSettings?.gatewayName || 'Stripe')}" /></label>
             <label class="field wide"><span>GST %</span><input name="gstPercent" type="number" value="${escapeHtml(String(settings.pricingSettings?.gstPercent ?? settings.billing?.taxPercent ?? 5))}" /></label>
             <label class="field wide"><span>Night charge %</span><input name="nightChargePercent" type="number" value="${escapeHtml(String(settings.pricingSettings?.nightChargePercent ?? 10))}" /></label>
+            <label class="field wide"><span>Local package price</span><input name="localPackagePrice" type="number" value="${escapeHtml(String(settings.pricingSettings?.localPackagePrice ?? settings.pricingSettings?.baseFare ?? 6500))}" /></label>
+            <label class="field wide"><span>Half day package price</span><input name="halfDayPrice" type="number" value="${escapeHtml(String(settings.pricingSettings?.halfDayPrice ?? 3500))}" /></label>
+            <label class="field wide"><span>Extra KM charge</span><input name="extraKmCharge" type="number" value="${escapeHtml(String(settings.pricingSettings?.extraKmCharge ?? settings.pricingSettings?.extraKmRate ?? 28))}" /></label>
+            <label class="field wide"><span>Extra hour charge</span><input name="extraHourCharge" type="number" value="${escapeHtml(String(settings.pricingSettings?.extraHourCharge ?? 500))}" /></label>
+            <label class="field wide"><span>Airport pickup / drop min</span><input name="airportTransferMinCharge" type="number" value="${escapeHtml(String(settings.pricingSettings?.airportTransferMinCharge ?? 2500))}" /></label>
+            <label class="field wide"><span>Airport pickup / drop max</span><input name="airportTransferMaxCharge" type="number" value="${escapeHtml(String(settings.pricingSettings?.airportTransferMaxCharge ?? 3500))}" /></label>
+            <label class="field wide"><span>Outstation min</span><input name="outstationMinCharge" type="number" value="${escapeHtml(String(settings.pricingSettings?.outstationMinCharge ?? 8500))}" /></label>
+            <label class="field wide"><span>Outstation max</span><input name="outstationMaxCharge" type="number" value="${escapeHtml(String(settings.pricingSettings?.outstationMaxCharge ?? 10500))}" /></label>
+            <label class="field wide"><span>Wedding / VIP price</span><input name="weddingVipCharge" type="number" value="${escapeHtml(String(settings.pricingSettings?.weddingVipCharge ?? 12000))}" /></label>
             <label class="field wide"><span>Driver allowance</span><input name="driverAllowance" type="number" value="${escapeHtml(String(settings.pricingSettings?.driverAllowance ?? 0))}" /></label>
-            <label class="field wide"><span>Extra km rate</span><input name="extraKmRate" type="number" value="${escapeHtml(String(settings.pricingSettings?.extraKmRate ?? 0))}" /></label>
             <label class="field wide"><span>Waiting charge / hour</span><input name="waitingChargePerHour" type="number" value="${escapeHtml(String(settings.pricingSettings?.waitingChargePerHour ?? 0))}" /></label>
             <label class="field wide"><span>Default included km</span><input name="defaultIncludedKm" type="number" value="${escapeHtml(String(settings.pricingSettings?.defaultIncludedKm ?? 0))}" /></label>
-            <label class="field wide"><span>Default base fare</span><input name="defaultBaseFare" type="number" value="${escapeHtml(String(settings.pricingSettings?.baseFare ?? 0))}" /></label>
-            <label class="field wide"><span>Default price per km</span><input name="defaultPricePerKm" type="number" value="${escapeHtml(String(settings.pricingSettings?.pricePerKm ?? 0))}" /></label>
+            <label class="field wide"><span>Default included hours</span><input name="defaultIncludedHours" type="number" value="${escapeHtml(String(settings.pricingSettings?.defaultIncludedHours ?? 8))}" /></label>
+            <label class="field wide"><span>Default base fare</span><input name="defaultBaseFare" type="number" value="${escapeHtml(String(settings.pricingSettings?.baseFare ?? settings.pricingSettings?.localPackagePrice ?? 6500))}" /></label>
+            <label class="field wide"><span>Default price per km</span><input name="defaultPricePerKm" type="number" value="${escapeHtml(String(settings.pricingSettings?.pricePerKm ?? settings.pricingSettings?.extraKmCharge ?? 28))}" /></label>
             <label class="field full"><span>Testimonials (Name::Quote per line)</span><textarea name="testimonials">${escapeHtml((homepage.testimonials || []).map((item) => `${item.name}::${item.quote}`).join('\n'))}</textarea></label>
             <label class="field full"><span>Fleet highlights (Title::Description per line)</span><textarea name="fleetHighlights">${escapeHtml((homepage.fleetHighlights || []).map((item) => `${item.title}::${item.description}`).join('\n'))}</textarea></label>
             <label class="inline-toggle"><input type="checkbox" name="emailEnabled" ${settings.notificationSettings?.emailEnabled !== false ? 'checked' : ''} /><span>Email notifications enabled</span></label>
@@ -1275,6 +1816,7 @@
   }
 
   function renderCurrentView() {
+    renderTopbarSurface();
     if (state.view === 'dashboard') renderDashboard();
     else if (state.view === 'bookings') renderBookingsView();
     else if (state.view === 'drivers') renderDriversView();
@@ -1569,12 +2111,8 @@
         toast('Driver assigned', 'Driver linked to booking');
         state.bookings = null;
         await refreshView();
-      } else if (action === 'booking-generate-invoice') {
-        await apiFetch(`/api/admin/bookings/${id}/generate-invoice`, { method: 'POST' });
-        toast('Invoice generated', 'Invoice is ready for download');
-        state.bookings = null;
-        state.dashboard = null;
-        await refreshView();
+      } else if (action === 'booking-edit-invoice' || action === 'booking-generate-invoice') {
+        await openInvoiceEditor(id);
       } else if (action === 'booking-regenerate-invoice') {
         await apiFetch(`/api/admin/bookings/${id}/regenerate-invoice`, { method: 'POST' });
         toast('Invoice regenerated', 'A fresh PDF was created');
@@ -1591,12 +2129,12 @@
         const method = window.prompt('Payment method', 'Cash');
         if (!method) return;
         const amount = window.prompt('Payment amount', '');
-        const status = ['Card', 'Online payment link'].includes(method.trim()) ? 'Paid Online' : 'Paid Offline';
+        const transactionId = window.prompt('Transaction / reference id', '');
         await apiFetch(`/api/admin/bookings/${id}/mark-paid`, {
           method: 'POST',
-          body: JSON.stringify({ paymentMethod: method.trim(), paymentStatus: status, amount: amount ? Number(amount) : undefined })
+          body: JSON.stringify({ paymentMethod: method.trim(), paymentStatus: 'Paid', amount: amount ? Number(amount) : undefined, transactionId: transactionId || '' })
         });
-        toast('Payment recorded', `${status} captured for booking`);
+        toast('Payment recorded', 'Payment captured for booking');
         state.bookings = null;
         state.dashboard = null;
         await refreshView();

@@ -1190,7 +1190,7 @@ td:last-child {
   display: flex;
   gap: 18px;
   will-change: transform;
-  transition: transform .45s cubic-bezier(.22, .8, .22, 1);
+  transition: none;
   width: max-content;
 }
 
