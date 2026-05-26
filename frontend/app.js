@@ -55,10 +55,8 @@
 
   function isBrowserExtensionNoise(reason) {
     const text = String(reason?.message || reason?.stack || reason || '').toLowerCase();
-    return (
-      text.includes('listener indicated an asynchronous response')
-      && text.includes('message channel closed before a response was received')
-    ) || text.includes('listener indicated an asynchronous response')
+    return text.includes('a listener indicated an asynchronous response by returning true')
+      || text.includes('listener indicated an asynchronous response')
       || text.includes('message channel closed before a response was received')
       || text.includes('async response')
       || text.includes('message channel closed');
@@ -173,12 +171,14 @@
     else localStorage.removeItem(AUTH_TOKEN_KEY);
     if (!token) setUser(null);
     renderAuthButtons();
+    syncRealtimeSocket();
   }
 
   function setUser(user) {
     if (user) sessionStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
     else sessionStorage.removeItem(AUTH_USER_KEY);
     renderAuthButtons();
+    syncRealtimeSocket();
   }
 
   function getUser() {
@@ -188,6 +188,73 @@
     } catch (e) {
       return null;
     }
+  }
+
+  let realtimeSocket = null;
+  let realtimeSocketUserId = '';
+
+  function disconnectRealtimeSocket() {
+    if (!realtimeSocket) return;
+    realtimeSocket.removeAllListeners?.();
+    realtimeSocket.disconnect();
+    realtimeSocket = null;
+    realtimeSocketUserId = '';
+  }
+
+  async function refreshBookingsModalIfOpen() {
+    const modal = document.getElementById('bookingsModal');
+    if (!modal || modal.style.display !== 'flex' || !getToken()) return;
+
+    try {
+      const res = await authFetch(apiUrl('/api/bookings'), {}, { retries: 1 });
+      const body = await safeJson(res);
+      if (!res.ok || !body) return;
+      showBookingsModal(body.bookings || []);
+    } catch (error) {
+      console.warn('Unable to refresh live bookings modal', error);
+    }
+  }
+
+  function handleRealtimeCustomerUpdate(payload = {}) {
+    const notification = payload.notification || payload;
+    const eventName = payload.eventName || 'notification:new';
+    const message = notification?.message || payload.message || 'Your booking has been updated.';
+    showGlobalNotification(message, false);
+
+    if (['booking:created', 'booking:status-updated', 'booking:driver-assigned', 'booking:cancelled', 'invoice:generated', 'payment:received', 'payment:refunded', 'booking:updated'].includes(eventName)) {
+      void refreshBookingsModalIfOpen();
+    }
+  }
+
+  function syncRealtimeSocket() {
+    const token = getToken();
+    const user = getUser();
+
+    if (!window.io || !token || !user?.id) {
+      disconnectRealtimeSocket();
+      return;
+    }
+
+    if (realtimeSocket && realtimeSocketUserId === String(user.id)) {
+      return;
+    }
+
+    disconnectRealtimeSocket();
+    realtimeSocketUserId = String(user.id);
+    realtimeSocket = window.io(API_BASE, {
+      withCredentials: true,
+      transports: ['websocket', 'polling'],
+      auth: { token }
+    });
+
+    realtimeSocket.on('connect', () => {
+      realtimeSocket.emit('join:user', user.id);
+    });
+
+    realtimeSocket.on('disconnect', () => undefined);
+    realtimeSocket.on('connect_error', () => undefined);
+
+    realtimeSocket.on('notification:new', (payload) => handleRealtimeCustomerUpdate(payload));
   }
 
   function authFetch(url, opts = {}, requestOptions = {}) {
@@ -508,6 +575,7 @@
 
   // Initialize auth UI state
   renderAuthButtons();
+  syncRealtimeSocket();
 
   // Try to auto-login by fetching profile if token exists and no cached user
   async function fetchProfileOnLoad() {

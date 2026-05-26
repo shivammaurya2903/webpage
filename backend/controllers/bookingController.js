@@ -12,7 +12,7 @@ const { createBookingId } = require('../utils/bookingId');
 const { createInvoiceId } = require('../utils/invoiceId');
 const { buildInvoicePdf } = require('../utils/invoicePdf');
 const { calculateFareQuote } = require('../services/fareCalculator');
-const { notifyAdmins, notifyBookingStatusChange } = require('../services/notificationService');
+const { notifyBookingCreated, notifyBookingStatusChange } = require('../services/notificationService');
 const { bookingConfirmation } = require('../services/emailTemplates');
 const { sendEmail } = require('../services/emailService');
 const { sendWhatsApp } = require('../services/whatsappService');
@@ -292,13 +292,18 @@ const createBooking = asyncHandler(async (req, res) => {
       dropCoordinates: payload.dropCoordinates,
       distanceInKm: pricing.distanceInKm,
       estimatedDuration: pricing.estimatedDuration,
+      duration: pricing.estimatedDuration,
       baseFare: pricing.fareBreakdown.baseFare,
-      perKmRate: pricing.fareBreakdown.perKmRate,
+      perKmRate: pricing.fareBreakdown.pricePerKm,
+      pricePerKm: pricing.fareBreakdown.pricePerKm,
       distanceFare: pricing.fareBreakdown.distanceFare,
       tollCharges: pricing.fareBreakdown.tollCharges,
       waitingCharges: pricing.fareBreakdown.waitingCharges,
       nightCharges: pricing.fareBreakdown.nightCharges,
+      driverAllowance: pricing.fareBreakdown.driverAllowance,
+      extraCharges: pricing.fareBreakdown.extraTravelCharges || 0,
       gstAmount: pricing.fareBreakdown.gstAmount,
+      subtotal: pricing.fareBreakdown.subtotalAmount,
       estimatedFare: pricing.totalFare,
       totalFare: pricing.totalFare,
       fareBreakdown: pricing.fareBreakdown,
@@ -323,17 +328,7 @@ const createBooking = asyncHandler(async (req, res) => {
     throw error;
   }
 
-  await notifyAdmins('booking:new', {
-    bookingId: booking.bookingId,
-    customerName: booking.customerName,
-    pickupLocation: booking.pickupLocation,
-    dropLocation: booking.dropLocation,
-    bookingStatus: booking.bookingStatus,
-    paymentStatus: booking.paymentStatus,
-    estimatedFare: booking.estimatedFare,
-    totalFare: booking.totalFare,
-    tripType: booking.tripType
-  });
+  await notifyBookingCreated(booking);
 
   await sendEmail({
     to: booking.email,
@@ -507,6 +502,16 @@ const downloadBookingInvoice = asyncHandler(async (req, res) => {
 const deleteBooking = asyncHandler(async (req, res) => {
   const booking = await Booking.findById(req.params.id);
   if (!booking) throw new ApiError(404, 'Booking not found');
+
+  await notifyBookingStatusChange({
+    booking,
+    status: 'Cancelled',
+    note: 'Booking deleted by admin',
+    userId: booking.user || null,
+    socketEvent: 'booking:cancelled',
+    adminEvent: 'booking:cancelled',
+    adminTitle: 'Booking cancelled'
+  });
 
   if (booking.assignedDriver) {
     await Driver.updateOne({ _id: booking.assignedDriver }, { $set: { availability: true } });

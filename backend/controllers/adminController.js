@@ -750,7 +750,7 @@ const listNotifications = asyncHandler(async (req, res) => {
   const [notifications, total, unreadCount] = await Promise.all([
     Notification.find({ recipientRole: 'admin' }).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
     Notification.countDocuments({ recipientRole: 'admin' }),
-    Notification.countDocuments({ recipientRole: 'admin', readAt: null })
+    Notification.countDocuments({ recipientRole: 'admin', $or: [{ isRead: { $ne: true } }, { readAt: null }] })
   ]);
 
   res.json({ success: true, page, limit, total, pages: Math.ceil(total / limit), unreadCount, notifications });
@@ -759,6 +759,7 @@ const listNotifications = asyncHandler(async (req, res) => {
 const markNotificationRead = asyncHandler(async (req, res) => {
   const notification = await Notification.findById(req.params.id);
   if (!notification) throw new ApiError(404, 'Notification not found');
+  notification.isRead = true;
   notification.readAt = new Date();
   await notification.save();
   res.json({ success: true, notification });

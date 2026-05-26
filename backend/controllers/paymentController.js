@@ -2,7 +2,7 @@ const Booking = require('../models/Booking');
 const Payment = require('../models/Payment');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
-const { notifyAdmins, notifyBookingStatusChange } = require('../services/notificationService');
+const { notifyBookingStatusChange, notifyCustomer } = require('../services/notificationService');
 const { sendEmail } = require('../services/emailService');
 const { paymentReceipt } = require('../services/emailTemplates');
 
@@ -44,7 +44,26 @@ const refundPayment = asyncHandler(async (req, res) => {
     status: payment.booking.bookingStatus,
     note: 'Payment refunded and booking cancelled',
     userId: payment.booking.user || null,
-    socketEvent: 'booking:status-updated'
+    socketEvent: 'booking:status-updated',
+    adminEvent: 'booking:cancelled',
+    adminTitle: 'Booking cancelled'
+  });
+
+  await notifyCustomer({
+    userId: payment.booking.user || null,
+    email: payment.booking.email,
+    phone: payment.booking.phone,
+    socketEvent: 'payment:refunded',
+    payload: {
+      title: 'Payment refunded',
+      message: `${payment.booking.bookingId} was refunded and cancelled`,
+      bookingId: payment.booking.bookingId,
+      paymentStatus: payment.booking.paymentStatus,
+      bookingStatus: payment.booking.bookingStatus,
+      amount: payment.amount,
+      tripType: payment.booking.tripType,
+      vehicle: payment.booking.selectedCar
+    }
   });
 
   res.json({ success: true, message: 'Refund marked successfully', refund: null, manualRefund: true });

@@ -71,6 +71,7 @@
     messages: null,
     settings: null,
     notifications: null,
+    notificationUnreadCount: 0,
     charts: {},
     socket: null,
     busy: false
@@ -109,6 +110,32 @@
     return `${fmtDate(value)} ${date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`;
   }
 
+  function getNotificationSummary(item) {
+    const metadata = item?.metadata || {};
+    const customerName = item?.customerName || metadata.customerName || metadata.name || 'Customer';
+    const rideType = metadata.serviceLabel || metadata.serviceType || (metadata.tripType ? String(metadata.tripType).replace(/[-_]/g, ' ') : '') || 'Ride';
+    const vehicle = metadata.vehicle || metadata.selectedCar || metadata.vehicleName || '';
+    const bookingStatus = metadata.bookingStatus || metadata.status || metadata.paymentStatus || item.status || '';
+
+    return {
+      customerName,
+      rideType,
+      vehicle,
+      bookingStatus
+    };
+  }
+
+  function upsertRealtimeNotification(notification) {
+    if (!notification?._id) return;
+    const list = Array.isArray(state.notifications) ? [...state.notifications] : [];
+    const existingIndex = list.findIndex((item) => item._id === notification._id);
+    if (existingIndex >= 0) list.splice(existingIndex, 1, notification);
+    else list.unshift(notification);
+    state.notifications = list;
+    state.notificationUnreadCount = list.filter((item) => !item.isRead && !item.readAt).length;
+    renderShellNotifications();
+  }
+
   function getInitials(value) {
     const text = String(value || 'SA').trim();
     if (!text) return 'SA';
@@ -128,6 +155,27 @@
   function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
   }
+
+  function isBrowserExtensionNoise(reason) {
+    const text = String(reason?.message || reason?.stack || reason || '').toLowerCase();
+    return text.includes('a listener indicated an asynchronous response by returning true')
+      || text.includes('listener indicated an asynchronous response')
+      || text.includes('message channel closed before a response was received')
+      || text.includes('async response')
+      || text.includes('message channel closed');
+  }
+
+  window.addEventListener('unhandledrejection', (event) => {
+    if (isBrowserExtensionNoise(event?.reason)) {
+      if (typeof event.preventDefault === 'function') event.preventDefault();
+    }
+  });
+
+  window.addEventListener('error', (event) => {
+    if (isBrowserExtensionNoise(event?.message || event?.error?.message || '')) {
+      if (typeof event.preventDefault === 'function') event.preventDefault();
+    }
+  });
 
   function toast(title, message, type = 'success') {
     const node = document.createElement('div');
@@ -313,11 +361,11 @@
 
   function renderShellNotifications() {
     const items = (state.notifications || []).slice(0, 6);
-    const unreadCount = items.filter((item) => !item.readAt).length;
+    const unreadCount = state.notificationUnreadCount || items.filter((item) => !item.readAt && !item.isRead).length;
 
     if (el.notificationCount) {
-      el.notificationCount.hidden = !items.length;
-      el.notificationCount.textContent = String(unreadCount || items.length || 0);
+      el.notificationCount.hidden = !unreadCount;
+      el.notificationCount.textContent = String(unreadCount || 0);
     }
 
     if (el.notificationList) {
@@ -328,7 +376,8 @@
             <span class="notification-item__copy">
               <strong>${escapeHtml(item.title || item.type || 'Notification')}</strong>
               <span>${escapeHtml(item.message || 'Update available')}</span>
-              <small>${escapeHtml(fmtDateTime(item.createdAt))}</small>
+              <small>${escapeHtml(getNotificationSummary(item).customerName)} · ${escapeHtml(getNotificationSummary(item).rideType)}${getNotificationSummary(item).vehicle ? ` · ${escapeHtml(getNotificationSummary(item).vehicle)}` : ''}</small>
+              <small>${escapeHtml(getNotificationSummary(item).bookingStatus || 'Pending')} · ${escapeHtml(fmtDateTime(item.createdAt))}</small>
             </span>
           </button>
         `).join('')
@@ -363,6 +412,77 @@
       el.appShell.classList.remove('sidebar-open');
       document.body.classList.remove('shell-open');
     }
+  }
+
+  function disconnectRealtimeSocket() {
+    if (!state.socket) return;
+    state.socket.removeAllListeners?.();
+    state.socket.disconnect();
+    state.socket = null;
+    if (el.socketStatus) el.socketStatus.innerHTML = '<span style="background: var(--danger);"></span>Offline';
+  }
+
+  function handleRealtimeNotification(payload = {}) {
+    const notification = payload.notification || payload;
+    const eventName = payload.eventName || 'notification:new';
+    if (notification?._id) {
+      upsertRealtimeNotification(notification);
+    }
+
+    const shouldRefreshBookings = ['booking:new', 'booking:status-updated', 'booking:driver-assigned', 'booking:cancelled', 'invoice:generated', 'invoice:resent', 'payment:completed', 'payment:received'].includes(eventName);
+    const shouldRefreshDashboard = shouldRefreshBookings || ['payment:refunded'].includes(eventName);
+
+    if (shouldRefreshBookings) state.bookings = null;
+    if (shouldRefreshDashboard) state.dashboard = null;
+
+    const title = notification?.title || payload?.title || 'Live update';
+    const message = notification?.message || payload?.message || 'Dashboard updated';
+    toast(title, message, 'success');
+
+    if (state.view === 'notifications') {
+      void loadNotifications(true).then(() => renderCurrentView()).catch(() => undefined);
+      return;
+    }
+
+    if (state.view === 'bookings' && shouldRefreshBookings) {
+      void refreshView();
+      return;
+    }
+
+    if (state.view === 'dashboard' && shouldRefreshDashboard) {
+      void refreshView();
+      return;
+    }
+
+    if (shouldRefreshDashboard) void loadDashboard(true).catch(() => undefined);
+    if (shouldRefreshBookings) void loadBookings(true).catch(() => undefined);
+    void loadNotifications(true).catch(() => undefined);
+  }
+
+  function connectRealtimeSocket() {
+    if (!window.io || !state.token) return;
+
+    disconnectRealtimeSocket();
+    state.socket = window.io(API_BASE, {
+      withCredentials: true,
+      transports: ['websocket', 'polling'],
+      auth: { token: state.token }
+    });
+
+    state.socket.on('connect', () => {
+      if (el.socketStatus) el.socketStatus.innerHTML = '<span></span>Live';
+      state.socket.emit('join:admin');
+    });
+
+    state.socket.on('disconnect', () => {
+      if (el.socketStatus) el.socketStatus.innerHTML = '<span style="background: var(--danger);"></span>Offline';
+    });
+
+    state.socket.on('connect_error', () => {
+      if (el.socketStatus) el.socketStatus.innerHTML = '<span style="background: var(--danger);"></span>Offline';
+    });
+
+    state.socket.on('notification:new', (payload) => handleRealtimeNotification(payload));
   }
 
   function toggleSidebarShell() {
@@ -710,6 +830,7 @@
     if (state.notifications && !force) return state.notifications;
     const body = await apiFetch('/api/admin/notifications');
     state.notifications = body.notifications || [];
+    state.notificationUnreadCount = Number(body.unreadCount || 0);
     renderShellNotifications();
     return state.notifications;
   }
@@ -1131,8 +1252,10 @@
     const notifications = state.notifications || [];
     const rows = notifications.map((item) => `
       <tr>
-        <td><strong>${escapeHtml(item.title || item.type || '')}</strong></td>
+        <td><strong>${escapeHtml(item.title || item.type || '')}</strong><div class="helper">${escapeHtml(item.type || '')}</div></td>
         <td>${escapeHtml(item.message || '')}</td>
+        <td>${escapeHtml(getNotificationSummary(item).customerName)}<div class="helper">${escapeHtml(getNotificationSummary(item).rideType)}${getNotificationSummary(item).vehicle ? ` · ${escapeHtml(getNotificationSummary(item).vehicle)}` : ''}</div></td>
+        <td>${escapeHtml(item.bookingId || item.metadata?.bookingId || '—')}<div class="helper">${escapeHtml(getNotificationSummary(item).bookingStatus || 'Pending')}</div></td>
         <td>${renderBadge(item.readAt ? 'Read' : 'Unread')}</td>
         <td>${escapeHtml(fmtDateTime(item.createdAt))}</td>
         <td>${renderButtons([
@@ -1145,7 +1268,7 @@
     el.viewRoot.innerHTML = `
       <div class="view">
         <section class="card table-card">
-          ${tableShell(['Title', 'Message', 'State', 'Created', 'Actions'], rows, 'No notifications found')}
+          ${tableShell(['Title', 'Message', 'Customer', 'Booking', 'State', 'Created', 'Actions'], rows, 'No notifications found')}
         </section>
       </div>
     `;
@@ -1583,21 +1706,7 @@
       syncTopbarSurface();
       syncSidebarMode();
       await Promise.all([loadDashboard(), loadNotifications(true)]);
-      if (window.io) {
-        state.socket = window.io(API_BASE, { withCredentials: true, transports: ['websocket', 'polling'] });
-        state.socket.on('connect', () => {
-          el.socketStatus.innerHTML = '<span></span>Live';
-          state.socket.emit('join:admin');
-        });
-        state.socket.on('disconnect', () => {
-          el.socketStatus.innerHTML = '<span style="background: var(--danger);"></span>Offline';
-        });
-        state.socket.onAny(() => {
-          state.dashboard = null;
-          state.notifications = null;
-          if (state.view === 'dashboard' || state.view === 'notifications') refreshView();
-        });
-      }
+      connectRealtimeSocket();
       renderCurrentView();
     } catch (error) {
       state.token = '';
@@ -1650,7 +1759,7 @@
     state.messages = null;
     state.settings = null;
     state.notifications = null;
-    if (state.socket) state.socket.disconnect();
+    disconnectRealtimeSocket();
     if (el.appShell) el.appShell.classList.remove('sidebar-open', 'sidebar-collapsed');
     document.body.classList.remove('shell-open');
     showLogin();

@@ -80,80 +80,58 @@ function truncateText(value, maxLength = 42, fallback = '—') {
 }
 
 function getSubtotalFromFare(fare = {}, booking = {}, invoice = {}) {
-  const baseFare = Number(fare.baseFare || fare.baseAmount || booking.baseFare || invoice.subtotalAmount || booking.estimatedFare || 0);
-  const distanceCharges = Number(fare.distanceFare || fare.distanceCharges || 0);
+  const subtotal = Number(fare.subtotalAmount || fare.subtotal || invoice.subtotalAmount || booking.subtotal || 0);
+  if (subtotal > 0) return subtotal;
+
+  const baseFare = Number(fare.packageBaseFare || fare.baseFare || fare.baseAmount || booking.baseFare || booking.estimatedFare || 0);
+  const distanceFare = Number(fare.distanceFare || fare.distanceCharges || 0);
   const driverAllowance = Number(fare.driverAllowance || 0);
   const tollCharges = Number(fare.tollCharges || 0);
   const waitingCharges = Number(fare.waitingCharges || 0);
   const nightCharges = Number(fare.nightCharges || 0);
+  const extraTravelCharges = Number(fare.extraTravelCharges || booking.extraCharges || 0);
   const discountAmount = Math.max(0, Number(invoice.discountAmount || booking.finalBill?.discountAmount || fare.discountAmount || 0));
 
-  return Math.max(0, baseFare + distanceCharges + driverAllowance + tollCharges + waitingCharges + nightCharges - discountAmount);
+  return Math.max(0, baseFare + distanceFare + driverAllowance + tollCharges + waitingCharges + nightCharges + extraTravelCharges - discountAmount);
 }
 
 function buildFinancialRows(model) {
-  const rows = [
-    {
-      description: 'Base Fare',
+  if (Array.isArray(model.lineItems) && model.lineItems.length) return model.lineItems;
+
+  const rows = [];
+  if (model.fare.packageBaseFare || model.fare.baseFare) {
+    rows.push({
+      description: model.fare.packageBaseFare ? 'Package / Base Fare' : 'Base Fare',
       quantity: 1,
-      unitPrice: model.fare.baseFare,
-      tax: 0,
-      amount: model.fare.baseFare
-    },
-    {
-      description: 'Distance Charges',
-      quantity: 1,
-      unitPrice: model.fare.distanceCharges,
-      tax: 0,
-      amount: model.fare.distanceCharges
-    },
-    {
-      description: 'Driver Allowance',
-      quantity: 1,
-      unitPrice: model.fare.driverAllowance,
-      tax: 0,
-      amount: model.fare.driverAllowance
-    },
-    {
-      description: 'Toll Charges',
-      quantity: 1,
-      unitPrice: model.fare.tollCharges,
-      tax: 0,
-      amount: model.fare.tollCharges
-    },
-    {
-      description: 'Waiting Charges',
-      quantity: 1,
-      unitPrice: model.fare.waitingCharges,
-      tax: 0,
-      amount: model.fare.waitingCharges
-    },
-    {
-      description: 'Night Charges',
-      quantity: 1,
-      unitPrice: model.fare.nightCharges,
-      tax: 0,
-      amount: model.fare.nightCharges
-    },
-    {
-      description: `GST (${model.tax.taxPercent}%)`,
-      quantity: 1,
-      unitPrice: model.tax.subtotal,
-      tax: model.tax.taxAmount,
-      amount: model.tax.taxAmount,
-      isTaxRow: true
-    }
-  ];
+      unitPrice: model.fare.packageBaseFare || model.fare.baseFare,
+      amount: model.fare.packageBaseFare || model.fare.baseFare
+    });
+  }
+
+  rows.push({
+    description: model.fare.tripType === 'local-package' ? 'Extra Distance Charge' : 'Distance Fare',
+    quantity: 1,
+    unitPrice: model.fare.billableDistance || model.fare.tripDistance || 0,
+    amount: model.fare.distanceFare || 0
+  });
+
+  if (model.fare.extraHourCharge) rows.push({ description: 'Extra Hour Charge', quantity: 1, unitPrice: model.fare.extraHourCharge, amount: model.fare.extraHourCharge });
+  if (model.fare.tollCharges) rows.push({ description: 'Toll Charges', quantity: 1, unitPrice: model.fare.tollCharges, amount: model.fare.tollCharges });
+  if (model.fare.driverAllowance) rows.push({ description: 'Driver Allowance', quantity: Math.max(1, Number(model.fare.driverAllowanceDays || 1)), unitPrice: model.fare.driverAllowance, amount: model.fare.driverAllowance });
+  if (model.fare.waitingCharges) rows.push({ description: 'Waiting Charges', quantity: 1, unitPrice: model.fare.waitingCharges, amount: model.fare.waitingCharges });
+  if (model.fare.nightCharges) rows.push({ description: 'Night Charges', quantity: 1, unitPrice: model.fare.nightCharges, amount: model.fare.nightCharges });
+  if (model.fare.extraTravelCharges) rows.push({ description: 'Extra Travel Charges', quantity: 1, unitPrice: model.fare.extraTravelCharges, amount: model.fare.extraTravelCharges });
+
+  rows.push({
+    description: `GST (${model.tax.taxPercent}%)`,
+    quantity: 1,
+    unitPrice: model.tax.subtotal,
+    amount: model.tax.taxAmount,
+    isTaxRow: true
+  });
 
   if (model.tax.discountAmount > 0) {
-    rows.push({
-      description: 'Discounts',
-      quantity: 1,
-      unitPrice: model.tax.discountAmount,
-      tax: 0,
-      amount: -model.tax.discountAmount,
-      isDiscountRow: true
-    });
+    rows.push({ description: 'Discounts', quantity: 1, unitPrice: model.tax.discountAmount, amount: -model.tax.discountAmount, isDiscountRow: true });
   }
 
   return rows;
@@ -184,7 +162,7 @@ function getBusinessInfo(settings = {}) {
 }
 
 function getLineItems(booking, invoice, businessInfo) {
-  const fare = invoice.fareBreakdown || booking.finalBill || {};
+  const fare = invoice.fareBreakdown || booking.fareBreakdown || booking.finalBill || {};
   const taxPercent = Number(fare.gstPercent || invoice.taxPercent || businessInfo.taxPercent || 5);
   const subtotal = getSubtotalFromFare(fare, booking, invoice);
   const discountAmount = Math.max(0, Number(invoice.discountAmount || booking.finalBill?.discountAmount || fare.discountAmount || 0));
@@ -192,12 +170,19 @@ function getLineItems(booking, invoice, businessInfo) {
 
   return buildFinancialRows({
     fare: {
+      packageBaseFare: Number(fare.packageBaseFare || 0),
       baseFare: Number(fare.baseFare || fare.baseAmount || booking.baseFare || invoice.subtotalAmount || booking.estimatedFare || 0),
-      distanceCharges: Number(fare.distanceFare || fare.distanceCharges || 0),
+      distanceFare: Number(fare.distanceFare || fare.distanceCharges || 0),
+      tripType: fare.tripType || booking.tripType || '',
+      tripDistance: Number(fare.tripDistance || booking.distanceInKm || 0),
+      billableDistance: Number(fare.billableDistance || booking.distanceInKm || 0),
+      extraHourCharge: Number(fare.extraHourCharge || 0),
       driverAllowance: Number(fare.driverAllowance || 0),
+      driverAllowanceDays: Number(fare.driverAllowanceDays || 1),
       tollCharges: Number(fare.tollCharges || 0),
       waitingCharges: Number(fare.waitingCharges || 0),
-      nightCharges: Number(fare.nightCharges || 0)
+      nightCharges: Number(fare.nightCharges || 0),
+      extraTravelCharges: Number(fare.extraTravelCharges || booking.extraCharges || 0)
     },
     tax: {
       subtotal,
@@ -210,31 +195,39 @@ function getLineItems(booking, invoice, businessInfo) {
 
 function buildInvoiceModel({ booking, invoice, driver, settings }) {
   const business = getBusinessInfo(settings);
-  const fare = invoice.fareBreakdown || booking.finalBill || {};
+  const fare = invoice.fareBreakdown || booking.fareBreakdown || booking.finalBill || {};
   const discountAmount = Math.max(0, Number(invoice.discountAmount || booking.finalBill?.discountAmount || fare.discountAmount || 0));
   const taxPercent = Number(invoice.taxPercent || booking.finalBill?.gstPercent || fare.gstPercent || business.taxPercent || 5);
-  const baseAmount = Number(fare.baseFare || fare.baseAmount || booking.baseFare || invoice.subtotalAmount || booking.estimatedFare || 0);
+  const baseAmount = Number(fare.packageBaseFare || fare.baseFare || fare.baseAmount || booking.baseFare || invoice.subtotalAmount || booking.estimatedFare || 0);
   const distanceAmount = Number(fare.distanceFare || fare.distanceCharges || 0);
   const waitingAmount = Number(fare.waitingCharges || 0);
   const tollAmount = Number(fare.tollCharges || 0);
   const driverAllowance = Number(fare.driverAllowance || 0);
   const nightAmount = Number(fare.nightCharges || 0);
-  const subtotal = Math.max(0, baseAmount + distanceAmount + waitingAmount + tollAmount + driverAllowance + nightAmount - discountAmount);
+  const extraAmount = Number(fare.extraTravelCharges || booking.extraCharges || 0);
+  const subtotal = Math.max(0, Number(fare.subtotalAmount || fare.subtotal || baseAmount + distanceAmount + waitingAmount + tollAmount + driverAllowance + nightAmount + extraAmount - discountAmount));
   const taxAmount = Number(invoice.taxAmount || booking.finalBill?.gstAmount || fare.gstAmount || Math.round(subtotal * (taxPercent / 100)));
-  const cgstAmount = Number(invoice.cgstAmount || Math.round(taxAmount / 2));
-  const sgstAmount = Number(invoice.sgstAmount || Math.max(0, taxAmount - cgstAmount));
-  const totalAmount = Number(invoice.totalFare || booking.totalFare || booking.finalBill?.totalAmount || Math.max(0, subtotal + taxAmount));
+  const cgstAmount = Number(invoice.cgstAmount || fare.cgstAmount || Math.round(taxAmount / 2));
+  const sgstAmount = Number(invoice.sgstAmount || fare.sgstAmount || Math.max(0, taxAmount - cgstAmount));
+  const totalAmount = Number(invoice.totalFare || booking.totalFare || fare.totalAmount || booking.finalBill?.totalAmount || Math.max(0, subtotal + taxAmount));
   const paymentStatus = invoice.paymentStatus || booking.paymentStatus || 'Pending';
   const amountPaid = Number(invoice.amountPaid || booking.finalBill?.paidAmount || (['Paid', 'Paid Offline', 'Paid Online', 'Fully Paid'].includes(paymentStatus) ? totalAmount : 0));
   const balanceDue = Math.max(0, totalAmount - amountPaid);
   const lineItems = buildFinancialRows({
     fare: {
       baseFare: baseAmount,
-      distanceCharges: distanceAmount,
+      packageBaseFare: fare.packageBaseFare || 0,
+      distanceFare: distanceAmount,
+      tripType: fare.tripType || booking.tripType,
+      tripDistance: fare.tripDistance || booking.distanceInKm || 0,
+      billableDistance: fare.billableDistance || booking.distanceInKm || 0,
+      extraHourCharge: fare.extraHourCharge || 0,
       driverAllowance,
+      driverAllowanceDays: fare.driverAllowanceDays || 1,
       tollCharges: tollAmount,
       waitingCharges: waitingAmount,
-      nightCharges: nightAmount
+      nightCharges: nightAmount,
+      extraTravelCharges: extraAmount
     },
     tax: {
       subtotal,
@@ -386,14 +379,14 @@ function drawCardRow(doc, fonts, cards, options = {}) {
 
 function drawTable(doc, fonts, rows) {
   const startX = doc.page.margins.left;
-  const widths = [220, 42, 84, 66, 107];
+  const widths = [250, 46, 104, 114];
   const tableWidth = widths.reduce((sum, value) => sum + value, 0);
   const headerY = doc.y;
   const rowHeight = 15;
   const headerHeight = 19;
 
   doc.roundedRect(startX, headerY, tableWidth, headerHeight, 7).fillAndStroke('#5b21b6', '#5b21b6');
-  ['Description', 'Qty', 'Unit Price', 'Tax', 'Amount'].forEach((label, index) => {
+  ['Description', 'Qty', 'Rate', 'Amount'].forEach((label, index) => {
     const x = startX + widths.slice(0, index).reduce((sum, value) => sum + value, 0);
     doc.fillColor('#ffffff').font(fonts.bold).fontSize(7.1).text(label, x + 7, headerY + 5.5, {
       width: widths[index] - 14,
@@ -411,7 +404,6 @@ function drawTable(doc, fonts, rows) {
       truncateText(row.description, 34),
       String(row.quantity ?? 1),
       formatMoney(row.unitPrice ?? row.rate ?? 0),
-      formatMoneySigned(row.tax ?? 0),
       formatMoneySigned(row.amount ?? 0)
     ];
 
@@ -431,8 +423,8 @@ function drawTable(doc, fonts, rows) {
 }
 
 function drawSummaryBox(doc, fonts, model) {
-  const boxWidth = 214;
-  const boxHeight = 82;
+  const boxWidth = 220;
+  const boxHeight = 98;
   const x = doc.page.width - doc.page.margins.right - boxWidth;
   const y = doc.y + 2;
 
@@ -443,6 +435,7 @@ function drawSummaryBox(doc, fonts, model) {
     ['Subtotal', formatMoney(model.tax.subtotal), false],
     ['CGST', formatMoney(model.tax.cgstAmount), false],
     ['SGST', formatMoney(model.tax.sgstAmount), false],
+    ['GST', formatMoney(model.tax.taxAmount), false],
     ['Grand Total', formatMoney(model.tax.totalAmount), true],
     ['Amount Paid', formatMoney(model.tax.amountPaid), false],
     ['Remaining Balance', formatMoney(model.tax.balanceDue), false]
