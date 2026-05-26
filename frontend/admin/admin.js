@@ -28,6 +28,7 @@
     sidebarToggle: document.getElementById('sidebarToggle'),
     appShell: document.querySelector('.app-shell'),
     sideNav: document.getElementById('sideNav'),
+    sidebarNavRoot: document.querySelector('#appView .sidebar'),
     viewRoot: document.getElementById('viewRoot'),
     viewLabel: document.getElementById('viewLabel'),
     viewTitle: document.getElementById('viewTitle'),
@@ -732,7 +733,8 @@
 
   function setView(view) {
     state.view = view;
-    el.sideNav.querySelectorAll('.nav-item').forEach((btn) => btn.classList.toggle('is-active', btn.dataset.view === view));
+    const navRoot = el.sidebarNavRoot || el.sideNav;
+    navRoot?.querySelectorAll('.nav-item[data-view]').forEach((btn) => btn.classList.toggle('is-active', btn.dataset.view === view));
     const labels = {
       dashboard: ['Dashboard', 'Luxury Operations Overview'],
       bookings: ['Bookings', 'Booking Management'],
@@ -2335,7 +2337,8 @@
         el.notificationDropdown.open = false;
       }
     });
-    el.sideNav.addEventListener('click', async (event) => {
+    const navRoot = el.sidebarNavRoot || el.sideNav;
+    navRoot?.addEventListener('click', async (event) => {
       const button = event.target.closest('[data-view]');
       if (!button) return;
       setView(button.dataset.view);
