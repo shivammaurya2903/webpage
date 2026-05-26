@@ -41,8 +41,6 @@
     sidebarAvatar: document.getElementById('sidebarAvatar'),
     sidebarAdminName: document.getElementById('sidebarAdminName'),
     sidebarAdminEmail: document.getElementById('sidebarAdminEmail'),
-    profileName: document.getElementById('profileName'),
-    profileAvatar: document.getElementById('profileAvatar'),
     notificationCount: document.getElementById('notificationCount'),
     notificationList: document.getElementById('notificationList'),
     notificationDropdown: document.getElementById('notificationDropdown'),
@@ -52,8 +50,7 @@
     modalEyebrow: document.getElementById('modalEyebrow'),
     modalBody: document.getElementById('modalBody'),
     closeModal: document.getElementById('closeModal'),
-    toastHost: document.getElementById('toastHost'),
-    socketStatus: document.getElementById('socketStatus')
+    toastHost: document.getElementById('toastHost')
   };
 
   const state = {
@@ -406,8 +403,6 @@
     if (el.sidebarAvatar) el.sidebarAvatar.textContent = initials;
     if (el.sidebarAdminName) el.sidebarAdminName.textContent = name;
     if (el.sidebarAdminEmail) el.sidebarAdminEmail.textContent = email;
-    if (el.profileName) el.profileName.textContent = name;
-    if (el.profileAvatar) el.profileAvatar.textContent = initials;
     renderShellNotifications();
   }
 
@@ -644,7 +639,6 @@
     state.socket.removeAllListeners?.();
     state.socket.disconnect();
     state.socket = null;
-    if (el.socketStatus) el.socketStatus.innerHTML = '<span style="background: var(--danger);"></span>Offline';
   }
 
   function handleRealtimeNotification(payload = {}) {
@@ -695,16 +689,7 @@
     });
 
     state.socket.on('connect', () => {
-      if (el.socketStatus) el.socketStatus.innerHTML = '<span></span>Live';
       state.socket.emit('join:admin');
-    });
-
-    state.socket.on('disconnect', () => {
-      if (el.socketStatus) el.socketStatus.innerHTML = '<span style="background: var(--danger);"></span>Offline';
-    });
-
-    state.socket.on('connect_error', () => {
-      if (el.socketStatus) el.socketStatus.innerHTML = '<span style="background: var(--danger);"></span>Offline';
     });
 
     state.socket.on('notification:new', (payload) => handleRealtimeNotification(payload));
@@ -1439,17 +1424,18 @@
 
     el.viewRoot.innerHTML = `
       <div class="view booking-view">
-        <section class="page-header">
-          <h3>Booking Management</h3>
-          <p>Manage bookings, approvals, drivers, payments and invoices.</p>
-        </section>
-
-        <section class="booking-toolbar-container">
+        <section class="card booking-toolbar-container">
+          <div class="booking-page-head">
+            <div>
+              <h3>Booking Management</h3>
+              <p>Approvals, driver assignment, invoice actions, and ride status in one compact workspace.</p>
+            </div>
+            <span class="booking-count-chip">${bookings.length} booking${bookings.length === 1 ? '' : 's'}</span>
+          </div>
           ${getBookingToolbarMarkup()}
         </section>
 
         <section class="card table-card booking-table-card">
-          <div class="card-header booking-table-head"><div><h3>Booking Table</h3></div></div>
           ${tableShell(['Booking', 'Customer', 'Route', 'Vehicle', 'Status', 'Payment', 'Driver', 'Actions'], rows, 'No bookings found')}
         </section>
       </div>
@@ -2325,11 +2311,6 @@
           el.appShell.classList.remove('sidebar-open');
           document.body.classList.remove('shell-open');
         }
-        return;
-      }
-      const shellAction = event.target.closest('[data-shell-action="logout"]');
-      if (shellAction) {
-        logout();
         return;
       }
       const closeNotifications = event.target.closest('[data-shell-action="close-notifications"]');

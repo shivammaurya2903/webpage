@@ -1039,6 +1039,16 @@
     </a>
   </div>
 
+  <!-- AUTH FEEDBACK MODAL (Global Error/Success Overlay) -->
+  <div id="authFeedbackModal" class="auth-feedback-modal" aria-hidden="true">
+    <div class="auth-feedback-modal__card" role="alertdialog" aria-modal="true" aria-labelledby="authFeedbackTitle" aria-describedby="authFeedbackReason">
+      <div class="auth-feedback-modal__badge" id="authFeedbackIcon" aria-hidden="true">⚠</div>
+      <h3 id="authFeedbackTitle" class="auth-feedback-modal__title">Login Failed</h3>
+      <p id="authFeedbackReason" class="auth-feedback-modal__reason">Reason: Invalid email or password.</p>
+      <button id="authFeedbackActionBtn" class="btn btn-primary auth-feedback-modal__action" type="button">Try Again</button>
+    </div>
+  </div>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="app.js"></script>
 </body>

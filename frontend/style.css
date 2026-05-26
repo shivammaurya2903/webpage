@@ -154,6 +154,116 @@
   color: var(--primary);
 }
 
+/* =====================================================
+   AUTH FEEDBACK MODAL (Global Error/Success Overlay)
+   ===================================================== */
+
+.auth-feedback-modal {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+  background: rgba(0, 0, 0, 0.45);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  z-index: 11000;
+}
+
+.auth-feedback-modal.is-open {
+  display: flex;
+}
+
+.auth-feedback-modal__card {
+  width: min(500px, calc(100vw - 44px));
+  min-height: 220px;
+  border-radius: 20px;
+  padding: 26px 24px 22px;
+  text-align: center;
+  border: 1px solid rgba(212, 175, 55, 0.32);
+  background:
+    radial-gradient(520px 200px at 10% -10%, rgba(212, 175, 55, 0.18), transparent 45%),
+    radial-gradient(460px 220px at 95% 0%, rgba(143, 74, 199, 0.28), transparent 52%),
+    linear-gradient(160deg, rgba(35, 10, 54, 0.96), rgba(53, 16, 79, 0.95));
+  box-shadow: 0 30px 60px rgba(8, 2, 16, 0.5);
+  color: #fffaf0;
+  animation: authFeedbackPop 0.22s ease-out;
+}
+
+@keyframes authFeedbackPop {
+  from {
+    transform: translateY(14px) scale(0.98);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+.auth-feedback-modal__badge {
+  width: 68px;
+  height: 68px;
+  margin: 0 auto 14px;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 34px;
+  line-height: 1;
+  border: 1px solid rgba(212, 175, 55, 0.42);
+  background: linear-gradient(145deg, rgba(212, 175, 55, 0.26), rgba(255, 230, 149, 0.1));
+  box-shadow: 0 12px 28px rgba(212, 175, 55, 0.15);
+}
+
+.auth-feedback-modal__title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 34px;
+  line-height: 1.08;
+  color: #ffe7a2;
+  margin-bottom: 12px;
+}
+
+.auth-feedback-modal__reason {
+  font-size: 15px;
+  line-height: 1.7;
+  color: rgba(255, 248, 229, 0.96);
+  margin-bottom: 20px;
+}
+
+.auth-feedback-modal__action {
+  min-width: 170px;
+  margin-inline: auto;
+}
+
+.auth-feedback-modal.is-success .auth-feedback-modal__badge {
+  background: linear-gradient(145deg, rgba(88, 203, 126, 0.35), rgba(61, 140, 84, 0.16));
+  border-color: rgba(129, 229, 159, 0.5);
+  box-shadow: 0 12px 28px rgba(78, 181, 112, 0.2);
+}
+
+.auth-feedback-modal.is-success .auth-feedback-modal__title {
+  color: #d8ffd8;
+}
+
+@media (max-width: 640px) {
+  .auth-feedback-modal {
+    padding: 12px;
+  }
+
+  .auth-feedback-modal__card {
+    width: 90vw;
+    min-height: 208px;
+    padding: 24px 18px 20px;
+  }
+
+  .auth-feedback-modal__title {
+    font-size: 30px;
+  }
+}
+
 /* booking uses .has-error already */
 
 

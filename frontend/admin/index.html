@@ -135,7 +135,6 @@
               <input id="globalSearch" type="search" placeholder="Search current view" />
             </label>
           </div>
-          <div class="status-chip" id="socketStatus"><span></span>Live</div>
           <details class="topbar-dropdown" id="notificationDropdown">
             <summary class="icon-button icon-button--soft" aria-label="Notifications">
               <i class="fa-solid fa-bell"></i>
@@ -160,29 +159,10 @@
           <button type="button" id="refreshButton" class="icon-button icon-button--soft" aria-label="Refresh current view">
             <i class="fa-solid fa-rotate-right"></i>
           </button>
-          <details class="topbar-dropdown" id="profileDropdown">
-            <summary class="profile-chip" aria-label="Admin profile menu">
-              <span class="profile-avatar" id="adminAvatar">SA</span>
-              <span class="profile-copy">
-                <small>Signed in</small>
-                <strong id="adminChip">Admin</strong>
-              </span>
-            </summary>
-            <div class="dropdown-panel dropdown-panel--profile">
-              <div class="profile-summary">
-                <span class="profile-avatar profile-avatar--large" id="profileAvatar">SA</span>
-                <div>
-                  <p class="eyebrow">Luxury Admin</p>
-                  <strong id="profileName">Site Admin</strong>
-                  <div class="helper">Premium travel operations dashboard</div>
-                </div>
-              </div>
-              <button type="button" class="secondary-btn full-width" data-shell-action="logout">
-                <i class="fa-solid fa-right-from-bracket"></i>
-                <span>Logout</span>
-              </button>
-            </div>
-          </details>
+          <div class="topbar-admin" aria-label="Signed in admin">
+            <span class="profile-avatar" id="adminAvatar">SA</span>
+            <strong class="topbar-admin-name" id="adminChip">Admin</strong>
+          </div>
         </div>
       </header>
 

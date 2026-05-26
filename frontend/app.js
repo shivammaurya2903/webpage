@@ -158,6 +158,137 @@
   const menu = document.querySelector('[data-menu]');
   const navLinks = Array.from(document.querySelectorAll('.nav-links a, .mobile-menu a[href^="#"]'));
 
+  const authFeedbackModal = document.getElementById('authFeedbackModal');
+  const authFeedbackTitle = document.getElementById('authFeedbackTitle');
+  const authFeedbackReason = document.getElementById('authFeedbackReason');
+  const authFeedbackIcon = document.getElementById('authFeedbackIcon');
+  const authFeedbackActionBtn = document.getElementById('authFeedbackActionBtn');
+  let authFeedbackTimer = null;
+
+  function toFriendlyAuthError(message, context = 'auth') {
+    const raw = String(message || '').replace(/\s*\(https?:\/\/[^)]*\)\s*/gi, ' ').trim();
+    const text = raw.toLowerCase();
+
+    if (!raw) {
+      if (context === 'register') return 'Unable to create account. Please try again later.';
+      if (context === 'session') return 'Authentication failed. Please log in again.';
+      return 'Unable to sign in right now. Please try again.';
+    }
+
+    if (text.includes('invalid email or password') || text.includes('wrong password')) {
+      return 'Invalid email or password.';
+    }
+
+    if (text.includes('email already exists') || text.includes('duplicate key') || text.includes('e11000')) {
+      return 'Email already exists.';
+    }
+
+    if (text.includes('valid email') || text.includes('required') || text.includes('validation')) {
+      return 'Please check your details and try again.';
+    }
+
+    if (text.includes('failed to fetch') || text.includes('networkerror') || text.includes('network') || text.includes('unable to connect') || text.includes('failed after retries')) {
+      return 'Unable to connect to the server. Please check your internet and try again.';
+    }
+
+    if (text.includes('timed out') || text.includes('timeout')) {
+      return 'The request timed out. Please try again.';
+    }
+
+    if (text.includes('authentication token has expired') || text.includes('invalid authentication token') || text.includes('authentication required') || text.includes('user no longer exists')) {
+      return 'Your session has expired. Please log in again.';
+    }
+
+    if (text.includes('blocked')) {
+      return 'This account is blocked. Please contact support.';
+    }
+
+    if (text.includes('mongo') || text.includes('server') || text.includes('internal')) {
+      return context === 'register'
+        ? 'Unable to create account. Please try again later.'
+        : 'Server is currently unavailable. Please try again later.';
+    }
+
+    return raw;
+  }
+
+  function closeAuthFeedbackModal() {
+    if (!authFeedbackModal) return;
+    authFeedbackModal.classList.remove('is-open', 'is-success');
+    authFeedbackModal.setAttribute('aria-hidden', 'true');
+    if (authFeedbackTimer) {
+      window.clearTimeout(authFeedbackTimer);
+      authFeedbackTimer = null;
+    }
+  }
+
+  function showAuthFeedbackModal({
+    status = 'error',
+    title,
+    reason,
+    actionLabel = 'Try Again',
+    autoCloseMs = 0
+  }) {
+    if (!authFeedbackModal || !authFeedbackTitle || !authFeedbackReason || !authFeedbackActionBtn || !authFeedbackIcon) {
+      showGlobalNotification(reason || title || 'Authentication error', status !== 'success');
+      return;
+    }
+
+    if (authFeedbackTimer) {
+      window.clearTimeout(authFeedbackTimer);
+      authFeedbackTimer = null;
+    }
+
+    authFeedbackModal.classList.add('is-open');
+    authFeedbackModal.classList.toggle('is-success', status === 'success');
+    authFeedbackModal.setAttribute('aria-hidden', 'false');
+
+    authFeedbackIcon.textContent = status === 'success' ? '✅' : '⚠';
+    authFeedbackTitle.textContent = title || (status === 'success' ? 'Success' : 'Authentication Failed');
+    authFeedbackReason.textContent = reason || '';
+    authFeedbackActionBtn.textContent = actionLabel;
+
+    if (autoCloseMs > 0) {
+      authFeedbackTimer = window.setTimeout(() => {
+        closeAuthFeedbackModal();
+      }, autoCloseMs);
+    }
+  }
+
+  function showErrorModal(message, options = {}) {
+    const context = options.context || 'auth';
+    const title = options.title || (context === 'register' ? 'Registration Failed' : context === 'session' ? 'Authentication Required' : 'Login Failed');
+    const reason = `Reason: ${toFriendlyAuthError(message, context)}`;
+
+    showAuthFeedbackModal({
+      status: 'error',
+      title,
+      reason,
+      actionLabel: options.actionLabel || 'Try Again'
+    });
+  }
+
+  function showSuccessModal(message, options = {}) {
+    showAuthFeedbackModal({
+      status: 'success',
+      title: options.title || 'Success',
+      reason: message,
+      actionLabel: options.actionLabel || 'Continue',
+      autoCloseMs: Number(options.autoCloseMs || 0)
+    });
+  }
+
+  authFeedbackActionBtn?.addEventListener('click', closeAuthFeedbackModal);
+  authFeedbackModal?.addEventListener('click', (event) => {
+    if (event.target === authFeedbackModal) closeAuthFeedbackModal();
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && authFeedbackModal?.classList.contains('is-open')) {
+      closeAuthFeedbackModal();
+    }
+  });
+
   // --- Simple frontend auth helpers (store JWT in localStorage) ---
   const AUTH_TOKEN_KEY = 'auth_token';
   const AUTH_USER_KEY = 'auth_user';
@@ -257,7 +388,7 @@
     realtimeSocket.on('notification:new', (payload) => handleRealtimeCustomerUpdate(payload));
   }
 
-  function authFetch(url, opts = {}, requestOptions = {}) {
+  async function authFetch(url, opts = {}, requestOptions = {}) {
     opts = { ...opts };
     opts.headers = opts.headers ? { ...opts.headers } : {};
     const token = getToken();
@@ -265,7 +396,23 @@
     if (!opts.headers.Accept) opts.headers.Accept = 'application/json';
     // include credentials in case backend relies on cookies
     opts.credentials = opts.credentials || 'include';
-    return performRequest(url, opts, requestOptions);
+    const response = await performRequest(url, opts, requestOptions);
+
+    if ((response.status === 401 || response.status === 403) && !requestOptions.suppressAuthModal) {
+      let serverMessage = 'Authentication required';
+      try {
+        const body = await safeJson(response.clone());
+        serverMessage = body?.message || serverMessage;
+      } catch (_) {
+        // ignore clone parsing errors
+      }
+
+      showErrorModal(serverMessage, { title: 'Authentication Required', context: 'session' });
+      setToken(null);
+      setUser(null);
+    }
+
+    return response;
   }
 
   function setFormSubmitting(form, isSubmitting, label) {
@@ -831,10 +978,11 @@
     const cached = getUser();
     if (cached) return; // already have user info
     try {
-      const res = await authFetch(apiUrl('/api/auth/profile'));
+      const res = await authFetch(apiUrl('/api/auth/profile'), {}, { suppressAuthModal: true });
       const body = await safeJson(res);
       if (!res.ok || !body || !body.user) {
         // token likely invalid or expired
+        showErrorModal(body?.message || 'Authentication required', { title: 'Authentication Required', context: 'session' });
         setToken(null);
         setUser(null);
         return;
@@ -842,6 +990,7 @@
       setUser(body.user);
     } catch (e) {
       console.error('Profile fetch failed', e);
+      showErrorModal(e?.message || 'Authentication failed', { title: 'Authentication Required', context: 'session' });
       setToken(null);
       setUser(null);
     }
@@ -1121,9 +1270,17 @@
       setToken(body.token);
       setUser(body.user || null);
       closeAuth();
-      showGlobalNotification('Logged in successfully', false);
+      showSuccessModal('Redirecting to dashboard...', {
+        title: 'Login Successful',
+        actionLabel: 'Continue',
+        autoCloseMs: 1800
+      });
     } catch (err) {
-      showGlobalNotification((err && err.message) || 'Login failed');
+      showErrorModal((err && err.message) || 'Login failed', {
+        title: 'Login Failed',
+        context: 'login',
+        actionLabel: 'Try Again'
+      });
       console.error(err);
     } finally {
       setFormSubmitting(form, false);
@@ -1149,9 +1306,17 @@
       setToken(body.token);
       setUser(body.user || null);
       closeAuth();
-      showGlobalNotification('Registered and logged in', false);
+      showSuccessModal('Your account has been created successfully.', {
+        title: 'Registration Successful',
+        actionLabel: 'Continue',
+        autoCloseMs: 2100
+      });
     } catch (err) {
-      showGlobalNotification((err && err.message) || 'Registration failed');
+      showErrorModal((err && err.message) || 'Registration failed', {
+        title: 'Registration Failed',
+        context: 'register',
+        actionLabel: 'Try Again'
+      });
       console.error(err);
     } finally {
       setFormSubmitting(form, false);

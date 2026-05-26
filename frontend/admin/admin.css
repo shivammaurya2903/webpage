@@ -147,7 +147,7 @@ img { max-width: 100%; display: block; }
 }
 .search-pill i { color: var(--accent); }
 .search-pill input { border: 0; padding: 0; background: transparent; }
-.status-chip, .profile-chip {
+.status-chip {
   display: inline-flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 999px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
 }
 .status-chip span { width: 10px; height: 10px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 4px rgba(79,209,197,0.15); }
@@ -430,7 +430,7 @@ body.shell-open { overflow: hidden; }
   pointer-events: none;
 }
 
-.login-brand, .brand-row, .sidebar-top, .sidebar-profile, .modal-header, .topbar, .topbar-actions, .profile-summary, .dropdown-header {
+.login-brand, .brand-row, .sidebar-top, .sidebar-profile, .modal-header, .topbar, .topbar-actions, .dropdown-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -540,8 +540,7 @@ body.shell-open { overflow: hidden; }
 .small-btn:hover,
 .primary-btn:hover,
 .secondary-btn:hover,
-.nav-item:hover,
-.profile-chip:hover {
+.nav-item:hover {
   transform: translateY(-1px);
 }
 
@@ -690,7 +689,7 @@ body.shell-open { overflow: hidden; }
 
 .profile-avatar--large { width: 54px; height: 54px; border-radius: 18px; }
 
-.sidebar-label, .sidebar-note, .profile-copy small { color: rgba(255, 255, 255, 0.72); display: block; }
+.sidebar-label, .sidebar-note { color: rgba(255, 255, 255, 0.72); display: block; }
 .sidebar-title { color: #fff; font-size: 1.2rem; }
 .sidebar-note { margin: 6px 0 0; line-height: 1.45; }
 
@@ -813,7 +812,7 @@ body.shell-open { overflow: hidden; }
 .search-pill i { color: var(--accent-2); }
 .search-pill input { border: 0; padding: 0; background: transparent; box-shadow: none; }
 
-.status-chip, .profile-chip {
+.status-chip {
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -827,11 +826,6 @@ body.shell-open { overflow: hidden; }
 
 .status-chip span { width: 10px; height: 10px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 4px rgba(46, 157, 104, 0.14); }
 
-.profile-chip { color: #2d123c; }
-.profile-chip small { display: block; color: var(--muted); font-size: 0.72rem; }
-.profile-copy { display: grid; gap: 2px; text-align: left; }
-.profile-copy strong { color: #2d123c; }
-
 .topbar-actions > .status-chip,
 .topbar-actions > .topbar-dropdown,
 .topbar-actions > #refreshButton {
@@ -844,8 +838,7 @@ body.shell-open { overflow: hidden; }
 }
 
 .topbar-actions .icon-button--soft:hover,
-.status-chip:hover,
-.profile-chip:hover {
+.status-chip:hover {
   box-shadow: 0 14px 30px rgba(48, 16, 84, 0.12);
   border-color: rgba(106, 27, 154, 0.26);
 }
@@ -963,13 +956,6 @@ body.shell-open { overflow: hidden; }
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-
-.profile-summary {
-  align-items: center;
-  justify-content: flex-start;
-}
-
-.profile-summary .helper { margin-top: 4px; }
 
 .view-root {
   margin-right: 0;
@@ -1813,10 +1799,6 @@ body.shell-open { overflow: hidden; }
     flex: 0 0 auto;
     min-width: auto;
   }
-  .profile-chip {
-    justify-content: flex-start;
-  }
-
   .topbar-search-slot:has(.booking-toolbar) {
     order: 2;
   }
@@ -1967,6 +1949,283 @@ body.shell-open { overflow: hidden; }
   .sidebar { width: min(92vw, 340px); }
 }
 
+/* =====================================================
+   Admin Dashboard Cleanup + Modernization Overrides
+   ===================================================== */
+
+.card {
+  border-radius: 20px;
+  padding: 16px;
+  border: 1px solid rgba(106, 27, 154, 0.12);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 16px 36px rgba(48, 16, 84, 0.08);
+}
+
+.view-root,
+.view {
+  gap: 14px;
+}
+
+.sidebar {
+  padding: 14px;
+  gap: 14px;
+  border-radius: 24px;
+}
+
+.nav {
+  gap: 6px;
+}
+
+.nav-item {
+  padding: 11px 12px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.nav-item i {
+  color: #f3c95d;
+}
+
+.nav-item:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.14);
+  transform: translateY(-1px);
+}
+
+.nav-item.is-active {
+  border-color: rgba(212, 175, 55, 0.34);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(212, 175, 55, 0.26));
+  box-shadow: 0 10px 22px rgba(22, 6, 34, 0.24);
+}
+
+.topbar {
+  border-radius: 22px;
+  padding: 12px 16px;
+}
+
+.topbar h2 {
+  font-size: clamp(1.35rem, 1.9vw, 1.95rem);
+}
+
+.topbar-actions {
+  display: grid;
+  grid-template-columns: minmax(250px, 1fr) auto auto auto;
+  align-items: center;
+  gap: 8px;
+  width: min(100%, 880px);
+}
+
+.topbar-search-slot {
+  min-width: 0;
+}
+
+.search-pill {
+  min-width: 100%;
+  min-height: 42px;
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.topbar-dropdown,
+#refreshButton,
+.topbar-admin {
+  justify-self: end;
+}
+
+.topbar-admin {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 6px 12px 6px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(106, 27, 154, 0.14);
+}
+
+.topbar-admin-name {
+  color: #2d123c;
+  font-size: 0.92rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.topbar-admin .profile-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  box-shadow: none;
+}
+
+.dropdown-panel {
+  border-radius: 16px;
+  padding: 12px;
+}
+
+.booking-view {
+  gap: 12px;
+}
+
+.booking-toolbar-container {
+  margin: 0;
+  padding: 12px;
+  border-radius: 16px;
+}
+
+.booking-page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.booking-page-head h3 {
+  margin: 0;
+  font-size: 1.35rem;
+  color: #2e0d42;
+  font-family: 'Cormorant Garamond', serif;
+}
+
+.booking-page-head p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.booking-count-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(106, 27, 154, 0.16);
+  background: rgba(255, 255, 255, 0.9);
+  color: #4d1f69;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.booking-toolbar {
+  padding: 10px;
+  border-radius: 14px;
+  box-shadow: none;
+}
+
+.booking-search-pill,
+.booking-toolbar__filters--inline .booking-filter-field select,
+.booking-toolbar__filters--inline .booking-filter-field input,
+.booking-toolbar__actions .secondary-btn,
+.booking-toolbar__actions .primary-btn {
+  min-height: 40px;
+  height: 40px;
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.booking-toolbar__actions {
+  gap: 6px;
+}
+
+.booking-toolbar__actions .secondary-btn,
+.booking-toolbar__actions .primary-btn {
+  padding: 8px 12px;
+}
+
+.booking-table-card .table-wrap,
+.table-wrap {
+  border-radius: 16px;
+}
+
+.data-table {
+  min-width: 880px;
+}
+
+.data-table th,
+.data-table td {
+  padding: 11px 12px;
+}
+
+.data-table th {
+  font-size: 0.73rem;
+  letter-spacing: 0.09em;
+}
+
+.data-table tbody tr {
+  transition: background 0.18s ease;
+}
+
+.data-table tr:hover td {
+  background: rgba(212, 175, 55, 0.08);
+}
+
+.badge {
+  padding: 6px 10px;
+  font-size: 0.74rem;
+  border-radius: 999px;
+}
+
+.row-actions,
+.booking-actions-primary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.small-btn,
+.booking-more-trigger {
+  min-height: 32px;
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 0.74rem;
+}
+
+.booking-more-panel {
+  width: 184px;
+  border-radius: 12px;
+  padding: 8px;
+  gap: 5px;
+}
+
+.booking-more-panel .small-btn {
+  justify-content: flex-start;
+}
+
+@media (max-width: 980px) {
+  .topbar-actions {
+    display: flex;
+    width: 100%;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .topbar-search-slot {
+    flex: 1 1 100%;
+  }
+
+  .topbar-admin {
+    margin-left: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .booking-page-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .booking-count-chip {
+    align-self: flex-start;
+  }
+
+  .data-table {
+    min-width: 740px;
+  }
+}
+
 @media (max-width: 540px) {
   .login-screen { padding: 16px; }
   .login-panel { padding: 18px; }
@@ -2036,10 +2295,6 @@ details > summary {
 .table-wrap,
 .search-pill,
 .status-chip,
-.profile-chip,
-.small-btn,
-.primary-btn,
-.secondary-btn,
 .icon-button,
 .nav-item {
   transition:
@@ -2135,8 +2390,7 @@ textarea::placeholder {
   border-color: rgba(47, 7, 63, 0.8);
 }
 
-.dropdown-panel--notifications,
-.dropdown-panel--profile {
+.dropdown-panel--notifications {
   animation: panelFadeIn 180ms ease;
 }
 
