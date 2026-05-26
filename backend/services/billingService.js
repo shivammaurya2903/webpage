@@ -69,8 +69,12 @@ function normalizeCoordinates(input) {
 }
 
 function buildLocationLabel(properties = {}, fallbackLabel = '') {
+  const primaryLabel = trimText(properties.label);
+  if (primaryLabel) {
+    return primaryLabel;
+  }
+
   const parts = [
-    properties.label,
     properties.name,
     properties.locality,
     properties.district,
@@ -358,10 +362,9 @@ async function resolveRouteEstimate({ pickup, drop }) {
   if (apiKey && resolvedPickupCoordinates && resolvedDropCoordinates) {
     try {
       const response = await axios.post(
-        `${ORS_BASE_URL}/v2/directions/driving-car`,
+        `${ORS_BASE_URL}/v2/directions/driving-car/geojson`,
         {
           coordinates: [resolvedPickupCoordinates, resolvedDropCoordinates],
-          geometry_format: 'geojson',
           instructions: false
         },
         {
@@ -407,6 +410,8 @@ async function resolveRouteEstimate({ pickup, drop }) {
       debugBookingRoute('directions-fallback', {
         pickupCoordinates: resolvedPickupCoordinates,
         dropCoordinates: resolvedDropCoordinates,
+        status: error?.response?.status,
+        responseData: error?.response?.data,
         error: error?.message || 'OpenRouteService directions lookup failed',
         fallbackDistance,
         fallbackDuration

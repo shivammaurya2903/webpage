@@ -217,9 +217,16 @@
     return String(value || '').trim();
   }
 
+  function isRelativeUploadPath(value) {
+    return /^\/?uploads\/[\w./-]+\.(jpe?g|png|webp)$/i.test(value);
+  }
+
   function isLikelyImageUrl(value) {
     const url = normalizeImageUrl(value);
     if (!url) return true;
+
+    if (/^data:image\/(jpe?g|png|webp);/i.test(url)) return true;
+    if (isRelativeUploadPath(url)) return true;
 
     try {
       const parsed = new URL(url);

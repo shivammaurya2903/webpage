@@ -39,6 +39,7 @@ initSocket(server);
 
 const frontendPath = path.resolve(__dirname, '../frontend');
 const adminPath = path.resolve(__dirname, '../frontend/admin');
+const uploadsPath = path.resolve(__dirname, './uploads');
 const corsOrigins = (process.env.CORS_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:5000,http://127.0.0.1:5000')
   .split(',')
   .map((origin) => origin.trim())
@@ -89,6 +90,7 @@ app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.static(frontendPath));
 app.use('/frontend', express.static(frontendPath));
 app.use('/admin', express.static(adminPath));
+app.use('/uploads', express.static(uploadsPath));
 app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, limit: 300, standardHeaders: true, legacyHeaders: false }));
 
 app.get('/api/health', (req, res) => {
