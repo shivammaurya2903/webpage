@@ -204,7 +204,7 @@ async function resolveVehiclePricing({ vehicle, vehicleId, selectedCar, settings
     halfDayPrice: clampMinimum(pricingSettings.halfDayPrice, 3500),
     airportTransferMinCharge: clampMinimum(pricingSettings.airportTransferMinCharge, 2500),
     airportTransferMaxCharge: clampMinimum(pricingSettings.airportTransferMaxCharge, 3500),
-    outstationMinCharge: clampMinimum(pricingSettings.outstationMinCharge, 8500),
+    outstationMinCharge: clampMinimum(pricingSettings.outstationMinCharge, 0),
     outstationMaxCharge: clampMinimum(pricingSettings.outstationMaxCharge, 10500),
     weddingVipCharge: clampMinimum(pricingSettings.weddingVipCharge, 12000),
     baseFare: clampMinimum(resolvedVehicle?.baseFare, clampMinimum(pricingSettings.baseFare, clampMinimum(resolvedVehicle?.pricePerDay, 6500))),
@@ -214,7 +214,9 @@ async function resolveVehiclePricing({ vehicle, vehicleId, selectedCar, settings
     includedHours: clampMinimum(resolvedVehicle?.includedHours, clampMinimum(pricingSettings.defaultIncludedHours, 8)),
     extraHourRate: clampMinimum(resolvedVehicle?.extraHourRate, clampMinimum(pricingSettings.extraHourCharge, 500)),
     nightChargePercent: clampMinimum(resolvedVehicle?.nightChargePercent, clampMinimum(pricingSettings.nightChargePercent, 10)),
+    nightChargeFixed: clampMinimum(pricingSettings.nightChargeFixed, 0),
     driverAllowance: clampMinimum(resolvedVehicle?.driverAllowance, clampMinimum(pricingSettings.driverAllowance, 0)),
+    driverAllowancePerDay: clampMinimum(resolvedVehicle?.driverAllowancePerDay, clampMinimum(pricingSettings.driverAllowancePerDay, clampMinimum(pricingSettings.driverAllowance, 0))),
     waitingChargePerHour: clampMinimum(pricingSettings.waitingChargePerHour, 0),
     freeWaitingMinutes: clampMinimum(pricingSettings.freeWaitingMinutes, 30),
     gstPercent: clampMinimum(pricingSettings.gstPercent, clampMinimum(billingSettings.taxPercent, 5)),
@@ -226,6 +228,8 @@ async function resolveVehiclePricing({ vehicle, vehicleId, selectedCar, settings
     multiDayCharges: clampMinimum(pricingSettings.multiDayCharges, 0),
     statePermitCharges: clampMinimum(pricingSettings.statePermitCharges, 0),
     nightSurchargePercent: clampMinimum(pricingSettings.nightChargePercent, 10),
+    minimumFare: clampMinimum(pricingSettings.minimumFare, 0),
+    surgeMultiplier: clampMinimum(pricingSettings.surgeMultiplier, 1),
     perDayIncludedKm: clampMinimum(pricingSettings.defaultIncludedKm, 80),
     perDayIncludedHours: clampMinimum(pricingSettings.defaultIncludedHours, 8)
   };
@@ -480,7 +484,7 @@ async function resolveRouteEstimate({ pickup, drop }) {
   };
 }
 
-function calculateDistanceFare({ tripType, distanceInKm, durationMinutes, pricePerKm, extraKmRate, extraHourRate, includedKm, includedHours, tripPackage, roundTripMultiplier = 1 }) {
+function calculateDistanceFare({ tripType, distanceInKm, durationMinutes, pricePerKm, extraKmRate, extraHourRate, includedKm, includedHours, tripPackage, roundTripMultiplier = 1, surgeMultiplier = 1 }) {
   const activeTripType = normalizeTripType(tripType || tripPackage?.packageName || 'one-way');
   const tripDistance = Math.max(0, toNumber(distanceInKm, 0) * Math.max(1, toNumber(roundTripMultiplier, 1)));
   const tripDuration = Math.max(0, toNumber(durationMinutes, 0) * Math.max(1, toNumber(roundTripMultiplier, 1)));
@@ -491,11 +495,13 @@ function calculateDistanceFare({ tripType, distanceInKm, durationMinutes, priceP
   const packageIncludedHours = clampMinimum(tripPackage?.includedHours, includedHours);
   const packageExtraHourRate = clampMinimum(tripPackage?.extraHourRate, clampMinimum(extraHourRate, 0));
 
+  // Local / package trips: base fare is a package that includes kilometers/hours
   if (activeTripType === 'local-package' || activeTripType === 'half-day-package') {
     const billableKm = Math.max(0, tripDistance - packageIncludedKm);
     const billableHours = Math.max(0, tripDuration / 60 - packageIncludedHours);
-    const distanceFare = roundCurrency(billableKm * rateForExtraKm);
+    let distanceFare = roundCurrency(billableKm * rateForExtraKm);
     const extraHourCharge = roundCurrency(billableHours * packageExtraHourRate);
+    distanceFare = roundCurrency(distanceFare * surgeMultiplier);
 
     return {
       tripType: activeTripType,
@@ -509,14 +515,15 @@ function calculateDistanceFare({ tripType, distanceInKm, durationMinutes, priceP
     };
   }
 
-  if (activeTripType === 'airport-transfer' || activeTripType === 'wedding-vip-event' || activeTripType === 'outstation-package') {
-    const billableKm = Math.max(0, tripDistance - packageIncludedKm);
-    const distanceFare = roundCurrency(billableKm * rateForExtraKm);
+  // Outstation trips: charge per km (no implicit base fare), unless package explicitly provided
+  if (activeTripType === 'outstation-package' || activeTripType === 'multi-day-tour') {
+    let distanceFare = roundCurrency(tripDistance * ratePerKm);
+    distanceFare = roundCurrency(distanceFare * surgeMultiplier);
 
     return {
       tripType: activeTripType,
       tripDistance: Number(tripDistance.toFixed(2)),
-      billableDistance: Number(billableKm.toFixed(2)),
+      billableDistance: Number(tripDistance.toFixed(2)),
       includedKm: packageIncludedKm,
       includedHours: packageIncludedHours,
       distanceFare,
@@ -525,7 +532,9 @@ function calculateDistanceFare({ tripType, distanceInKm, durationMinutes, priceP
     };
   }
 
-  const distanceFare = roundCurrency(tripDistance * ratePerKm);
+  // Default: simple per-km charge (one-way, round-trip handled via roundTripMultiplier earlier)
+  let distanceFare = roundCurrency(tripDistance * ratePerKm);
+  distanceFare = roundCurrency(distanceFare * surgeMultiplier);
 
   return {
     tripType: activeTripType,
@@ -552,7 +561,7 @@ function calculateWaitingCharges({ waitingMinutes = 0, freeWaitingMinutes = 30, 
   return roundCurrency(Math.ceil(chargeableMinutes / 60) * toNumber(waitingChargePerHour, 0));
 }
 
-function calculateNightCharge(baseAmount, pickupDateTime, nightChargePercent) {
+function calculateNightCharge(distanceFareAmount, pickupDateTime, nightChargePercent, nightChargeFixed = 0) {
   const date = pickupDateTime ? new Date(pickupDateTime) : null;
   if (!date || Number.isNaN(date.getTime())) return 0;
 
@@ -560,7 +569,11 @@ function calculateNightCharge(baseAmount, pickupDateTime, nightChargePercent) {
   const isNight = hour >= 22 || hour < 6;
   if (!isNight) return 0;
 
-  return roundCurrency(toNumber(baseAmount, 0) * (toNumber(nightChargePercent, 10) / 100));
+  if (toNumber(nightChargeFixed, 0) > 0) {
+    return roundCurrency(nightChargeFixed);
+  }
+
+  return roundCurrency(toNumber(distanceFareAmount, 0) * (toNumber(nightChargePercent, 10) / 100));
 }
 
 function calculateGST(amount, gstPercent) {
@@ -590,6 +603,24 @@ function buildBillingLineItems(breakdown = {}) {
       tax: 0,
       amount: breakdown.packageBaseFare
     });
+    if (breakdown.includedKm > 0) {
+      rows.push({
+        description: 'Included KM',
+        quantity: 1,
+        unitPrice: breakdown.includedKm,
+        tax: 0,
+        amount: 0
+      });
+    }
+    if (breakdown.includedHours > 0) {
+      rows.push({
+        description: 'Included Hours',
+        quantity: 1,
+        unitPrice: breakdown.includedHours,
+        tax: 0,
+        amount: 0
+      });
+    }
   } else if (breakdown.baseFare > 0) {
     rows.push({
       description: 'Base Fare',
@@ -600,6 +631,7 @@ function buildBillingLineItems(breakdown = {}) {
     });
   }
 
+  // Extra KM / Distance charges
   rows.push({
     description: distanceLabel,
     quantity: Number(breakdown.billableDistance || breakdown.tripDistance || 0) > 0 ? 1 : 0,
@@ -607,6 +639,17 @@ function buildBillingLineItems(breakdown = {}) {
     tax: 0,
     amount: breakdown.distanceFare || 0
   });
+
+  // If package had included KM, show extra KM row separately for clarity
+  if (breakdown.includedKm > 0 && Number(breakdown.billableDistance || 0) > 0) {
+    rows.push({
+      description: 'Extra KM',
+      quantity: 1,
+      unitPrice: Number(breakdown.billableDistance || 0),
+      tax: 0,
+      amount: breakdown.distanceFare || 0
+    });
+  }
 
   if (breakdown.extraHourCharge > 0) {
     rows.push({
@@ -786,23 +829,33 @@ async function calculateFareQuote({
     tripType: packageProfile.activeTripType,
     distanceInKm: tripDistance,
     durationMinutes,
-    pricePerKm: packageProfile.extraKmRate || pricing.pricePerKm,
+    pricePerKm: pricing.pricePerKm,
     extraKmRate: packageProfile.extraKmRate || pricing.extraKmRate,
     extraHourRate: packageProfile.extraHourRate || pricing.extraHourRate,
     includedKm: localIncludedKm,
     includedHours: localIncludedHours,
     tripPackage,
-    roundTripMultiplier
+    roundTripMultiplier,
+    surgeMultiplier: pricing.surgeMultiplier || 1
   });
 
   const distanceFare = routeSource === 'route-table' || ['airport-transfer', 'wedding-vip-event'].includes(packageProfile.activeTripType)
     ? 0
     : roundCurrency(distanceQuote.distanceFare || packageProfile.distanceFare || 0);
-  const packageBaseFare = roundCurrency(packageProfile.packageBaseFare || distanceQuote.packageBaseFare || pricing.baseFare);
-  const baseFare = packageBaseFare || pricing.baseFare;
+  // Package base fare should only apply when explicitly provided for outstation trips.
+  const explicitPackageBase = roundCurrency(packageProfile.packageBaseFare || distanceQuote.packageBaseFare || 0);
+  const packageBaseFare = explicitPackageBase;
+  let baseFare = 0;
+  if (packageProfile.activeTripType === 'outstation-package') {
+    baseFare = packageBaseFare > 0 ? packageBaseFare : 0; // do not add default baseFare for outstation unless package sets it
+  } else {
+    baseFare = packageBaseFare || pricing.baseFare;
+  }
   const tripDaysCount = Math.max(1, toNumber(tripDays, 0) || (activeTripType === 'multi-day-tour' ? 2 : activeTripType === 'round-trip' ? 2 : 1));
   const isLongDistance = !['local-package', 'half-day-package', 'airport-transfer', 'wedding-vip-event'].includes(packageProfile.activeTripType);
-  const driverAllowance = isLongDistance ? roundCurrency(pricing.driverAllowance * (packageProfile.activeTripType === 'outstation-package' ? tripDaysCount : packageProfile.activeTripType === 'round-trip' ? 2 : 1)) : 0;
+  const driverDays = packageProfile.activeTripType === 'multi-day-tour' ? tripDaysCount : packageProfile.activeTripType === 'round-trip' ? 2 : 1;
+  const driverAllowancePerDay = pricing.driverAllowancePerDay || pricing.driverAllowance || 0;
+  const driverAllowance = isLongDistance ? roundCurrency(driverAllowancePerDay * Math.max(1, driverDays)) : 0;
   const tollChargesAmount = calculateTollCharges({ tollCharges, adminAdjustment: additionalChargeBundle.breakdown.manualAdjustment, routeTollCharges: pricing.tollCharges });
   const waitingChargesAmount = calculateWaitingCharges({
     waitingMinutes,
@@ -818,9 +871,13 @@ async function calculateFareQuote({
       pricing.multiDayCharges +
       pricing.statePermitCharges
   );
-  const nightChargesBase = baseFare + distanceFare + tollChargesAmount + driverAllowance + waitingChargesAmount + extraTravelCharges;
-  const nightChargesAmount = calculateNightCharge(nightChargesBase, pickupDateTime, pricing.nightChargePercent);
-  const subtotalAmount = roundCurrency(baseFare + distanceFare + tollChargesAmount + driverAllowance + waitingChargesAmount + nightChargesAmount + extraTravelCharges);
+  // Night charge applies on distance fare (or can be fixed) as per new rules
+  const nightChargesAmount = calculateNightCharge(distanceFare, pickupDateTime, pricing.nightSurchargePercent, pricing.nightChargeFixed);
+  let subtotalAmount = roundCurrency(baseFare + distanceFare + tollChargesAmount + driverAllowance + waitingChargesAmount + nightChargesAmount + extraTravelCharges);
+  // enforce minimum fare if configured
+  if (pricing.minimumFare && pricing.minimumFare > 0 && subtotalAmount < pricing.minimumFare) {
+    subtotalAmount = roundCurrency(pricing.minimumFare);
+  }
   const gstAmount = calculateGST(subtotalAmount, pricing.gstPercent);
   const totalAmount = roundCurrency(subtotalAmount + gstAmount);
   const cgstAmount = roundCurrency(gstAmount / 2);
