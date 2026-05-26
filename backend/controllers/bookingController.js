@@ -219,7 +219,9 @@ const createBooking = asyncHandler(async (req, res) => {
     phone: normalizedPhone,
     email,
     pickupLocation,
+    pickupAddress: pickupLocation,
     dropLocation,
+    destinationAddress: dropLocation,
     pickupDate: pickupDateValue,
     pickupTime,
     passengers,
@@ -228,7 +230,8 @@ const createBooking = asyncHandler(async (req, res) => {
     tripType,
     vehicleId,
     pickupCoordinates: parseCoordinates(req.body.pickupCoordinates || req.body.pickupCoords),
-    dropCoordinates: parseCoordinates(req.body.dropCoordinates || req.body.dropCoords),
+    destinationCoordinates: parseCoordinates(req.body.destinationCoordinates || req.body.destinationCoords || req.body.dropCoordinates || req.body.dropCoords),
+    dropCoordinates: parseCoordinates(req.body.dropCoordinates || req.body.dropCoords || req.body.destinationCoordinates || req.body.destinationCoords),
     specialRequirements: String(req.body.specialRequirements || req.body.requirements || '').trim(),
     user: req.user?._id || null
   };
@@ -270,7 +273,7 @@ const createBooking = asyncHandler(async (req, res) => {
     },
     drop: {
       address: payload.dropLocation,
-      coordinates: payload.dropCoordinates
+      coordinates: payload.destinationCoordinates || payload.dropCoordinates
     },
     vehicle: car,
     tripPackage,
@@ -289,7 +292,8 @@ const createBooking = asyncHandler(async (req, res) => {
       ...payload,
       pickupDate,
       pickupCoordinates: payload.pickupCoordinates,
-      dropCoordinates: payload.dropCoordinates,
+      dropCoordinates: payload.destinationCoordinates || payload.dropCoordinates,
+      destinationCoordinates: payload.destinationCoordinates || payload.dropCoordinates,
       distanceInKm: pricing.distanceInKm,
       estimatedDuration: pricing.estimatedDuration,
       duration: pricing.estimatedDuration,
@@ -316,7 +320,8 @@ const createBooking = asyncHandler(async (req, res) => {
         source: pricing.source,
         routeGeometry: pricing.routeGeometry,
         pickupCoordinates: pricing.pickup?.coordinates || null,
-        dropCoordinates: pricing.drop?.coordinates || null
+        dropCoordinates: pricing.drop?.coordinates || null,
+        destinationCoordinates: pricing.drop?.coordinates || null
       },
       paymentStatus: 'Unpaid',
       bookingStatus: 'Pending'

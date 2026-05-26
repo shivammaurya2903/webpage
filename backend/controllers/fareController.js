@@ -2,7 +2,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const Car = require('../models/Car');
 const SiteSettings = require('../models/SiteSettings');
-const { calculateFareQuote, resolvePlaces } = require('../services/fareCalculator');
+const { calculateFareQuote, resolvePlaces, reverseGeocodeCoordinates } = require('../services/fareCalculator');
 
 function parseCoordinates(value) {
   if (!value) return null;
@@ -37,11 +37,11 @@ const calculateFare = asyncHandler(async (req, res) => {
 
   const quote = await calculateFareQuote({
     pickup: {
-      address: pickup.address || pickup.location || pickup.text || '',
+      address: pickup.address || pickup.location || pickup.text || pickup.label || '',
       coordinates: parseCoordinates(pickup.coordinates || pickup.coords || pickup.position)
     },
     drop: {
-      address: drop.address || drop.location || drop.text || '',
+      address: drop.address || drop.location || drop.text || drop.label || '',
       coordinates: parseCoordinates(drop.coordinates || drop.coords || drop.position)
     },
     vehicle,
@@ -68,6 +68,21 @@ const calculateFare = asyncHandler(async (req, res) => {
   });
 });
 
+const reverseGeocodeLocation = asyncHandler(async (req, res) => {
+  const longitude = Number(req.query.lng ?? req.query.lon ?? req.query.longitude);
+  const latitude = Number(req.query.lat ?? req.query.latitude);
+
+  if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
+    throw new ApiError(400, 'Valid longitude and latitude are required');
+  }
+
+  const location = await reverseGeocodeCoordinates({ longitude, latitude });
+  res.json({
+    success: true,
+    location
+  });
+});
+
 const geocodeLocation = asyncHandler(async (req, res) => {
   const query = String(req.query.query || req.query.text || '').trim();
   if (!query) {
@@ -78,4 +93,4 @@ const geocodeLocation = asyncHandler(async (req, res) => {
   res.json({ success: true, suggestions });
 });
 
-module.exports = { calculateFare, geocodeLocation };
+module.exports = { calculateFare, geocodeLocation, reverseGeocodeLocation };

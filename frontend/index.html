@@ -472,10 +472,13 @@
                 <input id="pickupTime" name="pickupTime" type="time" required />
               </div>
 
-              <div class="field">
+              <div class="field pickup-location-field">
                 <input id="pickupLocation" name="pickupLocation" type="text" placeholder="Pickup Location" list="pickupSuggestions" autocomplete="off" required />
                 <input type="hidden" name="pickupCoordinates" data-pickup-coordinates />
                 <datalist id="pickupSuggestions"></datalist>
+                <div class="location-actions">
+                  <button type="button" class="location-action-btn" data-use-current-location>📍 Use Current Location</button>
+                </div>
               </div>
 
               <div class="field">

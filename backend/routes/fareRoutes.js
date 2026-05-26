@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const { body, query } = require('express-validator');
-const { calculateFare, geocodeLocation } = require('../controllers/fareController');
+const { calculateFare, geocodeLocation, reverseGeocodeLocation } = require('../controllers/fareController');
 const { validateRequest } = require('../middleware/validate');
 
 router.post(
@@ -14,5 +14,11 @@ router.post(
 );
 
 router.get('/geocode', [query('query').optional().isString()], validateRequest, geocodeLocation);
+router.get(
+  '/reverse-geocode',
+  [query('lng').optional().isFloat(), query('lat').optional().isFloat()],
+  validateRequest,
+  reverseGeocodeLocation
+);
 
 module.exports = router;

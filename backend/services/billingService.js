@@ -4,6 +4,15 @@ const Route = require('../models/Route');
 
 const ORS_BASE_URL = 'https://api.openrouteservice.org';
 
+function getOpenRouteServiceApiKey() {
+  return process.env.OPENROUTESERVICE_API_KEY || process.env.ORS_API_KEY || '';
+}
+
+function debugBookingRoute(label, payload) {
+  if (process.env.NODE_ENV === 'production') return;
+  console.debug(`[booking-route] ${label}`, payload);
+}
+
 function toNumber(value, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -35,9 +44,11 @@ function normalizeCoordinates(input) {
   if (!input) return null;
 
   if (Array.isArray(input) && input.length >= 2) {
-    const longitude = toNumber(input[0], NaN);
-    const latitude = toNumber(input[1], NaN);
-    if (Number.isFinite(longitude) && Number.isFinite(latitude)) return [longitude, latitude];
+    const first = toNumber(input[0], NaN);
+    const second = toNumber(input[1], NaN);
+    if (Number.isFinite(first) && Number.isFinite(second)) {
+      return [first, second];
+    }
   }
 
   if (typeof input === 'string') {
@@ -52,6 +63,12 @@ function normalizeCoordinates(input) {
   }
 
   return null;
+}
+
+function estimateDurationMinutes(distanceInKm) {
+  const kilometers = Math.max(0, toNumber(distanceInKm, 0));
+  if (kilometers <= 0) return 0;
+  return Math.max(1, Math.round((kilometers / 40) * 60));
 }
 
 function haversineDistanceKm(fromCoordinates, toCoordinates) {
@@ -80,7 +97,7 @@ function formatGeoPoint(feature, fallbackLabel = '') {
 }
 
 async function resolvePlaces(query, limit = 5) {
-  const apiKey = process.env.OPENROUTESERVICE_API_KEY || process.env.ORS_API_KEY || '';
+  const apiKey = getOpenRouteServiceApiKey();
   const text = trimText(query);
   if (!apiKey || !text) return [];
 
@@ -98,12 +115,42 @@ async function resolvePlaces(query, limit = 5) {
     timeout: 12000
   });
 
-  return (response.data?.features || []).map((feature) => formatGeoPoint(feature)).filter(Boolean);
+  const suggestions = (response.data?.features || []).map((feature) => formatGeoPoint(feature)).filter(Boolean);
+  debugBookingRoute('geocode-search', { query: text, count: suggestions.length });
+  return suggestions;
 }
 
 async function geocodeAddress(address) {
   const results = await resolvePlaces(address, 1).catch(() => []);
   return results[0] || null;
+}
+
+async function reverseGeocodeCoordinates({ longitude, latitude }) {
+  const apiKey = getOpenRouteServiceApiKey();
+  const lng = toNumber(longitude, NaN);
+  const lat = toNumber(latitude, NaN);
+
+  if (!apiKey || !Number.isFinite(lng) || !Number.isFinite(lat)) {
+    return null;
+  }
+
+  const response = await axios.get(`${ORS_BASE_URL}/geocode/reverse`, {
+    params: {
+      'point.lon': lng,
+      'point.lat': lat,
+      size: 1
+    },
+    headers: {
+      Authorization: apiKey,
+      'Content-Type': 'application/json'
+    },
+    timeout: 12000
+  });
+
+  const feature = response.data?.features?.[0] || null;
+  const location = formatGeoPoint(feature);
+  debugBookingRoute('geocode-reverse', { longitude: lng, latitude: lat, found: Boolean(location) });
+  return location;
 }
 
 async function resolveVehiclePricing({ vehicle, vehicleId, selectedCar, settings }) {
@@ -147,7 +194,7 @@ async function resolveVehiclePricing({ vehicle, vehicleId, selectedCar, settings
 }
 
 async function resolveRouteEstimate({ pickup, drop }) {
-  const apiKey = process.env.OPENROUTESERVICE_API_KEY || process.env.ORS_API_KEY || '';
+  const apiKey = getOpenRouteServiceApiKey();
   const pickupCoordinates = normalizeCoordinates(pickup?.coordinates);
   const dropCoordinates = normalizeCoordinates(drop?.coordinates);
   let resolvedPickupCoordinates = pickupCoordinates;
@@ -167,7 +214,11 @@ async function resolveRouteEstimate({ pickup, drop }) {
     try {
       const response = await axios.post(
         `${ORS_BASE_URL}/v2/directions/driving-car`,
-        { coordinates: [resolvedPickupCoordinates, resolvedDropCoordinates] },
+        {
+          coordinates: [resolvedPickupCoordinates, resolvedDropCoordinates],
+          geometry_format: 'geojson',
+          instructions: false
+        },
         {
           headers: {
             Authorization: apiKey,
@@ -177,20 +228,47 @@ async function resolveRouteEstimate({ pickup, drop }) {
         }
       );
 
-      const route = response.data?.routes?.[0] || {};
+      const route = response.data?.routes?.[0] || null;
+      if (!route) {
+        throw new Error('OpenRouteService directions response did not include routes[0]');
+      }
+
+      const distanceKm = toNumber(route.summary?.distance, 0) / 1000;
+      const durationMinutes = toNumber(route.summary?.duration, 0) / 60;
+      const safeDistanceKm = distanceKm > 0 ? distanceKm : haversineDistanceKm(resolvedPickupCoordinates, resolvedDropCoordinates);
+      const safeDurationMinutes = durationMinutes > 0 ? durationMinutes : estimateDurationMinutes(safeDistanceKm);
+      const geometry = route.geometry?.coordinates || route.geometry || [];
+
+      debugBookingRoute('directions-response', {
+        pickupCoordinates: resolvedPickupCoordinates,
+        dropCoordinates: resolvedDropCoordinates,
+        distanceKm: safeDistanceKm,
+        durationMinutes: safeDurationMinutes,
+        hasGeometry: Array.isArray(geometry) ? geometry.length > 0 : Boolean(geometry)
+      });
+
       return {
-        distanceInKm: toNumber(route.summary?.distance, 0) / 1000,
-        estimatedDuration: toNumber(route.summary?.duration, 0) / 60,
-        geometry: route.geometry?.coordinates || [],
+        distanceInKm: safeDistanceKm,
+        estimatedDuration: safeDurationMinutes,
+        geometry,
         source: 'openrouteservice',
         pickupCoordinates: resolvedPickupCoordinates,
         dropCoordinates: resolvedDropCoordinates,
         raw: route
       };
     } catch (error) {
+      const fallbackDistance = haversineDistanceKm(resolvedPickupCoordinates, resolvedDropCoordinates);
+      const fallbackDuration = estimateDurationMinutes(fallbackDistance);
+      debugBookingRoute('directions-fallback', {
+        pickupCoordinates: resolvedPickupCoordinates,
+        dropCoordinates: resolvedDropCoordinates,
+        error: error?.message || 'OpenRouteService directions lookup failed',
+        fallbackDistance,
+        fallbackDuration
+      });
       return {
-        distanceInKm: haversineDistanceKm(resolvedPickupCoordinates, resolvedDropCoordinates),
-        estimatedDuration: 0,
+        distanceInKm: fallbackDistance,
+        estimatedDuration: fallbackDuration,
         geometry: [],
         source: 'geodesic-fallback',
         pickupCoordinates: resolvedPickupCoordinates,
@@ -215,9 +293,11 @@ async function resolveRouteEstimate({ pickup, drop }) {
   if (matchingRoute) {
     const distanceMatch = String(matchingRoute.distance || '').match(/\d+(?:\.\d+)?/);
     const durationMatch = String(matchingRoute.estimatedTime || '').match(/\d+(?:\.\d+)?/);
+    const distanceInKm = distanceMatch ? Number(distanceMatch[0]) : 0;
+    const estimatedDuration = durationMatch ? Number(durationMatch[0]) * 60 : estimateDurationMinutes(distanceInKm);
     return {
-      distanceInKm: distanceMatch ? Number(distanceMatch[0]) : 0,
-      estimatedDuration: durationMatch ? Number(durationMatch[0]) * 60 : 0,
+      distanceInKm,
+      estimatedDuration,
       geometry: [],
       source: 'route-table',
       pickupCoordinates: resolvedPickupCoordinates,
@@ -227,9 +307,10 @@ async function resolveRouteEstimate({ pickup, drop }) {
   }
 
   if (resolvedPickupCoordinates && resolvedDropCoordinates) {
+    const distanceInKm = haversineDistanceKm(resolvedPickupCoordinates, resolvedDropCoordinates);
     return {
-      distanceInKm: haversineDistanceKm(resolvedPickupCoordinates, resolvedDropCoordinates),
-      estimatedDuration: 0,
+      distanceInKm,
+      estimatedDuration: estimateDurationMinutes(distanceInKm),
       geometry: [],
       source: 'geodesic-fallback',
       pickupCoordinates: resolvedPickupCoordinates,
@@ -670,5 +751,6 @@ module.exports = {
   normalizeTripType,
   resolvePlaces,
   resolveRouteEstimate,
-  resolveVehiclePricing
+  resolveVehiclePricing,
+  reverseGeocodeCoordinates
 };

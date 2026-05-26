@@ -2,12 +2,14 @@ const {
   calculateFareQuote,
   calculateGST,
   calculateNightCharge,
-  resolvePlaces
+  resolvePlaces,
+  reverseGeocodeCoordinates
 } = require('./billingService');
 
 module.exports = {
   calculateFareQuote,
   calculateGST,
   calculateNightCharge,
-  resolvePlaces
+  resolvePlaces,
+  reverseGeocodeCoordinates
 };

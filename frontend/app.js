@@ -288,56 +288,360 @@
     return submitButton;
   }
 
-  // Render bookings into a modal
   let __lastBookings = [];
+  let __bookingViewMode = 'list';
+  let __activeBooking = null;
+
+  const bookingMoneyFormatter = new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0
+  });
+
+  const bookingTimeline = ['Pending', 'Approved', 'Driver Assigned', 'Ride Started', 'Ride Completed', 'Invoice Generated', 'Paid'];
+
+  function formatBookingMoney(value) {
+    const amount = Number(value || 0);
+    return bookingMoneyFormatter.format(Number.isFinite(amount) ? amount : 0);
+  }
+
+  function formatBookingDate(value) {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  function formatBookingDateTime(dateValue, timeValue) {
+    const datePart = formatBookingDate(dateValue);
+    const timePart = String(timeValue || '').trim();
+    return timePart ? `${datePart}, ${timePart}` : datePart;
+  }
+
+  function formatBookingDistance(value) {
+    const distance = Number(value || 0);
+    if (!Number.isFinite(distance) || distance <= 0) return '—';
+    const rounded = distance >= 100 ? Math.round(distance) : Number(distance.toFixed(1));
+    return `${rounded} KM`;
+  }
+
+  function getBookingStatusClass(status = '') {
+    const normalized = String(status).toLowerCase();
+    if (normalized.includes('paid')) return 'is-success';
+    if (normalized.includes('reject') || normalized.includes('cancel')) return 'is-danger';
+    if (normalized.includes('pending')) return 'is-warning';
+    if (normalized.includes('approved') || normalized.includes('driver assigned') || normalized.includes('ride started') || normalized.includes('invoice generated')) return 'is-info';
+    return 'is-neutral';
+  }
+
+  function getBookingTimelineIndex(status = '') {
+    const normalized = String(status).toLowerCase();
+    if (normalized.includes('reject') || normalized.includes('cancel')) return -1;
+    const exact = bookingTimeline.findIndex((step) => String(step).toLowerCase() === normalized);
+    if (exact >= 0) return exact;
+    if (normalized.includes('paid')) return bookingTimeline.length - 1;
+    if (normalized.includes('invoice')) return 5;
+    if (normalized.includes('ride completed')) return 4;
+    if (normalized.includes('ride started')) return 3;
+    if (normalized.includes('driver assigned')) return 2;
+    if (normalized.includes('approved')) return 1;
+    return 0;
+  }
+
+  function getBookingReference(booking = {}) {
+    return booking.bookingId || booking.invoiceId || booking._id || 'Booking';
+  }
+
+  function getBookingVehicleName(booking = {}) {
+    return booking.selectedCar || booking.vehicle?.carName || booking.vehicleName || booking.vehicle || '—';
+  }
+
+  function getBookingTripType(booking = {}) {
+    return booking.tripType || booking.selectedPackage || '—';
+  }
+
+  function getBookingDriver(booking = {}) {
+    const driver = booking.assignedDriver;
+    if (!driver) return null;
+    return {
+      name: driver.driverName || driver.name || 'Driver assigned',
+      phone: driver.phone || '',
+      vehicle: driver.vehicleAssigned || driver.vehicle || ''
+    };
+  }
+
+  function getBookingFareBreakdown(booking = {}) {
+    const finalBill = booking.finalBill || {};
+    return [
+      ['Base fare', booking.baseFare ?? finalBill.baseFare],
+      ['Distance fare', booking.distanceFare ?? finalBill.distanceFare],
+      ['Toll charges', booking.tollCharges ?? finalBill.tollCharges],
+      ['Waiting charges', booking.waitingCharges ?? finalBill.waitingCharges],
+      ['Night charges', booking.nightCharges ?? finalBill.nightCharges],
+      ['Driver allowance', booking.driverAllowance ?? finalBill.driverAllowance],
+      ['Extra charges', booking.extraCharges ?? finalBill.extraCharges],
+      ['GST', booking.gstAmount ?? finalBill.gstAmount],
+      ['Estimated fare', booking.estimatedFare],
+      ['Final bill', finalBill.totalAmount ?? booking.totalFare]
+    ].filter(([, value]) => value !== undefined && value !== null && value !== '');
+  }
+
+  function renderBookingTimeline(status = '') {
+    const currentIndex = getBookingTimelineIndex(status);
+    return `
+      <div class="booking-timeline" aria-label="Booking status timeline">
+        ${bookingTimeline.map((step, index) => {
+          const state = currentIndex < 0 ? 'is-done is-error' : index < currentIndex ? 'is-done' : index === currentIndex ? 'is-current' : 'is-upcoming';
+          return `<span class="booking-timeline__step ${state}"><span>${escapeHtml(step)}</span></span>`;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  function renderBookingListItem(booking, index) {
+    const reference = getBookingReference(booking);
+    const vehicleName = getBookingVehicleName(booking);
+    const tripType = getBookingTripType(booking);
+    const distance = formatBookingDistance(booking.distanceInKm || booking.distance || booking.finalBill?.distanceInKm);
+    const fare = formatBookingMoney(booking.totalFare || booking.estimatedFare || booking.finalBill?.totalAmount || 0);
+    const pickupDate = formatBookingDateTime(booking.pickupDate, booking.pickupTime);
+    const status = String(booking.bookingStatus || 'Pending');
+    const paymentStatus = String(booking.paymentStatus || 'Unpaid');
+    const driver = getBookingDriver(booking);
+
+    return `
+      <li class="booking-list-item" data-booking-index="${index}">
+        <div class="booking-list-item__hero">
+          <div class="booking-list-item__icon" aria-hidden="true">
+            <i class="fa-solid fa-car-side"></i>
+          </div>
+          <div class="booking-list-item__title-group">
+            <div class="booking-list-item__eyebrow">Booking #${escapeHtml(reference)}</div>
+            <h4>${escapeHtml(vehicleName)}</h4>
+            <div class="booking-list-item__meta">
+              <span>${escapeHtml(tripType)}</span>
+              <span>${escapeHtml(distance)}</span>
+              <span>${escapeHtml(pickupDate)}</span>
+            </div>
+          </div>
+          <div class="booking-list-item__money">
+            <strong>${escapeHtml(fare)}</strong>
+            <span class="booking-badge ${getBookingStatusClass(status)}">${escapeHtml(status)}</span>
+          </div>
+        </div>
+
+        <div class="booking-list-item__route">
+          <div class="booking-route-point">
+            <span class="booking-route-point__label">Pickup</span>
+            <strong>${escapeHtml(booking.pickupLocation || '—')}</strong>
+          </div>
+          <div class="booking-route-point">
+            <span class="booking-route-point__label">Destination</span>
+            <strong>${escapeHtml(booking.dropLocation || '—')}</strong>
+          </div>
+        </div>
+
+        <div class="booking-list-item__footer">
+          <div class="booking-list-item__footer-group">
+            <span class="booking-card__label">Payment</span>
+            <span class="booking-badge booking-badge--payment ${getBookingStatusClass(paymentStatus)}">${escapeHtml(paymentStatus)}</span>
+          </div>
+          <div class="booking-list-item__footer-group">
+            <span class="booking-card__label">Driver</span>
+            <span class="booking-card__value">${escapeHtml(driver ? driver.name : 'Not assigned yet')}</span>
+          </div>
+          <div class="booking-list-item__actions">
+            <button class="btn btn-ghost btn-sm" type="button" data-booking-view="${index}">View Details</button>
+            ${booking.invoiceId || booking.invoice?.invoiceId || booking.invoiceGenerated ? `<button class="btn btn-primary btn-sm" type="button" data-booking-download="${index}">Download Invoice</button>` : ''}
+          </div>
+        </div>
+      </li>
+    `;
+  }
+
+  function renderBookingsList(bookings) {
+    return `
+      <div class="bookings-modal__section">
+        <div class="bookings-modal__summary">
+          <div>
+            <p class="bookings-modal__eyebrow">Customer dashboard</p>
+            <h3>My Bookings</h3>
+          </div>
+          <span class="booking-count">${bookings.length} booking${bookings.length === 1 ? '' : 's'}</span>
+        </div>
+        <p class="bookings-modal__lede">Review your trips, payment status, and invoices without internal system data.</p>
+        ${bookings.length ? `<ul class="bookings-list">${bookings.map((booking, index) => renderBookingListItem(booking, index)).join('')}</ul>` : '<div class="booking-empty">No bookings found.</div>'}
+      </div>
+    `;
+  }
+
+  function renderBookingsModalNotice(title, message) {
+    return `
+      <div class="booking-empty booking-empty--notice">
+        <strong>${escapeHtml(title)}</strong>
+        <span>${escapeHtml(message)}</span>
+      </div>
+    `;
+  }
+
+  function renderBookingDetail(booking) {
+    const reference = getBookingReference(booking);
+    const vehicleName = getBookingVehicleName(booking);
+    const tripType = getBookingTripType(booking);
+    const pickupDate = formatBookingDateTime(booking.pickupDate, booking.pickupTime);
+    const distance = formatBookingDistance(booking.distanceInKm || booking.distance || booking.finalBill?.distanceInKm);
+    const estimatedFare = formatBookingMoney(booking.estimatedFare || booking.totalFare || booking.finalBill?.totalAmount || 0);
+    const finalFare = formatBookingMoney(booking.finalBill?.totalAmount || booking.totalFare || booking.estimatedFare || 0);
+    const status = String(booking.bookingStatus || 'Pending');
+    const paymentStatus = String(booking.paymentStatus || 'Unpaid');
+    const driver = getBookingDriver(booking);
+    const fareBreakdown = getBookingFareBreakdown(booking);
+    const invoiceId = booking.invoiceId || booking.invoice?.invoiceId || 'Pending';
+    const routeHint = booking.pickupAddress || booking.destinationAddress || booking.specialRequirements || '';
+
+    return `
+      <div class="booking-detail">
+        <div class="booking-detail__header">
+          <button class="btn btn-ghost btn-sm" type="button" data-booking-back>Back to bookings</button>
+          <div class="booking-detail__title">
+            <p class="bookings-modal__eyebrow">Booking #${escapeHtml(reference)}</p>
+            <h3>${escapeHtml(vehicleName)}</h3>
+            <div class="booking-detail__meta">
+              <span>${escapeHtml(tripType)}</span>
+              <span>${escapeHtml(distance)}</span>
+              <span>${escapeHtml(pickupDate)}</span>
+            </div>
+          </div>
+          <div class="booking-detail__status">
+            <span class="booking-badge ${getBookingStatusClass(status)}">${escapeHtml(status)}</span>
+            <span class="booking-badge booking-badge--payment ${getBookingStatusClass(paymentStatus)}">${escapeHtml(paymentStatus)}</span>
+          </div>
+        </div>
+
+        <div class="booking-detail__grid">
+          <section class="booking-panel">
+            <h4>Booking Information</h4>
+            <div class="booking-info-list">
+              <div><span>Pickup</span><strong>${escapeHtml(booking.pickupLocation || '—')}</strong></div>
+              <div><span>Destination</span><strong>${escapeHtml(booking.dropLocation || '—')}</strong></div>
+              <div><span>Booking date</span><strong>${escapeHtml(pickupDate)}</strong></div>
+              <div><span>Vehicle</span><strong>${escapeHtml(vehicleName)}</strong></div>
+              <div><span>Trip type</span><strong>${escapeHtml(tripType)}</strong></div>
+              <div><span>Distance</span><strong>${escapeHtml(distance)}</strong></div>
+            </div>
+            ${routeHint ? `<p class="booking-panel__note">${escapeHtml(routeHint)}</p>` : ''}
+          </section>
+
+          <section class="booking-panel">
+            <h4>Driver Details</h4>
+            ${driver ? `
+              <div class="booking-driver-card">
+                <div class="booking-driver-card__icon"><i class="fa-solid fa-user-tie"></i></div>
+                <div>
+                  <strong>${escapeHtml(driver.name)}</strong>
+                  <span>${escapeHtml(driver.phone || 'Contact shared after assignment')}</span>
+                  ${driver.vehicle ? `<small>${escapeHtml(driver.vehicle)}</small>` : ''}
+                </div>
+              </div>
+            ` : '<div class="booking-empty booking-empty--compact">Driver will appear here once assigned.</div>'}
+          </section>
+
+          <section class="booking-panel booking-panel--wide">
+            <h4>Fare Breakdown</h4>
+            <div class="booking-fare-grid">
+              ${fareBreakdown.map(([label, value]) => `<div class="booking-fare-row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(formatBookingMoney(value))}</strong></div>`).join('')}
+            </div>
+          </section>
+
+          <section class="booking-panel">
+            <h4>Payment</h4>
+            <div class="booking-info-list">
+              <div><span>Payment status</span><strong>${escapeHtml(paymentStatus)}</strong></div>
+              <div><span>Invoice</span><strong>${escapeHtml(invoiceId)}</strong></div>
+              <div><span>Estimated fare</span><strong>${escapeHtml(estimatedFare)}</strong></div>
+              <div><span>Final amount</span><strong>${escapeHtml(finalFare)}</strong></div>
+            </div>
+          </section>
+        </div>
+
+        <div class="booking-detail__timeline">
+          <h4>Status Timeline</h4>
+          ${renderBookingTimeline(status)}
+        </div>
+
+        <div class="booking-detail__actions">
+          ${booking.invoiceId || booking.invoice?.invoiceId || booking.invoiceGenerated ? `<button class="btn btn-primary" type="button" data-booking-download-detail>Download Invoice</button>` : ''}
+          <button class="btn btn-ghost" type="button" data-booking-back>View all bookings</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function bindBookingsModalActions() {
+    const list = document.getElementById('bookingsList');
+    if (!list) return;
+
+    list.querySelectorAll('[data-booking-view]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const index = Number(button.getAttribute('data-booking-view'));
+        const booking = __lastBookings[index];
+        if (booking) showBookingDetail(booking);
+      });
+    });
+
+    list.querySelectorAll('[data-booking-download]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const index = Number(button.getAttribute('data-booking-download'));
+        const booking = __lastBookings[index];
+        if (booking) await downloadBookingInvoice(booking);
+      });
+    });
+
+    list.querySelectorAll('[data-booking-back]').forEach((button) => {
+      button.addEventListener('click', () => showBookingsModal(__lastBookings));
+    });
+
+    const detailDownloadBtn = list.querySelector('[data-booking-download-detail]');
+    if (detailDownloadBtn && __bookingViewMode === 'detail' && __activeBooking) {
+      detailDownloadBtn.addEventListener('click', async () => {
+        await downloadBookingInvoice(__activeBooking);
+      });
+    }
+  }
+
+  async function downloadBookingInvoice(booking) {
+    try {
+      const response = await authFetch(apiUrl(`/api/bookings/${booking._id}/invoice/download`), { method: 'GET' });
+      if (!response.ok) throw new Error('Invoice download failed');
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${booking.invoiceId || booking.invoice?.invoiceId || booking.bookingId || 'invoice'}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      showGlobalNotification(error.message || 'Invoice download failed');
+    }
+  }
+
   function showBookingsModal(bookings) {
     try {
       __lastBookings = Array.isArray(bookings) ? bookings : [];
+      __bookingViewMode = 'list';
+      __activeBooking = null;
       const modal = document.getElementById('bookingsModal');
       const list = document.getElementById('bookingsList');
       const closeBtn = document.getElementById('bookingsCloseBtn');
       if (!modal || !list) return;
-      list.innerHTML = '';
-      if (!bookings || !bookings.length) {
-        list.innerHTML = '<div class="card" style="padding:12px">No bookings found.</div>';
-      } else {
-        bookings.forEach((b, idx) => {
-          const card = document.createElement('div');
-          card.className = 'card';
-          card.style.padding = '12px';
-          card.style.marginBottom = '8px';
-          const fare = b.estimatedFare || b.amount || 0;
-          const status = b.bookingStatus || b.paymentStatus || '';
-          card.innerHTML = `
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
-              <div style="flex:1">
-                <div style="font-weight:600">${escapeHtml(b.bookingId)} — ${escapeHtml(b.customerName || '')}</div>
-                <div style="color:#666;margin-top:6px">${escapeHtml(b.pickupLocation || '')} → ${escapeHtml(b.dropLocation || '')}</div>
-                <div style="color:#666;margin-top:6px;font-size:13px">Pickup: ${new Date(b.pickupDate).toLocaleDateString()} ${escapeHtml(b.pickupTime || '')}</div>
-              </div>
-              <div style="text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:8px">
-                <div style="font-weight:700">₹${fare}</div>
-                <div style="font-size:13px;color:#333">${escapeHtml(status)}</div>
-                <div>
-                  <button class="btn btn-sm btn-ghost" data-view-idx="${idx}">View</button>
-                </div>
-              </div>
-            </div>
-          `;
-          list.appendChild(card);
-        });
-
-        // attach handlers for view buttons
-        list.querySelectorAll('[data-view-idx]').forEach((btn) => {
-          btn.addEventListener('click', (ev) => {
-            const idx = Number(btn.getAttribute('data-view-idx'));
-            const booking = __lastBookings[idx];
-            if (booking) showBookingDetail(booking);
-          });
-        });
-      }
+      list.innerHTML = renderBookingsList(__lastBookings);
+      bindBookingsModalActions();
       modal.style.display = 'flex';
       modal.setAttribute('aria-hidden', 'false');
+      const title = modal.querySelector('h3');
+      if (title) title.textContent = 'My Bookings';
       if (closeBtn && !closeBtn._bookingsHandler) {
         closeBtn.addEventListener('click', () => {
           modal.style.display = 'none';
@@ -346,7 +650,7 @@
         closeBtn._bookingsHandler = true;
       }
     } catch (e) {
-      console.error('showBookingsModal error', e);
+      showGlobalNotification('Unable to display your bookings right now.');
     }
   }
 
@@ -357,102 +661,19 @@
 
   function showBookingDetail(b) {
     try {
+      __activeBooking = b || null;
       const modal = document.getElementById('bookingsModal');
       const list = document.getElementById('bookingsList');
       if (!modal || !list) return;
-      list.innerHTML = '';
-      const wrapper = document.createElement('div');
-      wrapper.className = 'card';
-      wrapper.style.padding = '14px';
-      wrapper.style.maxHeight = '60vh';
-      wrapper.style.overflow = 'auto';
-
-      const rows = [
-        ['Booking ID', b.bookingId],
-        ['Customer', b.customerName || b.fullName || ''],
-        ['Email', b.email || ''],
-        ['Phone', b.phone || ''],
-        ['From → To', `${b.pickupLocation || ''} → ${b.dropLocation || ''}`],
-        ['Pickup', `${new Date(b.pickupDate).toLocaleDateString()} ${b.pickupTime || ''}`],
-        ['Passengers', b.passengers || ''],
-        ['Car', b.selectedCar || ''],
-        ['Package', b.selectedPackage || ''],
-        ['Estimated Fare', `₹${b.estimatedFare || ''}`],
-        ['Booking Status', b.bookingStatus || 'Pending'],
-        ['Payment Status', b.paymentStatus || 'Unpaid'],
-        ['Invoice ID', b.invoiceId || b.invoice?.invoiceId || 'Pending'],
-        ['Final Bill', b.finalBill?.totalAmount ? `₹${b.finalBill.totalAmount}` : `₹${b.totalFare || b.estimatedFare || ''}`],
-        ['Payment Note', 'Payment after ride completion']
-      ];
-
-      const content = document.createElement('div');
-      rows.forEach(([k, v]) => {
-        const el = document.createElement('div');
-        el.style.marginBottom = '8px';
-        el.innerHTML = `<strong>${escapeHtml(k)}:</strong> ${escapeHtml(v)} `;
-        content.appendChild(el);
-      });
-
-      const rawPre = document.createElement('pre');
-      rawPre.style.background = '#f6f6f6';
-      rawPre.style.padding = '8px';
-      rawPre.style.borderRadius = '6px';
-      rawPre.style.overflow = 'auto';
-      rawPre.textContent = JSON.stringify(b, null, 2);
-
-      const actions = document.createElement('div');
-      actions.style.marginTop = '12px';
-      const backBtn = document.createElement('button');
-      backBtn.className = 'btn btn-ghost';
-      backBtn.textContent = 'Back to list';
-      backBtn.addEventListener('click', () => showBookingsModal(__lastBookings));
-
-      const closeBtn = document.getElementById('bookingsCloseBtn');
-      const closeLocal = document.createElement('button');
-      closeLocal.className = 'btn btn-ghost';
-      closeLocal.style.marginLeft = '8px';
-      closeLocal.textContent = 'Close';
-      closeLocal.addEventListener('click', () => {
-        const modalEl = document.getElementById('bookingsModal');
-        modalEl.style.display = 'none';
-        modalEl.setAttribute('aria-hidden', 'true');
-      });
-
-      actions.appendChild(backBtn);
-      if (b.invoiceId || b.invoice?.invoiceId || b.invoiceGenerated) {
-        const downloadInvoiceBtn = document.createElement('button');
-        downloadInvoiceBtn.className = 'btn btn-primary';
-        downloadInvoiceBtn.style.marginLeft = '8px';
-        downloadInvoiceBtn.textContent = 'Download invoice';
-        downloadInvoiceBtn.addEventListener('click', async () => {
-          try {
-            const response = await authFetch(apiUrl(`/api/bookings/${b._id}/invoice/download`), { method: 'GET' });
-            if (!response.ok) throw new Error('Invoice download failed');
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `${b.invoiceId || b.invoice?.invoiceId || b.bookingId}.pdf`;
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            window.URL.revokeObjectURL(url);
-          } catch (error) {
-            alert(error.message || 'Invoice download failed');
-          }
-        });
-        actions.appendChild(downloadInvoiceBtn);
-      }
-      actions.appendChild(closeLocal);
-
-      wrapper.appendChild(content);
-      wrapper.appendChild(rawPre);
-      wrapper.appendChild(actions);
-      list.appendChild(wrapper);
+      __bookingViewMode = 'detail';
+      list.innerHTML = renderBookingDetail(b);
+      bindBookingsModalActions();
       modal.style.display = 'flex';
       modal.setAttribute('aria-hidden', 'false');
+      const title = modal.querySelector('h3');
+      if (title) title.textContent = `Booking #${getBookingReference(b)}`;
     } catch (e) {
-      console.error('showBookingDetail error', e);
+      showGlobalNotification('Unable to open booking details right now.');
     }
   }
 
@@ -488,13 +709,26 @@
         mb.type = 'button';
         mb.textContent = 'My Bookings';
         mb.addEventListener('click', async () => {
+          const modal = document.getElementById('bookingsModal');
+          const list = document.getElementById('bookingsList');
+          if (modal && list) {
+            __bookingViewMode = 'list';
+            list.innerHTML = renderBookingsModalNotice('Loading bookings...', 'Please wait while we fetch your trips.');
+            modal.style.display = 'flex';
+            modal.setAttribute('aria-hidden', 'false');
+          }
           try {
             const res = await authFetch(apiUrl('/api/bookings'), {}, { retries: 1 });
             const body = await safeJson(res);
-            if (!res.ok) throw new Error(body?.message || 'Failed to fetch bookings');
+            if (!res.ok) throw new Error(body?.message || 'Booking failed to load');
             showBookingsModal(body.bookings || []);
           } catch (e) {
-            showGlobalNotification(e.message || 'Failed to fetch bookings');
+            if (modal && list) {
+              list.innerHTML = renderBookingsModalNotice('Booking failed to load', 'Please try again in a moment.');
+              modal.style.display = 'flex';
+              modal.setAttribute('aria-hidden', 'false');
+            }
+            showGlobalNotification('Booking failed to load');
           }
         });
         navRight.insertBefore(mb, menuBtn);
@@ -503,13 +737,26 @@
       if (mobileMyBookingsBtn) {
         mobileMyBookingsBtn.onclick = async () => {
           closeMenu();
+          const modal = document.getElementById('bookingsModal');
+          const list = document.getElementById('bookingsList');
+          if (modal && list) {
+            __bookingViewMode = 'list';
+            list.innerHTML = renderBookingsModalNotice('Loading bookings...', 'Please wait while we fetch your trips.');
+            modal.style.display = 'flex';
+            modal.setAttribute('aria-hidden', 'false');
+          }
           try {
             const res = await authFetch(apiUrl('/api/bookings'), {}, { retries: 1 });
             const body = await safeJson(res);
-            if (!res.ok) throw new Error(body?.message || 'Failed to fetch bookings');
+            if (!res.ok) throw new Error(body?.message || 'Booking failed to load');
             showBookingsModal(body.bookings || []);
           } catch (e) {
-            showGlobalNotification(e.message || 'Failed to fetch bookings');
+            if (modal && list) {
+              list.innerHTML = renderBookingsModalNotice('Booking failed to load', 'Please try again in a moment.');
+              modal.style.display = 'flex';
+              modal.setAttribute('aria-hidden', 'false');
+            }
+            showGlobalNotification('Booking failed to load');
           }
         };
       }
@@ -1080,6 +1327,7 @@
     const selectedPackage = form.querySelector('[name="selectedPackage"]') || tripType;
     const pickupCoordinates = form.querySelector('[data-pickup-coordinates]');
     const dropCoordinates = form.querySelector('[data-drop-coordinates]');
+    const useCurrentLocationBtn = form.querySelector('[data-use-current-location]');
     const pickupSuggestions = document.getElementById('pickupSuggestions');
     const dropSuggestions = document.getElementById('dropSuggestions');
     const fareDistance = document.querySelector('[data-fare-distance]');
@@ -1111,6 +1359,14 @@
     let isBookingSubmitting = false;
 
     const originalSubmitLabel = submitBtn?.innerHTML || 'Submit Booking';
+
+    const shouldLogBookingDiagnostics = () => window.__BOOKING_DEBUG__ || /localhost|127\.0\.0\.1/i.test(window.location.hostname);
+
+    const logBookingDiagnostics = (...args) => {
+      if (shouldLogBookingDiagnostics()) {
+        console.debug('[booking]', ...args);
+      }
+    };
 
     const getTodayDateValue = () => {
       const today = new Date();
@@ -1318,10 +1574,42 @@
 
     const parseCoords = (value) => {
       if (!value) return null;
+      if (Array.isArray(value) && value.length >= 2) {
+        const longitude = Number(value[0]);
+        const latitude = Number(value[1]);
+        if (Number.isFinite(longitude) && Number.isFinite(latitude)) return [longitude, latitude];
+      }
+
       const parts = String(value).split(',').map((item) => Number(item.trim()));
-      if (parts.length >= 2 && parts.every(Number.isFinite)) return parts;
+      if (parts.length >= 2 && parts.every(Number.isFinite)) return [parts[0], parts[1]];
       return null;
     };
+
+    const serializeCoords = (coordinates) => {
+      const parsed = parseCoords(coordinates);
+      return parsed ? parsed.join(',') : '';
+    };
+
+    const setPickupCoordinatesValue = (coordinates) => {
+      if (pickupCoordinates) pickupCoordinates.value = serializeCoords(coordinates);
+    };
+
+    const setDropCoordinatesValue = (coordinates) => {
+      if (dropCoordinates) dropCoordinates.value = serializeCoords(coordinates);
+    };
+
+    const requestCurrentPosition = () => new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Geolocation is not supported in this browser.'));
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true,
+        timeout: 12000,
+        maximumAge: 60000
+      });
+    });
 
     const getTripTypeValue = () => tripType?.value || selectedPackage?.value || 'one-way';
 
@@ -1436,6 +1724,7 @@
 
     const refreshLocationSuggestions = async (input, datalist, coordField) => {
       const query = String(input?.value || '').trim();
+      if (coordField) coordField.value = '';
       if (!query || query.length < 3 || !datalist) return;
 
       try {
@@ -1446,7 +1735,8 @@
 
         const exactMatch = suggestions.find((item) => String(item.label || '').toLowerCase() === query.toLowerCase()) || suggestions[0];
         if (exactMatch?.coordinates && coordField) {
-          coordField.value = exactMatch.coordinates.join(',');
+          coordField.value = serializeCoords(exactMatch.coordinates);
+          logBookingDiagnostics('geocode selection', { query, coordinates: exactMatch.coordinates, label: exactMatch.label });
         }
       } catch (error) {
         console.warn('Location suggestion lookup failed', error);
@@ -1458,6 +1748,49 @@
       quoteTimer = window.setTimeout(() => {
         void calculateQuote();
       }, 450);
+    };
+
+    const populatePickupFromCurrentLocation = async () => {
+      if (!useCurrentLocationBtn || !pickupLoc) return;
+
+      const originalText = useCurrentLocationBtn.textContent;
+      useCurrentLocationBtn.disabled = true;
+      useCurrentLocationBtn.textContent = 'Locating...';
+
+      try {
+        const position = await requestCurrentPosition();
+        const { latitude, longitude } = position.coords || {};
+
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+          throw new Error('Invalid GPS coordinates received from the browser.');
+        }
+
+        setPickupCoordinatesValue([longitude, latitude]);
+
+        let resolvedLabel = '';
+        try {
+          const response = await performRequest(apiUrl(`/api/fare/reverse-geocode?lng=${encodeURIComponent(longitude)}&lat=${encodeURIComponent(latitude)}`));
+          const result = await safeJson(response);
+          resolvedLabel = String(result?.location?.label || '').trim();
+          logBookingDiagnostics('reverse geocode result', { longitude, latitude, resolvedLabel, result });
+        } catch (reverseError) {
+          console.warn('Reverse geocoding failed, keeping GPS coordinates only.', reverseError);
+        }
+
+        if (resolvedLabel) {
+          pickupLoc.value = resolvedLabel;
+        }
+
+        validateBookingField(pickupLoc, true);
+        updateSubmitState();
+        debounceQuote();
+      } catch (error) {
+        console.warn('Current location lookup failed', error);
+        showGlobalNotification(error?.message || 'Unable to use current location. You can still enter the pickup manually.');
+      } finally {
+        useCurrentLocationBtn.disabled = false;
+        useCurrentLocationBtn.textContent = originalText;
+      }
     };
 
     const calculateQuote = async () => {
@@ -1491,6 +1824,8 @@
           waitingMinutes: 0,
           tollCharges: 0
         };
+
+        logBookingDiagnostics('fare payload', payload);
 
         const response = await performRequest(apiUrl('/api/fare/calculate'), {
           method: 'POST',
@@ -1541,7 +1876,9 @@
           email: email.value.trim(),
           phone: normalizeIndianPhone(phone.value)?.normalized || phone.value.trim(),
           pickupLocation: pickupLoc.value.trim(),
+            pickupAddress: pickupLoc.value.trim(),
           dropLocation: dropLoc.value.trim(),
+            destinationAddress: dropLoc.value.trim(),
           pickupDate: pickupDate.value,
           dropDate: dropDate.value,
           pickupTime: pickupTime.value,
@@ -1551,7 +1888,8 @@
           tripType: getTripTypeValue(),
           selectedPackage: selectedPackage.value,
           pickupCoordinates: pickupCoordinates.value,
-          dropCoordinates: dropCoordinates.value,
+            dropCoordinates: dropCoordinates.value,
+            destinationCoordinates: dropCoordinates.value,
           specialRequirements: form.querySelector('[name="requirements"]')?.value.trim() || ''
         };
 
@@ -1658,7 +1996,6 @@
     [pickupLoc, dropLoc].forEach((input, index) => {
       const datalist = index === 0 ? pickupSuggestions : dropSuggestions;
       const coordField = index === 0 ? pickupCoordinates : dropCoordinates;
-      const timerRef = index === 0 ? 'pickupTimer' : 'dropTimer';
 
       const scheduleAutocomplete = () => {
         window.clearTimeout(index === 0 ? pickupTimer : dropTimer);
@@ -1666,7 +2003,10 @@
         else dropTimer = window.setTimeout(() => void refreshLocationSuggestions(input, datalist, coordField), 350);
       };
 
-      input.addEventListener('input', scheduleAutocomplete);
+      input.addEventListener('input', () => {
+        if (coordField) coordField.value = '';
+        scheduleAutocomplete();
+      });
       input.addEventListener('change', async () => {
         await refreshLocationSuggestions(input, datalist, coordField);
         debounceQuote();
@@ -1675,6 +2015,10 @@
         await refreshLocationSuggestions(input, datalist, coordField);
         debounceQuote();
       });
+    });
+
+    useCurrentLocationBtn?.addEventListener('click', () => {
+      void populatePickupFromCurrentLocation();
     });
 
     [vehicleSelect, selectedPackage, tripType, pickupDate, pickupTime].forEach((element) => {
