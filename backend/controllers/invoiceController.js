@@ -66,7 +66,7 @@ function syncInvoiceFromModel(booking, invoice, model, finalBill, paymentStatus,
   booking.invoiceGenerated = true;
   booking.bookingStatus = billing.paymentStatus === 'Paid' ? 'Paid' : 'Invoice Generated';
   booking.paymentStatus = billing.paymentStatus || paymentStatus || 'Pending';
-  booking.distanceInKm = finalBill.distanceInKm || booking.distanceInKm || 0;
+  booking.distanceInKm = finalBill.tripDistanceKm || finalBill.distanceInKm || booking.distanceInKm || 0;
   booking.duration = finalBill.estimatedDuration || booking.duration || booking.estimatedDuration || 0;
   booking.estimatedDuration = finalBill.estimatedDuration || booking.estimatedDuration || 0;
   booking.baseFare = finalBill.baseFare || booking.baseFare || 0;
@@ -131,7 +131,7 @@ function syncInvoiceFromModel(booking, invoice, model, finalBill, paymentStatus,
   invoice.driverName = booking.assignedDriver?.driverName || invoice.driverName || '';
   invoice.driverPhone = booking.assignedDriver?.phone || invoice.driverPhone || '';
   invoice.carType = booking.selectedPackage || invoice.carType || '';
-  invoice.distance = booking.distanceInKm ? `${Number(booking.distanceInKm).toFixed(1)} KM` : booking.finalBill?.distance || invoice.distance || '';
+  invoice.distance = booking.distanceInKm > 0 ? `${Number(booking.distanceInKm).toFixed(1)} KM` : booking.finalBill?.distance || invoice.distance || '';
   invoice.distanceValue = invoice.distance;
   invoice.duration = booking.duration || booking.estimatedDuration || invoice.duration || 0;
   invoice.pricePerKm = booking.pricePerKm || booking.perKmRate || invoice.pricePerKm || 0;

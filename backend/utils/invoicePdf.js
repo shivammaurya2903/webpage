@@ -200,15 +200,16 @@ function validateInvoiceRenderModel(model, booking = {}, invoice = {}) {
   const bookingId = normalizeInvoiceText(model?.invoice?.bookingId, '');
   const driverName = normalizeInvoiceText(model?.ride?.driverName, '');
   const driverPhone = normalizeInvoiceText(model?.ride?.driverPhone, '');
+  const tripDistanceKm = resolveNumericValue(model?.billingSummary?.tripDistanceKm);
   const tripDistance = normalizeInvoiceText(model?.billingSummary?.tripDistance, '');
-  const resolvedDistance = resolveTripDistance(model?.billingBreakdown || {}, booking, invoice);
+  const distanceCharge = resolveNumericValue(model?.billingBreakdown?.distanceCharge, model?.billingBreakdown?.distanceFare);
 
   if (!invoiceId) issues.push('invoiceId');
   if (!bookingId) issues.push('bookingId');
   if (!driverName) issues.push('driverName');
   if (!driverPhone) issues.push('driverPhone');
-  if (resolvedDistance > 0 && !tripDistance) issues.push('tripDistance');
-  if (resolvedDistance > 0 && /^(0\s?km|n\/a|unknown)$/i.test(tripDistance)) issues.push('tripDistanceDisplay');
+  if (distanceCharge > 0 && tripDistanceKm <= 0) issues.push('tripDistanceKm');
+  if (tripDistanceKm > 0 && (!tripDistance || /^(0\s?km|n\/a|unknown)$/i.test(tripDistance))) issues.push('tripDistanceDisplay');
 
   return {
     ok: issues.length === 0,
@@ -336,6 +337,7 @@ function buildInvoiceModel({ booking, invoice, driver, settings }) {
       rideStatus: booking.bookingStatus || paymentStatus
     },
     billingSummary: {
+      tripDistanceKm: resolvedTripDistance,
       tripDistance: formatDistanceDisplay(resolvedTripDistance),
       tripDuration: normalizeInvoiceText(formatDuration(billingBreakdown.estimatedDuration ?? booking.estimatedDuration ?? booking.duration), 'N/A'),
       vehicle: normalizeInvoiceText(invoice.vehicle || booking.selectedCar, 'N/A'),
@@ -508,7 +510,7 @@ function drawBillingSummaryCard(doc, fonts, model) {
   };
 
   const tripRows = [
-    { label: 'Distance', value: formatKm(resolveNumericValue(model.billingSummary.tripDistanceKm), 'km') },
+    { label: 'Distance', value: displayText(model.billingSummary.tripDistance, 'N/A') },
     { label: 'Duration', value: displayText(model.billingSummary.tripDuration) },
     { label: 'Vehicle', value: displayText(model.billingSummary.vehicle) },
     { label: 'Trip Type', value: displayText(model.billingSummary.tripType) }

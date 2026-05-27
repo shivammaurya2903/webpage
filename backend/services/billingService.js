@@ -533,12 +533,14 @@ function calculateDistanceFare({ tripType, distanceInKm, durationMinutes, priceP
     let extraKmCharge = roundCurrency(billableKm * rateForExtraKm);
     extraKmCharge = roundCurrency(extraKmCharge * surgeMultiplier);
     const extraHourCharge = roundCurrency(billableHours * packageExtraHourRate);
+    const tripDistanceKm = Number(tripDistance.toFixed(2));
 
     return {
       tripType: activeTripType,
-      tripDistance: Number(tripDistance.toFixed(2)),
+      tripDistance: tripDistanceKm,
+      tripDistanceKm,
       billableDistance: Number(billableKm.toFixed(2)),
-      distanceKm: Number(tripDistance.toFixed(2)),
+      distanceKm: tripDistanceKm,
       includedKm: packageIncludedKm,
       includedHours: packageIncludedHours,
       extraKm: Number(billableKm.toFixed(2)),
@@ -555,12 +557,14 @@ function calculateDistanceFare({ tripType, distanceInKm, durationMinutes, priceP
   if (activeTripType === 'outstation-package' || activeTripType === 'multi-day-tour') {
     let distanceCharge = roundCurrency(tripDistance * ratePerKm);
     distanceCharge = roundCurrency(distanceCharge * surgeMultiplier);
+    const tripDistanceKm = Number(tripDistance.toFixed(2));
 
     return {
       tripType: activeTripType,
-      tripDistance: Number(tripDistance.toFixed(2)),
-      billableDistance: Number(tripDistance.toFixed(2)),
-      distanceKm: Number(tripDistance.toFixed(2)),
+      tripDistance: tripDistanceKm,
+      tripDistanceKm,
+      billableDistance: tripDistanceKm,
+      distanceKm: tripDistanceKm,
       includedKm: packageIncludedKm,
       includedHours: packageIncludedHours,
       extraKm: Number(tripDistance.toFixed(2)),
@@ -576,12 +580,14 @@ function calculateDistanceFare({ tripType, distanceInKm, durationMinutes, priceP
   // Default: simple per-km charge (one-way, round-trip handled via roundTripMultiplier earlier)
   let distanceCharge = roundCurrency(tripDistance * ratePerKm);
   distanceCharge = roundCurrency(distanceCharge * surgeMultiplier);
+  const tripDistanceKm = Number(tripDistance.toFixed(2));
 
   return {
     tripType: activeTripType,
-    tripDistance: Number(tripDistance.toFixed(2)),
-    billableDistance: Number(tripDistance.toFixed(2)),
-    distanceKm: Number(tripDistance.toFixed(2)),
+    tripDistance: tripDistanceKm,
+    tripDistanceKm,
+    billableDistance: tripDistanceKm,
+    distanceKm: tripDistanceKm,
     includedKm: clampMinimum(includedKm, 0),
     includedHours: clampMinimum(includedHours, 0),
     extraKm: Number(tripDistance.toFixed(2)),
@@ -639,7 +645,7 @@ function calculateRoundTripFare(breakdown) {
 function buildBillingLineItems(breakdown = {}) {
   const rows = [];
   const packageLabel = breakdown.packageLabel || (breakdown.tripType === 'local-package' ? 'Local Package' : breakdown.tripType === 'half-day-package' ? 'Half Day Package' : breakdown.tripType === 'airport-transfer' ? 'Airport Pickup / Drop' : breakdown.tripType === 'outstation-package' ? 'Outstation Package' : breakdown.tripType === 'wedding-vip-event' ? 'Wedding / VIP Events' : 'Base Fare');
-  const distanceKm = toNumber(breakdown.distanceKm ?? breakdown.tripDistance ?? breakdown.distanceInKm, 0);
+  const distanceKm = toNumber(breakdown.tripDistanceKm ?? breakdown.distanceKm ?? breakdown.tripDistance ?? breakdown.distanceInKm, 0);
   const billableKm = toNumber(breakdown.extraKm ?? breakdown.billableDistance ?? distanceKm, 0);
   const ratePerKm = toNumber(breakdown.ratePerKm ?? breakdown.pricePerKm ?? breakdown.extraKmRate, 0);
   const driverAllowanceDays = Math.max(1, toNumber(breakdown.driverAllowanceDays, 1));
@@ -1017,6 +1023,7 @@ async function calculateFareQuote({
     distanceInKm: Number(toNumber(routeEstimate.distanceInKm, 0).toFixed(2)),
     estimatedDuration: Math.round(toNumber(routeEstimate.estimatedDuration, 0)),
     tripDistance: Number(tripDistance.toFixed(2)),
+    tripDistanceKm: Number(tripDistance.toFixed(2)),
     distanceKm: Number(tripDistance.toFixed(2)),
     billableDistance: Number(toNumber(distanceQuote.billableDistance, tripDistance).toFixed(2)),
     extraKm: Number(toNumber(distanceQuote.extraKm ?? distanceQuote.billableDistance, tripDistance).toFixed(2)),

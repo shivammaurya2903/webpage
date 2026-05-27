@@ -135,7 +135,7 @@ function calculateBillingDraft({ booking = {}, invoice = {}, settings = {}, draf
   const balanceAmount = roundCurrency(draft.balanceAmount ?? invoice.balanceAmount ?? booking.balanceAmount ?? sourceBreakdown.balanceAmount ?? grandTotal - paidAmount);
 
   const packageLabel = sourceBreakdown.packageLabel || booking.fareBreakdown?.packageLabel || booking.finalBill?.packageLabel || (booking.tripType === 'local-package' ? 'Local Package' : booking.tripType === 'half-day-package' ? 'Half Day Package' : booking.tripType === 'airport-transfer' ? 'Airport Pickup / Drop' : booking.tripType === 'outstation-package' ? 'Outstation Package' : booking.tripType === 'wedding-vip-event' ? 'Wedding / VIP Events' : 'Base Fare');
-  const distanceKm = toNumber(draft.distanceKm ?? sourceBreakdown.distanceKm ?? sourceBreakdown.tripDistance ?? booking.distanceInKm ?? 0, 0);
+  const distanceKm = toNumber(draft.distanceKm ?? sourceBreakdown.tripDistanceKm ?? sourceBreakdown.distanceKm ?? sourceBreakdown.tripDistance ?? booking.distanceInKm ?? 0, 0);
   const ratePerKm = toNumber(draft.ratePerKm ?? sourceBreakdown.ratePerKm ?? sourceBreakdown.pricePerKm ?? booking.pricePerKm ?? 0, 0);
   const extraHours = toNumber(draft.extraHours ?? sourceBreakdown.extraHours ?? 0, 0);
 
@@ -145,6 +145,7 @@ function calculateBillingDraft({ booking = {}, invoice = {}, settings = {}, draf
     packageBaseFare: baseFare,
     baseFare,
     distanceKm,
+    tripDistanceKm: distanceKm,
     tripDistance: distanceKm,
     ratePerKm,
     pricePerKm: ratePerKm,
@@ -179,6 +180,7 @@ function calculateBillingDraft({ booking = {}, invoice = {}, settings = {}, draf
     packageLabel,
     tripType: sourceBreakdown.tripType || booking.tripType,
     distanceKm,
+    tripDistanceKm: distanceKm,
     ratePerKm,
     includedKm: toNumber(sourceBreakdown.includedKm ?? 0, 0),
     includedHours: toNumber(sourceBreakdown.includedHours ?? 0, 0),

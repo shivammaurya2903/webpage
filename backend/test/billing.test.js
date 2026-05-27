@@ -233,6 +233,51 @@ describe('BillingService fare calculations', function () {
     expect(model.billingSummary.driverAllowancePerDay).to.equal(499);
     expect(model.billingSummary.tripType).to.equal('Outstation Package');
     expect(model.billingSummary.tripDistance).to.equal('120 km');
+    expect(model.billingSummary.tripDistanceKm).to.equal(120);
+  });
+
+  it('keeps the canonical trip distance aligned across quote and invoice model', async () => {
+    const quote = await calculateFareQuote({
+      pickup: { address: 'A' },
+      drop: { address: 'B' },
+      route: { distanceInKm: 457.4, estimatedDuration: 335 },
+      tripType: 'one-way',
+      pickupDateTime: '2026-05-27T10:00:00',
+      settings: { pricingSettings: { baseFare: 1000, pricePerKm: 20, gstPercent: 5 } }
+    });
+
+    const model = buildInvoiceModel({
+      booking: {
+        bookingId: 'BK-4',
+        customerName: 'Test User',
+        email: 'test@example.com',
+        phone: '9999999999',
+        pickupLocation: 'A',
+        dropLocation: 'B',
+        pickupDate: new Date('2026-05-27T10:00:00Z'),
+        pickupTime: '10:00',
+        selectedCar: 'Fortuner Legender',
+        selectedPackage: 'One Way',
+        tripType: 'one-way',
+        estimatedDuration: 335,
+        billingBreakdown: quote.billingBreakdown,
+        paymentMethod: 'UPI',
+        paymentStatus: 'Pending',
+        distanceInKm: 0
+      },
+      invoice: {
+        invoiceId: 'INV-4',
+        bookingId: 'BK-4',
+        createdAt: new Date('2026-05-27T10:00:00Z')
+      },
+      driver: null,
+      settings: {}
+    });
+
+    expect(quote.distanceInKm).to.equal(457.4);
+    expect(quote.billingBreakdown.tripDistanceKm).to.equal(457.4);
+    expect(model.billingSummary.tripDistanceKm).to.equal(457.4);
+    expect(model.billingSummary.tripDistance).to.equal('457.4 km');
   });
 
   it('normalizes blank invoice and booking fields to visible fallback text', async () => {
