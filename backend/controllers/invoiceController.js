@@ -13,6 +13,17 @@ const { sendEmail } = require('../services/emailService');
 const { invoiceGenerated, paymentReceipt } = require('../services/emailTemplates');
 const { sendWhatsApp } = require('../services/whatsappService');
 
+const BUILT_IN_CHARGE_NAMES = new Set([
+  'Toll Charges',
+  'Parking Charges',
+  'Driver Allowance',
+  'Waiting Charges',
+  'Night Charges',
+  'State Permit Charges',
+  'Extra Distance Charges',
+  'Miscellaneous Charges'
+]);
+
 async function loadSettings() {
   return SiteSettings.findOne({}).lean();
 }
@@ -44,6 +55,10 @@ async function buildBillingQuoteFromBooking(booking, settings) {
     tripDays: booking.fareBreakdown?.driverAllowanceDays || booking.finalBill?.driverAllowanceDays || 0,
     settings
   });
+}
+
+function normalizeCustomChargeItems(items) {
+  return normalizeChargeItems(items).filter((item) => !BUILT_IN_CHARGE_NAMES.has(item.name));
 }
 
 function syncInvoiceFromModel(booking, invoice, model, finalBill, paymentStatus, billing = {}) {
@@ -84,6 +99,13 @@ function syncInvoiceFromModel(booking, invoice, model, finalBill, paymentStatus,
     discountType: billing.discountType || booking.discountType || 'flat',
     discountValue: billing.discountValue ?? booking.discountValue ?? 0,
     discountAmount: billing.discountAmount ?? booking.discountAmount ?? 0,
+    baseFare: billing.fareBreakdown?.baseFare ?? finalBill.baseFare ?? booking.baseFare ?? 0,
+    packageBaseFare: billing.fareBreakdown?.packageBaseFare ?? finalBill.packageBaseFare ?? booking.baseFare ?? 0,
+    distanceCharge: billing.fareBreakdown?.distanceCharge ?? finalBill.distanceCharge ?? booking.distanceFare ?? 0,
+    distanceFare: billing.fareBreakdown?.distanceFare ?? finalBill.distanceFare ?? booking.distanceFare ?? 0,
+    extraKmCharge: billing.fareBreakdown?.extraKmCharge ?? finalBill.extraKmCharge ?? booking.distanceFare ?? 0,
+    minimumFareAdjustment: billing.fareBreakdown?.minimumFareAdjustment ?? finalBill.minimumFareAdjustment ?? 0,
+    subtotalAmount: billing.subtotal ?? finalBill.subtotalAmount ?? finalBill.subtotal ?? booking.subtotal ?? 0,
     subtotal: billing.subtotal ?? finalBill.subtotalAmount ?? finalBill.subtotal ?? booking.subtotal ?? 0,
     grandTotal: billing.grandTotal ?? finalBill.totalAmount ?? booking.grandTotal ?? 0,
     totalAmount: billing.totalFare ?? finalBill.totalAmount ?? booking.totalFare ?? 0,
@@ -127,6 +149,7 @@ function syncInvoiceFromModel(booking, invoice, model, finalBill, paymentStatus,
   invoice.customerSnapshot = model.customer;
   invoice.rideSnapshot = model.ride;
   invoice.lineItems = billing.lineItems || model.lineItems;
+  invoice.billingBreakdown = billing.billingBreakdown || model.billingBreakdown || model.fareBreakdown || finalBill;
   invoice.paymentSummary = model.payment;
   invoice.terms = model.terms;
   invoice.fareBreakdown = {
@@ -155,6 +178,13 @@ function syncInvoiceFromModel(booking, invoice, model, finalBill, paymentStatus,
   invoice.finalBill = {
     ...finalBill,
     ...billing.fareBreakdown,
+    baseFare: billing.fareBreakdown?.baseFare ?? finalBill.baseFare ?? booking.baseFare ?? 0,
+    packageBaseFare: billing.fareBreakdown?.packageBaseFare ?? finalBill.packageBaseFare ?? booking.baseFare ?? 0,
+    distanceCharge: billing.fareBreakdown?.distanceCharge ?? finalBill.distanceCharge ?? booking.distanceFare ?? 0,
+    distanceFare: billing.fareBreakdown?.distanceFare ?? finalBill.distanceFare ?? booking.distanceFare ?? 0,
+    extraKmCharge: billing.fareBreakdown?.extraKmCharge ?? finalBill.extraKmCharge ?? booking.distanceFare ?? 0,
+    minimumFareAdjustment: billing.fareBreakdown?.minimumFareAdjustment ?? finalBill.minimumFareAdjustment ?? 0,
+    subtotalAmount: billing.subtotal ?? finalBill.subtotalAmount ?? finalBill.subtotal ?? invoice.subtotalAmount ?? 0,
     extraCharges: billing.extraCharges || booking.extraCharges || [],
     discountType: billing.discountType || invoice.discountType || 'flat',
     discountValue: billing.discountValue ?? invoice.discountValue ?? 0,
@@ -196,6 +226,7 @@ function syncInvoiceFromModel(booking, invoice, model, finalBill, paymentStatus,
   };
 
   booking.invoice = invoice._id;
+  booking.billingBreakdown = billing.billingBreakdown || model.billingBreakdown || model.fareBreakdown || finalBill;
 }
 
 async function dispatchInvoiceArtifacts({ booking, invoice, settings, emailSubject, whatsappMessage }) {
@@ -223,9 +254,7 @@ async function loadBookingWithInvoice(id) {
 
 function buildInvoiceDraftSnapshot(booking, invoice = null) {
   const source = invoice?.invoiceDraft || booking.invoiceDraft || {};
-  const extraCharges = Array.isArray(source.extraCharges)
-    ? source.extraCharges
-    : normalizeChargeItems(source.extraCharges || booking.extraCharges || invoice?.extraCharges);
+  const extraCharges = normalizeCustomChargeItems(source.extraCharges || booking.extraCharges || invoice?.extraCharges);
 
   return {
     baseFare: Number(source.baseFare ?? booking.baseFare ?? invoice?.subtotalAmount ?? 0),
@@ -234,6 +263,7 @@ function buildInvoiceDraftSnapshot(booking, invoice = null) {
     parkingCharges: Number(source.parkingCharges ?? booking.parkingCharges ?? invoice?.parkingCharges ?? 0),
     waitingCharges: Number(source.waitingCharges ?? booking.waitingCharges ?? invoice?.waitingCharges ?? 0),
     nightCharges: Number(source.nightCharges ?? booking.nightCharges ?? invoice?.nightCharges ?? 0),
+    minimumFareAdjustment: Number(source.minimumFareAdjustment ?? booking.finalBill?.minimumFareAdjustment ?? invoice?.finalBill?.minimumFareAdjustment ?? 0),
     statePermitCharges: Number(source.statePermitCharges ?? booking.statePermitCharges ?? invoice?.statePermitCharges ?? 0),
     extraDistanceCharges: Number(source.extraDistanceCharges ?? booking.extraDistanceCharges ?? invoice?.extraDistanceCharges ?? 0),
     miscellaneousCharges: Number(source.miscellaneousCharges ?? booking.miscellaneousCharges ?? invoice?.miscellaneousCharges ?? 0),
@@ -241,7 +271,7 @@ function buildInvoiceDraftSnapshot(booking, invoice = null) {
     discountType: source.discountType ?? booking.discountType ?? invoice?.discountType ?? 'flat',
     discountValue: Number(source.discountValue ?? booking.discountValue ?? invoice?.discountValue ?? 0),
     discountAmount: Number(source.discountAmount ?? booking.discountAmount ?? invoice?.discountAmount ?? 0),
-      grandTotal: Number(source.grandTotal ?? booking.grandTotal ?? invoice?.grandTotal ?? 0),
+    grandTotal: Number(source.grandTotal ?? booking.grandTotal ?? invoice?.grandTotal ?? 0),
     paymentStatus: source.paymentStatus ?? booking.paymentStatus ?? invoice?.paymentStatus ?? 'Pending',
     paymentMethod: source.paymentMethod ?? booking.paymentMethod ?? invoice?.paymentMethod ?? '',
     paymentDate: source.paymentDate ?? booking.paymentDate ?? invoice?.paymentDate ?? null,
@@ -256,7 +286,7 @@ function buildInvoiceDraftSnapshot(booking, invoice = null) {
 function getBillingDraftInput(reqBody = {}) {
   return {
     ...reqBody,
-    extraCharges: Array.isArray(reqBody.extraCharges) ? reqBody.extraCharges : normalizeChargeItems(reqBody.extraCharges)
+    extraCharges: normalizeCustomChargeItems(reqBody.extraCharges)
   };
 }
 
@@ -282,6 +312,7 @@ const saveBookingInvoiceDraft = asyncHandler(async (req, res) => {
     ...buildInvoiceDraftSnapshot(booking, invoice),
     ...getBillingDraftInput(req.body || {}),
     extraCharges: billing.extraCharges,
+    minimumFareAdjustment: billing.fareBreakdown?.minimumFareAdjustment ?? 0,
     discountType: billing.discountType,
     discountValue: billing.discountValue,
     discountAmount: billing.discountAmount,
@@ -313,6 +344,13 @@ const saveBookingInvoiceDraft = asyncHandler(async (req, res) => {
   booking.finalBill = {
     ...(booking.finalBill || {}),
     ...billing.fareBreakdown,
+    baseFare: billing.fareBreakdown?.baseFare ?? booking.finalBill?.baseFare ?? booking.baseFare ?? 0,
+    packageBaseFare: billing.fareBreakdown?.packageBaseFare ?? booking.finalBill?.packageBaseFare ?? booking.baseFare ?? 0,
+    distanceCharge: billing.fareBreakdown?.distanceCharge ?? booking.finalBill?.distanceCharge ?? booking.distanceFare ?? 0,
+    distanceFare: billing.fareBreakdown?.distanceFare ?? booking.finalBill?.distanceFare ?? booking.distanceFare ?? 0,
+    extraKmCharge: billing.fareBreakdown?.extraKmCharge ?? booking.finalBill?.extraKmCharge ?? booking.distanceFare ?? 0,
+    minimumFareAdjustment: billing.fareBreakdown?.minimumFareAdjustment ?? booking.finalBill?.minimumFareAdjustment ?? 0,
+    subtotalAmount: billing.subtotal ?? booking.finalBill?.subtotalAmount ?? booking.finalBill?.subtotal ?? booking.subtotal ?? 0,
     payableAfterRide: true,
     paymentStatus: billing.paymentStatus,
     paymentMethod: billing.paymentMethod,
@@ -321,6 +359,7 @@ const saveBookingInvoiceDraft = asyncHandler(async (req, res) => {
     paymentDate: billing.paymentDate,
     transactionId: billing.transactionId
   };
+  booking.billingBreakdown = billing.billingBreakdown || billing.fareBreakdown;
 
   booking.statusHistory = Array.isArray(booking.statusHistory) ? booking.statusHistory : [];
   booking.statusHistory.push({
@@ -353,10 +392,12 @@ const saveBookingInvoiceDraft = asyncHandler(async (req, res) => {
       currency: invoice.fareBreakdown?.currency || 'INR'
     };
     invoice.lineItems = billing.lineItems;
+    invoice.billingBreakdown = billing.billingBreakdown || billing.fareBreakdown;
     invoice.paymentSummary = billing.paymentSummary;
     invoice.finalBill = {
       ...(invoice.finalBill || {}),
       ...billing.fareBreakdown,
+      minimumFareAdjustment: billing.fareBreakdown?.minimumFareAdjustment ?? invoice.finalBill?.minimumFareAdjustment ?? 0,
       payableAfterRide: true,
       paymentStatus: billing.paymentStatus,
       paymentMethod: billing.paymentMethod,

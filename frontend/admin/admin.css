@@ -203,6 +203,15 @@ img { max-width: 100%; display: block; }
 .form-grid .field.full { grid-column: 1 / -1; }
 .form-actions { display: flex; flex-wrap: wrap; gap: 12px; }
 .helper { color: var(--muted); font-size: 0.88rem; }
+/* small helper text shown under form fields */
+.field-help {
+  display: block;
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin-top: 6px;
+  line-height: 1.2;
+  opacity: 0.95;
+}
 .preview {
   margin-top: 12px; width: 100%; height: 180px; border-radius: 18px; object-fit: cover; border: 1px solid rgba(255,255,255,0.12);
 }

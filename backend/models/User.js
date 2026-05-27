@@ -9,7 +9,9 @@ const userSchema = new mongoose.Schema(
     role: { type: String, enum: ['customer', 'admin'], default: 'customer' },
     phone: { type: String, required: true },
     isBlocked: { type: Boolean, default: false },
-    lastLoginAt: { type: Date, default: null }
+    lastLoginAt: { type: Date, default: null },
+    resetPasswordToken: { type: String, default: null, select: false },
+    resetPasswordExpires: { type: Date, default: null, select: false }
   },
   { timestamps: true }
 );

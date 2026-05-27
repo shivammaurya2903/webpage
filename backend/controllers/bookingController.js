@@ -11,6 +11,7 @@ const ApiError = require('../utils/ApiError');
 const { createBookingId } = require('../utils/bookingId');
 const { createInvoiceId } = require('../utils/invoiceId');
 const { buildInvoicePdf } = require('../utils/invoicePdf');
+const { roundCurrency } = require('../utils/billingMath');
 const { normalizePaymentMethod: normalizeBillingPaymentMethod, normalizePaymentStatus: normalizeBillingPaymentStatus } = require('../utils/billingWorkflow');
 const { calculateFareQuote } = require('../services/fareCalculator');
 const { normalizeChargeItems } = require('../utils/billingWorkflow');
@@ -68,7 +69,7 @@ function normalizePaymentMethod(method) {
 
 function buildFinalBill(estimatedFare) {
   const baseAmount = Number(estimatedFare || 0);
-  const taxAmount = Math.max(0, Math.round(baseAmount * 0.05));
+  const taxAmount = roundCurrency(baseAmount * 0.05);
   const discountAmount = 0;
   const totalAmount = Math.max(0, baseAmount + taxAmount - discountAmount);
 
@@ -319,10 +320,12 @@ const createBooking = asyncHandler(async (req, res) => {
       estimatedFare: pricing.totalFare,
       totalFare: pricing.totalFare,
       fareBreakdown: pricing.fareBreakdown,
+      billingBreakdown: pricing.billingBreakdown || pricing.fareBreakdown,
       routeGeometry: pricing.routeGeometry || [],
       statusHistory: [{ status: 'Pending', at: new Date(), note: 'Booking created' }],
       finalBill: {
         ...pricing.fareBreakdown,
+        billingBreakdown: pricing.billingBreakdown || pricing.fareBreakdown,
         currency: 'INR',
         payableAfterRide: true,
         source: pricing.source,

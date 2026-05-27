@@ -1,3 +1,6 @@
+const { buildBillingLineItems } = require('../services/billingService');
+const { roundCurrency, toNumber, validateBillingBreakdown } = require('./billingMath');
+
 function trimText(value) {
   return String(value || '').trim();
 }
@@ -96,74 +99,139 @@ function sumCharges(items = []) {
 function calculateBillingDraft({ booking = {}, invoice = {}, settings = {}, draft = {} }) {
   const billingSettings = settings.billing || {};
   const paymentSettings = settings.paymentSettings || {};
+  const sourceBreakdown = invoice.billingBreakdown || invoice.fareBreakdown || booking.billingBreakdown || booking.fareBreakdown || booking.finalBill || invoice.finalBill || {};
 
-  const taxPercent = Number(draft.taxPercent ?? invoice.taxPercent ?? booking.taxPercent ?? booking.fareBreakdown?.gstPercent ?? billingSettings.taxPercent ?? 5);
-  const baseFare = Number(draft.baseFare ?? booking.baseFare ?? booking.fareBreakdown?.baseFare ?? invoice.subtotalAmount ?? 0);
-  const distanceFare = Number(draft.distanceFare ?? booking.distanceFare ?? booking.fareBreakdown?.distanceFare ?? 0);
-  const builtInCharges = collectChargeItems({
-    tollCharges: draft.tollCharges ?? booking.tollCharges,
-    parkingCharges: draft.parkingCharges ?? booking.parkingCharges,
-    driverAllowance: draft.driverAllowance ?? booking.driverAllowance,
-    waitingCharges: draft.waitingCharges ?? booking.waitingCharges,
-    nightCharges: draft.nightCharges ?? booking.nightCharges,
-    statePermitCharges: draft.statePermitCharges ?? booking.statePermitCharges,
-    miscellaneousCharges: draft.miscellaneousCharges ?? booking.miscellaneousCharges,
-    extraDistanceCharges: draft.extraDistanceCharges ?? booking.extraDistanceCharges,
-    extraCharges: []
-  });
-  const extraCharges = normalizeChargeItems(draft.extraCharges ?? booking.extraCharges ?? invoice.extraCharges);
-  const extraChargesTotal = sumCharges(extraCharges);
-  const builtInChargesTotal = sumCharges(builtInCharges);
+  const taxPercent = Number(draft.taxPercent ?? invoice.taxPercent ?? booking.taxPercent ?? sourceBreakdown.gstPercent ?? billingSettings.taxPercent ?? 5);
+  const discountType = trimText(draft.discountType ?? booking.discountType ?? invoice.discountType ?? sourceBreakdown.discountType ?? 'flat').toLowerCase() || 'flat';
+  const discountValue = Number(draft.discountValue ?? booking.discountValue ?? invoice.discountValue ?? sourceBreakdown.discountValue ?? booking.discountAmount ?? invoice.discountAmount ?? 0);
+  const paymentStatus = normalizePaymentStatus(draft.paymentStatus ?? invoice.paymentStatus ?? booking.paymentStatus ?? sourceBreakdown.paymentStatus ?? 'Pending');
+  const paymentMethod = normalizePaymentMethod(draft.paymentMethod ?? invoice.paymentMethod ?? booking.paymentMethod ?? sourceBreakdown.paymentMethod ?? paymentSettings.defaultMethod ?? 'Cash');
+  const paymentDate = draft.paymentDate || invoice.paymentDate || booking.paymentDate || sourceBreakdown.paymentDate || (paymentStatus === 'Paid' ? new Date() : null);
+  const transactionId = trimText(draft.transactionId ?? invoice.transactionId ?? booking.transactionId ?? sourceBreakdown.transactionId ?? '');
 
-  const discountType = trimText(draft.discountType ?? booking.discountType ?? invoice.discountType ?? 'flat').toLowerCase() || 'flat';
-  const discountValue = Number(draft.discountValue ?? booking.discountValue ?? invoice.discountValue ?? booking.discountAmount ?? invoice.discountAmount ?? 0);
-  const subtotalBeforeDiscount = Math.max(0, baseFare + distanceFare + builtInChargesTotal + extraChargesTotal);
-  let discountAmount = Number(draft.discountAmount ?? booking.discountAmount ?? invoice.discountAmount ?? 0);
+  const baseFare = roundCurrency(draft.baseFare ?? sourceBreakdown.baseFare ?? booking.baseFare ?? invoice.subtotalAmount ?? 0);
+  const distanceCharge = roundCurrency(draft.distanceCharge ?? draft.distanceFare ?? sourceBreakdown.distanceCharge ?? sourceBreakdown.distanceFare ?? booking.distanceFare ?? 0);
+  const extraKmCharge = roundCurrency(draft.extraKmCharge ?? sourceBreakdown.extraKmCharge ?? distanceCharge);
+  const extraHourCharge = roundCurrency(draft.extraHourCharge ?? sourceBreakdown.extraHourCharge ?? booking.extraHourCharge ?? 0);
+  const driverAllowance = roundCurrency(draft.driverAllowance ?? sourceBreakdown.driverAllowance ?? booking.driverAllowance ?? 0);
+  const tollCharges = roundCurrency(draft.tollCharges ?? sourceBreakdown.tollCharges ?? booking.tollCharges ?? 0);
+  const parkingCharges = roundCurrency(draft.parkingCharges ?? sourceBreakdown.parkingCharges ?? booking.parkingCharges ?? 0);
+  const permitCharges = roundCurrency(draft.permitCharges ?? sourceBreakdown.permitCharges ?? sourceBreakdown.statePermitCharges ?? booking.statePermitCharges ?? 0);
+  const waitingCharges = roundCurrency(draft.waitingCharges ?? sourceBreakdown.waitingCharges ?? booking.waitingCharges ?? 0);
+  const nightCharges = roundCurrency(draft.nightCharges ?? sourceBreakdown.nightCharges ?? booking.nightCharges ?? 0);
+  const extraTravelCharges = roundCurrency(draft.extraTravelCharges ?? sourceBreakdown.extraTravelCharges ?? 0);
+  const minimumFareAdjustment = roundCurrency(draft.minimumFareAdjustment ?? sourceBreakdown.minimumFareAdjustment ?? booking.minimumFareAdjustment ?? invoice.minimumFareAdjustment ?? 0);
+  const extraKmChargeVisible = roundCurrency(extraKmCharge) !== roundCurrency(distanceCharge) ? extraKmCharge : 0;
+  const subtotal = roundCurrency(baseFare + distanceCharge + extraKmChargeVisible + extraHourCharge + driverAllowance + tollCharges + parkingCharges + permitCharges + waitingCharges + nightCharges + extraTravelCharges + minimumFareAdjustment);
 
-  if (!Number.isFinite(discountAmount) || discountAmount < 0) discountAmount = 0;
+  let discountAmount = roundCurrency(draft.discountAmount ?? booking.discountAmount ?? invoice.discountAmount ?? sourceBreakdown.discountAmount ?? 0);
   if (!discountAmount && discountValue > 0) {
-    discountAmount = discountType === 'percentage' ? Math.round((subtotalBeforeDiscount * discountValue) / 100) : discountValue;
+    discountAmount = discountType === 'percentage' ? roundCurrency((subtotal * discountValue) / 100) : roundCurrency(discountValue);
   }
 
-  const subtotal = Math.max(0, subtotalBeforeDiscount - discountAmount);
-  const gstAmount = Math.max(0, Number(draft.taxAmount ?? invoice.taxAmount ?? booking.gstAmount ?? Math.round(subtotal * (taxPercent / 100))));
-  const grandTotal = Math.max(0, Number(draft.grandTotal ?? invoice.grandTotal ?? booking.grandTotal ?? subtotal + gstAmount));
+  const gstAmount = roundCurrency(subtotal * (taxPercent / 100));
+  const grandTotal = roundCurrency(subtotal + gstAmount - discountAmount);
+  const paidAmount = roundCurrency(draft.paidAmount ?? invoice.paidAmount ?? booking.paidAmount ?? sourceBreakdown.paidAmount ?? (paymentStatus === 'Paid' ? grandTotal : 0));
+  const balanceAmount = roundCurrency(draft.balanceAmount ?? invoice.balanceAmount ?? booking.balanceAmount ?? sourceBreakdown.balanceAmount ?? grandTotal - paidAmount);
 
-  const paymentStatus = normalizePaymentStatus(draft.paymentStatus ?? invoice.paymentStatus ?? booking.paymentStatus ?? 'Pending');
-  const paidAmount = Math.max(0, Number(draft.paidAmount ?? invoice.paidAmount ?? booking.paidAmount ?? (paymentStatus === 'Paid' ? grandTotal : 0)));
-  const balanceAmount = Math.max(0, Number(draft.balanceAmount ?? invoice.balanceAmount ?? booking.balanceAmount ?? grandTotal - paidAmount));
-  const paymentMethod = normalizePaymentMethod(draft.paymentMethod ?? invoice.paymentMethod ?? booking.paymentMethod ?? paymentSettings.defaultMethod ?? 'Cash');
-  const paymentDate = draft.paymentDate || invoice.paymentDate || booking.paymentDate || (paymentStatus === 'Paid' ? new Date() : null);
-  const transactionId = trimText(draft.transactionId ?? invoice.transactionId ?? booking.transactionId ?? '');
-  const packageLabel = booking.fareBreakdown?.packageLabel || booking.finalBill?.packageLabel || (booking.tripType === 'local-package' ? 'Local Package' : booking.tripType === 'half-day-package' ? 'Half Day Package' : booking.tripType === 'airport-transfer' ? 'Airport Pickup / Drop' : booking.tripType === 'outstation-package' ? 'Outstation Package' : booking.tripType === 'wedding-vip-event' ? 'Wedding / VIP Events' : 'Base Fare');
-  const distanceLabel = booking.fareBreakdown?.tripType === 'local-package' || booking.fareBreakdown?.tripType === 'half-day-package' ? 'Extra KM Charges' : booking.fareBreakdown?.tripType === 'airport-transfer' ? 'Airport Charges' : booking.fareBreakdown?.tripType === 'outstation-package' ? 'Extra KM Charges' : booking.fareBreakdown?.tripType === 'wedding-vip-event' ? 'Wedding / VIP Charges' : 'Distance Fare';
+  const packageLabel = sourceBreakdown.packageLabel || booking.fareBreakdown?.packageLabel || booking.finalBill?.packageLabel || (booking.tripType === 'local-package' ? 'Local Package' : booking.tripType === 'half-day-package' ? 'Half Day Package' : booking.tripType === 'airport-transfer' ? 'Airport Pickup / Drop' : booking.tripType === 'outstation-package' ? 'Outstation Package' : booking.tripType === 'wedding-vip-event' ? 'Wedding / VIP Events' : 'Base Fare');
+  const distanceKm = toNumber(draft.distanceKm ?? sourceBreakdown.distanceKm ?? sourceBreakdown.tripDistance ?? booking.distanceInKm ?? 0, 0);
+  const ratePerKm = toNumber(draft.ratePerKm ?? sourceBreakdown.ratePerKm ?? sourceBreakdown.pricePerKm ?? booking.pricePerKm ?? 0, 0);
+  const extraHours = toNumber(draft.extraHours ?? sourceBreakdown.extraHours ?? 0, 0);
 
-  const lineItems = [
-    { description: packageLabel, quantity: 1, unitPrice: baseFare, amount: baseFare },
-    { description: distanceLabel, quantity: 1, unitPrice: Math.max(1, Number(draft.distanceInKm ?? booking.distanceInKm ?? 1)), amount: distanceFare }
-  ];
-
-  builtInCharges.forEach((item) => {
-    lineItems.push({ description: item.name, quantity: 1, unitPrice: item.amount, amount: item.amount });
+  const lineItems = buildBillingLineItems({
+    tripType: sourceBreakdown.tripType || booking.tripType,
+    packageLabel,
+    packageBaseFare: baseFare,
+    baseFare,
+    distanceKm,
+    tripDistance: distanceKm,
+    ratePerKm,
+    pricePerKm: ratePerKm,
+    billableDistance: toNumber(sourceBreakdown.billableDistance ?? distanceKm, distanceKm),
+    extraKm: toNumber(sourceBreakdown.extraKm ?? (distanceCharge > 0 ? distanceKm : 0), 0),
+    distanceCharge,
+    distanceFare: distanceCharge,
+    extraKmCharge,
+    extraHours,
+    extraHourCharge,
+    extraHourRate: toNumber(sourceBreakdown.extraHourRate ?? 0, 0),
+    tollCharges,
+    driverAllowance,
+    driverAllowancePerDay: toNumber(sourceBreakdown.driverAllowancePerDay ?? 0, 0),
+    driverAllowanceDays: toNumber(sourceBreakdown.driverAllowanceDays ?? 1, 1),
+    parkingCharges,
+    permitCharges,
+    waitingCharges,
+    waitingMinutes: toNumber(sourceBreakdown.waitingMinutes ?? 0, 0),
+    freeWaitingMinutes: toNumber(sourceBreakdown.freeWaitingMinutes ?? 30, 30),
+    nightCharges,
+    nightChargePercent: toNumber(sourceBreakdown.nightChargePercent ?? taxPercent, taxPercent),
+    extraTravelCharges,
+    minimumFareAdjustment,
+    gstPercent: taxPercent,
+    gstAmount,
+    subtotalAmount: subtotal
   });
 
-  extraCharges.forEach((item) => {
-    lineItems.push({ description: item.name, quantity: 1, unitPrice: item.amount, amount: item.amount });
-  });
+  const billingBreakdown = {
+    baseFare,
+    packageLabel,
+    tripType: sourceBreakdown.tripType || booking.tripType,
+    distanceKm,
+    ratePerKm,
+    includedKm: toNumber(sourceBreakdown.includedKm ?? 0, 0),
+    includedHours: toNumber(sourceBreakdown.includedHours ?? 0, 0),
+    extraKm: toNumber(sourceBreakdown.extraKm ?? 0, 0),
+    extraHours,
+    distanceCharge,
+    extraKmCharge,
+    extraKmCharge,
+    extraHourCharge,
+    extraHourRate: toNumber(sourceBreakdown.extraHourRate ?? 0, 0),
+    driverAllowance,
+    driverAllowancePerDay: toNumber(sourceBreakdown.driverAllowancePerDay ?? 0, 0),
+    driverAllowanceDays: toNumber(sourceBreakdown.driverAllowanceDays ?? 1, 1),
+    tollCharges,
+    parkingCharges,
+    permitCharges,
+    waitingCharges,
+    nightCharges,
+    extraTravelCharges,
+    minimumFareAdjustment,
+    discountAmount,
+    discountType,
+    discountValue,
+    subtotal,
+    gstPercent: taxPercent,
+    gstAmount,
+    totalAmount: grandTotal,
+    totalFare: grandTotal,
+    paidAmount,
+    balanceAmount,
+    paymentStatus,
+    paymentMethod,
+    paymentDate,
+    transactionId,
+    currency: 'INR',
+    lineItems
+  };
 
-  if (discountAmount > 0) {
-    lineItems.push({ description: discountType === 'percentage' ? `Discount (${discountValue}%)` : 'Discount', quantity: 1, unitPrice: discountAmount, amount: -discountAmount, isDiscountRow: true });
+  const validation = validateBillingBreakdown(billingBreakdown, lineItems);
+  if (!validation.ok) {
+    const error = new Error('Billing reconciliation failed');
+    error.details = validation;
+    throw error;
   }
-
-  lineItems.push({ description: `GST (${taxPercent}%)`, quantity: 1, unitPrice: subtotal, amount: gstAmount, isTaxRow: true });
 
   return {
-    extraCharges,
+    extraCharges: normalizeChargeItems(draft.extraCharges ?? booking.extraCharges ?? invoice.extraCharges),
     discountType,
     discountValue,
     discountAmount,
+    minimumFareAdjustment,
     subtotal,
-    subtotalBeforeDiscount,
+    subtotalBeforeDiscount: subtotal,
     gstAmount,
     grandTotal,
     totalFare: grandTotal,
@@ -182,34 +250,8 @@ function calculateBillingDraft({ booking = {}, invoice = {}, settings = {}, draf
       paymentMethod,
       paymentStatus
     },
-    fareBreakdown: {
-      baseFare,
-      packageLabel,
-      distanceFare,
-      extraDistanceCharges: Number(draft.extraDistanceCharges ?? booking.extraDistanceCharges ?? 0),
-      tollCharges: Number(draft.tollCharges ?? booking.tollCharges ?? 0),
-      parkingCharges: Number(draft.parkingCharges ?? booking.parkingCharges ?? 0),
-      driverAllowance: Number(draft.driverAllowance ?? booking.driverAllowance ?? 0),
-      waitingCharges: Number(draft.waitingCharges ?? booking.waitingCharges ?? 0),
-      nightCharges: Number(draft.nightCharges ?? booking.nightCharges ?? 0),
-      statePermitCharges: Number(draft.statePermitCharges ?? booking.statePermitCharges ?? 0),
-      miscellaneousCharges: Number(draft.miscellaneousCharges ?? booking.miscellaneousCharges ?? 0),
-      extraCharges,
-      discountAmount,
-      discountType,
-      discountValue,
-      subtotal,
-      subtotalBeforeDiscount,
-      gstPercent: taxPercent,
-      gstAmount,
-      totalAmount: grandTotal,
-      paidAmount,
-      balanceAmount,
-      paymentStatus,
-      paymentMethod,
-      paymentDate,
-      transactionId
-    }
+    billingBreakdown,
+    fareBreakdown: billingBreakdown
   };
 }
 

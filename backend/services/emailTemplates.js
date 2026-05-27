@@ -72,6 +72,18 @@ function contactReceived(contact) {
   return layout('Support Request Received', `<p>Thanks ${contact.name}. We received your message and will respond soon.</p>`);
 }
 
+function passwordReset(name, resetUrl, expiresMinutes = 15) {
+  return layout('Reset Your Password', `
+    <p>Hi ${name || 'there'},</p>
+    <p>We received a request to reset your password.</p>
+    <p style="margin:24px 0;text-align:center;">
+      <a href="${resetUrl}" style="display:inline-block;background:#7c5d2f;color:#fff;padding:14px 22px;border-radius:999px;text-decoration:none;font-weight:700;">Reset Password</a>
+    </p>
+    <p>This reset link will expire in ${expiresMinutes} minutes.</p>
+    <p>If you did not request this change, you can ignore this email safely.</p>
+  `);
+}
+
 module.exports = {
   bookingConfirmation,
   bookingAccepted,
@@ -80,5 +92,6 @@ module.exports = {
   rideCompleted,
   invoiceGenerated,
   paymentReceipt,
-  contactReceived
+  contactReceived,
+  passwordReset
 };

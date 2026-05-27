@@ -188,6 +188,10 @@
           <button type="submit" class="btn btn-primary">Login</button>
           <button id="showRegister" type="button" class="btn btn-ghost">Register instead</button>
         </div>
+
+        <div class="auth-form__footer">
+          <button id="showForgot" type="button" class="auth-link-button">Forgot password?</button>
+        </div>
       </form>
 
       <form id="registerForm" class="auth-form is-hidden" aria-label="Register form" novalidate>
@@ -199,6 +203,26 @@
         <div class="auth-form__actions">
           <button type="submit" class="btn btn-primary">Register</button>
           <button id="showLogin" type="button" class="btn btn-ghost">Login instead</button>
+        </div>
+      </form>
+
+      <form id="forgotForm" class="auth-form is-hidden" aria-label="Forgot password form" novalidate>
+        <div class="field"><input name="email" type="email" placeholder="Email" required /></div>
+
+        <div class="auth-form__actions">
+          <button type="submit" class="btn btn-primary">Send Reset Link</button>
+          <button id="forgotBackToLogin" type="button" class="btn btn-ghost">Back to Login</button>
+        </div>
+      </form>
+
+      <form id="resetForm" class="auth-form is-hidden" aria-label="Reset password form" novalidate>
+        <input type="hidden" name="token" />
+        <div class="field"><input name="password" type="password" placeholder="New password" required /></div>
+        <div class="field"><input name="confirmPassword" type="password" placeholder="Confirm new password" required /></div>
+
+        <div class="auth-form__actions">
+          <button type="submit" class="btn btn-primary">Update Password</button>
+          <button id="resetBackToLogin" type="button" class="btn btn-ghost">Back to Login</button>
         </div>
       </form>
 

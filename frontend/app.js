@@ -1211,9 +1211,29 @@
 
   const loginForm = document.getElementById('loginForm');
   const registerForm = document.getElementById('registerForm');
+  const forgotForm = document.getElementById('forgotForm');
+  const resetForm = document.getElementById('resetForm');
   const showRegister = document.getElementById('showRegister');
   const showLogin = document.getElementById('showLogin');
+  const showForgot = document.getElementById('showForgot');
+  const forgotBackToLogin = document.getElementById('forgotBackToLogin');
+  const resetBackToLogin = document.getElementById('resetBackToLogin');
   const authTitle = document.getElementById('authTitle');
+  const resetTokenParam = new URLSearchParams(window.location.search).get('resetToken');
+  let pendingResetToken = resetTokenParam || '';
+
+  function setResetToken(token) {
+    pendingResetToken = token || '';
+    const tokenInput = resetForm?.querySelector('[name="token"]');
+    if (tokenInput) tokenInput.value = pendingResetToken;
+  }
+
+  function showOnlyForm(activeForm) {
+    [loginForm, registerForm, forgotForm, resetForm].forEach((form) => {
+      if (!form) return;
+      form.classList.toggle('is-hidden', form !== activeForm);
+    });
+  }
 
   function openAuth(mode = 'login') {
     if (!authModal) return;
@@ -1221,13 +1241,18 @@
     authModal.setAttribute('aria-hidden', 'false');
 
     if (mode === 'login') {
-      loginForm?.classList.remove('is-hidden');
-      registerForm?.classList.add('is-hidden');
+      showOnlyForm(loginForm);
       authTitle.textContent = 'Login';
-    } else {
-      loginForm?.classList.add('is-hidden');
-      registerForm?.classList.remove('is-hidden');
+    } else if (mode === 'register') {
+      showOnlyForm(registerForm);
       authTitle.textContent = 'Register';
+    } else if (mode === 'forgot') {
+      showOnlyForm(forgotForm);
+      authTitle.textContent = 'Reset Password';
+    } else if (mode === 'reset') {
+      showOnlyForm(resetForm);
+      authTitle.textContent = 'Reset Password';
+      setResetToken(pendingResetToken);
     }
   }
 
@@ -1236,6 +1261,17 @@
     authModal.classList.remove('is-open');
     authModal.setAttribute('aria-hidden', 'true');
   }
+
+  function syncResetTokenFromLocation() {
+    const token = new URLSearchParams(window.location.search).get('resetToken');
+    if (token) {
+      setResetToken(token);
+      openAuth('reset');
+    }
+  }
+
+  syncResetTokenFromLocation();
+  window.addEventListener('popstate', syncResetTokenFromLocation);
 
 
   authCloseBtn?.addEventListener('click', closeAuth);
@@ -1251,6 +1287,9 @@
   });
   showRegister?.addEventListener('click', () => openAuth('register'));
   showLogin?.addEventListener('click', () => openAuth('login'));
+  showForgot?.addEventListener('click', () => openAuth('forgot'));
+  forgotBackToLogin?.addEventListener('click', () => openAuth('login'));
+  resetBackToLogin?.addEventListener('click', () => openAuth('login'));
 
 
   loginForm?.addEventListener('submit', async (e) => {
@@ -1315,6 +1354,90 @@
       showErrorModal((err && err.message) || 'Registration failed', {
         title: 'Registration Failed',
         context: 'register',
+        actionLabel: 'Try Again'
+      });
+      console.error(err);
+    } finally {
+      setFormSubmitting(form, false);
+    }
+  });
+
+  forgotForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const email = form.querySelector('[name="email"]').value.trim();
+    setFormSubmitting(form, true, 'Sending reset link...');
+    try {
+      const res = await performRequest(apiUrl('/api/auth/forgot-password'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      const body = await safeJson(res);
+      if (!res.ok || !body || body.success !== true) throw new Error((body && body.message) || 'Password reset request failed');
+
+      if (body.resetUrl) {
+        const token = new URL(body.resetUrl).searchParams.get('resetToken');
+        setResetToken(token);
+        openAuth('reset');
+        showSuccessModal('Reset link prepared. Enter a new password to complete the reset.', {
+          title: 'Reset Link Generated',
+          actionLabel: 'Continue',
+          autoCloseMs: 1400
+        });
+      } else {
+        showSuccessModal(body.message || 'If the account exists, password reset instructions have been sent.', {
+          title: 'Reset Link Sent',
+          actionLabel: 'Continue',
+          autoCloseMs: 2200
+        });
+        openAuth('login');
+      }
+    } catch (err) {
+      showErrorModal((err && err.message) || 'Password reset request failed', {
+        title: 'Reset Failed',
+        context: 'session',
+        actionLabel: 'Try Again'
+      });
+      console.error(err);
+    } finally {
+      setFormSubmitting(form, false);
+    }
+  });
+
+  resetForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const token = String(form.querySelector('[name="token"]').value || '').trim();
+    const password = form.querySelector('[name="password"]').value;
+    const confirmPassword = form.querySelector('[name="confirmPassword"]').value;
+
+    if (password !== confirmPassword) {
+      showErrorModal('Passwords do not match', { title: 'Reset Failed', context: 'session', actionLabel: 'Try Again' });
+      return;
+    }
+
+    setFormSubmitting(form, true, 'Updating password...');
+    try {
+      const res = await performRequest(apiUrl('/api/auth/reset-password'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, password })
+      });
+      const body = await safeJson(res);
+      if (!res.ok || !body || body.success !== true) throw new Error((body && body.message) || 'Password reset failed');
+      setResetToken('');
+      window.history.replaceState({}, document.title, window.location.pathname);
+      showSuccessModal(body.message || 'Password updated successfully', {
+        title: 'Password Updated',
+        actionLabel: 'Continue',
+        autoCloseMs: 2000
+      });
+      openAuth('login');
+    } catch (err) {
+      showErrorModal((err && err.message) || 'Password reset failed', {
+        title: 'Reset Failed',
+        context: 'session',
         actionLabel: 'Try Again'
       });
       console.error(err);

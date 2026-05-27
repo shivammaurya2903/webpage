@@ -1,7 +1,9 @@
 const User = require('../models/User');
+const crypto = require('crypto');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { attachToken } = require('../utils/generateToken');
+const { sendTemplateEmail } = require('../services/emailService');
 
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
@@ -17,6 +19,10 @@ function normalizeIndianPhone(value) {
   }
 
   return /^[6-9][0-9]{9}$/.test(digits) ? `+91${digits}` : '';
+}
+
+function buildOrigin(req) {
+  return String(req.get('origin') || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
 }
 
 const register = asyncHandler(async (req, res) => {
@@ -83,4 +89,65 @@ const profile = asyncHandler(async (req, res) => {
   res.json({ success: true, user: req.user.toSafeJSON() });
 });
 
-module.exports = { register, login, profile };
+const requestPasswordReset = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+  const normalizedEmail = normalizeEmail(email);
+
+  if (!normalizedEmail) {
+    throw new ApiError(400, 'Valid email is required');
+  }
+
+  const user = await User.findOne({ email: normalizedEmail });
+  if (!user) {
+    return res.json({
+      success: true,
+      message: 'If the account exists, password reset instructions have been sent.'
+    });
+  }
+
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  user.resetPasswordToken = crypto.createHash('sha256').update(rawToken).digest('hex');
+  user.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000);
+  await user.save();
+
+  const resetUrl = `${buildOrigin(req)}/?resetToken=${rawToken}`;
+  await sendTemplateEmail('passwordReset', user.email, [user.name, resetUrl, 15], 'Reset your password');
+
+  const response = {
+    success: true,
+    message: 'If the account exists, password reset instructions have been sent.'
+  };
+
+  if (process.env.NODE_ENV !== 'production' && !process.env.EMAIL_HOST) {
+    response.resetUrl = resetUrl;
+  }
+
+  res.json(response);
+});
+
+const resetPassword = asyncHandler(async (req, res) => {
+  const { token, password } = req.body;
+
+  if (!token || !password) {
+    throw new ApiError(400, 'Token and new password are required');
+  }
+
+  const tokenHash = crypto.createHash('sha256').update(String(token)).digest('hex');
+  const user = await User.findOne({
+    resetPasswordToken: tokenHash,
+    resetPasswordExpires: { $gt: new Date() }
+  });
+
+  if (!user) {
+    throw new ApiError(400, 'Reset token is invalid or expired');
+  }
+
+  user.password = password;
+  user.resetPasswordToken = null;
+  user.resetPasswordExpires = null;
+  await user.save();
+
+  res.json({ success: true, message: 'Password updated successfully' });
+});
+
+module.exports = { register, login, profile, requestPasswordReset, resetPassword };

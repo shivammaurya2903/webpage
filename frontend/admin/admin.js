@@ -760,6 +760,13 @@
     document.body.style.overflow = 'hidden';
   }
 
+  function renderDriverOptions(drivers, selectedDriverId = '') {
+    return drivers.map((driver) => {
+      const label = `${driver.driverName}${driver.availability ? '' : ' (busy)'}`;
+      return `<option value="${escapeHtml(driver._id)}" ${String(driver._id) === String(selectedDriverId) ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+    }).join('');
+  }
+
   async function handleEntityFormSubmit(event) {
     const form = event.currentTarget;
     event.preventDefault();
@@ -771,6 +778,30 @@
     el.modalBackdrop.hidden = true;
     el.modalBody.innerHTML = '';
     document.body.style.overflow = '';
+  }
+
+  async function openWorkflowModal({ title, eyebrow = 'Edit', body, onSubmit }) {
+    openModal(title, body, eyebrow);
+    const form = el.modalBody.querySelector('form[data-workflow-form]');
+    if (!form) return;
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const submitButton = form.querySelector('button[type="submit"]');
+      const previousLabel = submitButton?.textContent || '';
+      if (submitButton) submitButton.disabled = true;
+
+      try {
+        await onSubmit(form);
+      } finally {
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent = previousLabel;
+        }
+      }
+    }, { once: true });
   }
 
   function formDataFromObject(fields, fileInputNames = []) {
@@ -976,7 +1007,9 @@
 
     const paymentStatuses = ['Pending', 'Partial', 'Paid', 'Refunded'];
     const paymentMethods = ['Cash', 'UPI', 'Card', 'Bank transfer', 'Online payment link'];
-    const chargeMarkup = renderChargeRows((booking.extraCharges || []).length ? booking.extraCharges : getBookingChargeItems(booking).filter((item) => !['Toll Charges', 'Parking Charges', 'Driver Allowance', 'Waiting Charges', 'Night Charges', 'State Permit Charges', 'Extra Distance Charges', 'Miscellaneous Charges'].includes(item.name)));
+    const chargeMarkup = renderChargeRows(
+      getBookingChargeItems(booking).filter((item) => !['Toll Charges', 'Parking Charges', 'Driver Allowance', 'Waiting Charges', 'Night Charges', 'State Permit Charges', 'Extra Distance Charges', 'Miscellaneous Charges'].includes(item.name))
+    );
 
     return `
       <form class="auth-form invoice-editor-form" data-invoice-editor-form data-booking-id="${escapeHtml(booking._id)}">
@@ -1718,8 +1751,9 @@
             <label class="field wide"><span>Currency</span><input name="currency" value="${escapeHtml(settings.paymentSettings?.currency || 'INR')}" /></label>
             <label class="field wide"><span>Advance percent</span><input name="advancePercent" type="number" value="${escapeHtml(String(settings.paymentSettings?.advancePercent ?? 20))}" /></label>
             <label class="field wide"><span>Payment gateway</span><input name="gatewayName" value="${escapeHtml(settings.paymentSettings?.gatewayName || 'Stripe')}" /></label>
-            <label class="field wide"><span>GST %</span><input name="gstPercent" type="number" value="${escapeHtml(String(settings.pricingSettings?.gstPercent ?? settings.billing?.taxPercent ?? 5))}" /></label>
-            <label class="field wide"><span>Night charge %</span><input name="nightChargePercent" type="number" value="${escapeHtml(String(settings.pricingSettings?.nightChargePercent ?? 10))}" /></label>
+            <div class="section-subtle"><strong>Pricing settings</strong><p class="muted">Configure package inclusions, per-km rates, surge, and night/driver allowances. Changes affect fare calculations immediately.</p></div>
+            <label class="field wide"><span>GST %</span><input name="gstPercent" type="number" value="${escapeHtml(String(settings.pricingSettings?.gstPercent ?? settings.billing?.taxPercent ?? 5))}" /><small class="field-help">GST applied to the subtotal (percentage).</small></label>
+            <label class="field wide"><span>Night charge % (applied on distance fare)</span><input name="nightChargePercent" type="number" value="${escapeHtml(String(settings.pricingSettings?.nightChargePercent ?? 10))}" /><small class="field-help">Percentage of distance charges applied for night pickups (22:00–06:00).</small></label>
             <label class="field wide"><span>Local package price</span><input name="localPackagePrice" type="number" value="${escapeHtml(String(settings.pricingSettings?.localPackagePrice ?? settings.pricingSettings?.baseFare ?? 6500))}" /></label>
             <label class="field wide"><span>Half day package price</span><input name="halfDayPrice" type="number" value="${escapeHtml(String(settings.pricingSettings?.halfDayPrice ?? 3500))}" /></label>
             <label class="field wide"><span>Extra KM charge</span><input name="extraKmCharge" type="number" value="${escapeHtml(String(settings.pricingSettings?.extraKmCharge ?? settings.pricingSettings?.extraKmRate ?? 28))}" /></label>
@@ -1729,12 +1763,16 @@
             <label class="field wide"><span>Outstation min</span><input name="outstationMinCharge" type="number" value="${escapeHtml(String(settings.pricingSettings?.outstationMinCharge ?? 8500))}" /></label>
             <label class="field wide"><span>Outstation max</span><input name="outstationMaxCharge" type="number" value="${escapeHtml(String(settings.pricingSettings?.outstationMaxCharge ?? 10500))}" /></label>
             <label class="field wide"><span>Wedding / VIP price</span><input name="weddingVipCharge" type="number" value="${escapeHtml(String(settings.pricingSettings?.weddingVipCharge ?? 12000))}" /></label>
-            <label class="field wide"><span>Driver allowance</span><input name="driverAllowance" type="number" value="${escapeHtml(String(settings.pricingSettings?.driverAllowance ?? 0))}" /></label>
+            <label class="field wide"><span>Driver allowance (legacy)</span><input name="driverAllowance" type="number" value="${escapeHtml(String(settings.pricingSettings?.driverAllowance ?? 0))}" /><small class="field-help">Legacy single-value driver allowance; prefer per-day value below.</small></label>
+            <label class="field wide"><span>Driver allowance / day</span><input name="driverAllowancePerDay" type="number" value="${escapeHtml(String(settings.pricingSettings?.driverAllowancePerDay ?? settings.pricingSettings?.driverAllowance ?? 0))}" /><small class="field-help">Per-day driver allowance used for outstation and multi-day trips (1 day for same-day trips).</small></label>
             <label class="field wide"><span>Waiting charge / hour</span><input name="waitingChargePerHour" type="number" value="${escapeHtml(String(settings.pricingSettings?.waitingChargePerHour ?? 0))}" /></label>
             <label class="field wide"><span>Default included km</span><input name="defaultIncludedKm" type="number" value="${escapeHtml(String(settings.pricingSettings?.defaultIncludedKm ?? 0))}" /></label>
             <label class="field wide"><span>Default included hours</span><input name="defaultIncludedHours" type="number" value="${escapeHtml(String(settings.pricingSettings?.defaultIncludedHours ?? 8))}" /></label>
             <label class="field wide"><span>Default base fare</span><input name="defaultBaseFare" type="number" value="${escapeHtml(String(settings.pricingSettings?.baseFare ?? settings.pricingSettings?.localPackagePrice ?? 6500))}" /></label>
-            <label class="field wide"><span>Default price per km</span><input name="defaultPricePerKm" type="number" value="${escapeHtml(String(settings.pricingSettings?.pricePerKm ?? settings.pricingSettings?.extraKmCharge ?? 28))}" /></label>
+            <label class="field wide"><span>Default price per km</span><input name="defaultPricePerKm" type="number" value="${escapeHtml(String(settings.pricingSettings?.pricePerKm ?? settings.pricingSettings?.extraKmCharge ?? 28))}" /><small class="field-help">Default per-km rate used for outstation and non-package calculations.</small></label>
+            <label class="field wide"><span>Minimum fare</span><input name="minimumFare" type="number" value="${escapeHtml(String(settings.pricingSettings?.minimumFare ?? 0))}" /><small class="field-help">If subtotal &lt; minimum fare, the minimum will be charged instead.</small></label>
+            <label class="field wide"><span>Surge multiplier</span><input name="surgeMultiplier" type="number" step="0.01" value="${escapeHtml(String(settings.pricingSettings?.surgeMultiplier ?? 1))}" /><small class="field-help">Global multiplier applied to distance charges (e.g., 1.2 = 20% surge). You can set festival/peak/weekend multipliers here.</small></label>
+            <label class="field wide"><span>Night charge fixed (optional)</span><input name="nightChargeFixed" type="number" value="${escapeHtml(String(settings.pricingSettings?.nightChargeFixed ?? 0))}" /><small class="field-help">Optional fixed night fee; if set it overrides percentage-based night charge calculation.</small></label>
             <label class="field full"><span>Testimonials (Name::Quote per line)</span><textarea name="testimonials">${escapeHtml((homepage.testimonials || []).map((item) => `${item.name}::${item.quote}`).join('\n'))}</textarea></label>
             <label class="field full"><span>Fleet highlights (Title::Description per line)</span><textarea name="fleetHighlights">${escapeHtml((homepage.fleetHighlights || []).map((item) => `${item.title}::${item.description}`).join('\n'))}</textarea></label>
             <label class="inline-toggle"><input type="checkbox" name="emailEnabled" ${settings.notificationSettings?.emailEnabled !== false ? 'checked' : ''} /><span>Email notifications enabled</span></label>
@@ -2091,21 +2129,61 @@
         state.dashboard = null;
         await refreshView();
       } else if (action === 'booking-reject') {
-        const reason = window.prompt('Rejection reason', 'Not available');
-        await apiFetch(`/api/admin/bookings/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'Rejected', rejectionReason: reason || '' }) });
-        toast('Booking rejected', 'Reason recorded');
-        state.bookings = null;
-        await refreshView();
+        await openWorkflowModal({
+          title: 'Reject Booking',
+          eyebrow: 'Booking Workflow',
+          body: `
+            <form data-workflow-form>
+              <label class="field full">
+                <span>Rejection reason</span>
+                <textarea name="reason" rows="4" placeholder="Not available"></textarea>
+              </label>
+              <div class="form-actions">
+                <button class="primary-btn" type="submit">Reject booking</button>
+                <button class="secondary-btn" type="button" data-close-modal>Cancel</button>
+              </div>
+            </form>
+          `,
+          onSubmit: async (form) => {
+            const reason = String(new FormData(form).get('reason') || '').trim();
+            await apiFetch(`/api/admin/bookings/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'Rejected', rejectionReason: reason }) });
+            closeModal();
+            toast('Booking rejected', 'Reason recorded');
+            state.bookings = null;
+            await refreshView();
+          }
+        });
       } else if (action === 'booking-assign') {
         const drivers = await loadDrivers();
         if (!drivers.length) throw new Error('No drivers available');
-        const options = drivers.map((driver) => `${driver._id}::${driver.driverName}${driver.availability ? '' : ' (busy)'}`).join('\n');
-        const selected = window.prompt(`Choose driver by entering driver id:\n${options}`);
-        if (!selected) return;
-        await apiFetch(`/api/admin/bookings/${id}/assign-driver`, { method: 'PATCH', body: JSON.stringify({ driverId: selected.trim() }) });
-        toast('Driver assigned', 'Driver linked to booking');
-        state.bookings = null;
-        await refreshView();
+        const selectedDriverId = drivers.find((driver) => driver.availability)?._id || drivers[0]._id;
+        await openWorkflowModal({
+          title: 'Assign Driver',
+          eyebrow: 'Booking Workflow',
+          body: `
+            <form data-workflow-form>
+              <label class="field full">
+                <span>Select driver</span>
+                <select name="driverId" required>
+                  ${renderDriverOptions(drivers, selectedDriverId)}
+                </select>
+              </label>
+              <div class="form-actions">
+                <button class="primary-btn" type="submit">Assign driver</button>
+                <button class="secondary-btn" type="button" data-close-modal>Cancel</button>
+              </div>
+            </form>
+          `,
+          onSubmit: async (form) => {
+            const driverId = String(new FormData(form).get('driverId') || '').trim();
+            if (!driverId) throw new Error('Driver selection is required');
+            await apiFetch(`/api/admin/bookings/${id}/assign-driver`, { method: 'PATCH', body: JSON.stringify({ driverId }) });
+            closeModal();
+            toast('Driver assigned', 'Driver linked to booking');
+            state.bookings = null;
+            await refreshView();
+          }
+        });
       } else if (action === 'booking-edit-invoice' || action === 'booking-generate-invoice') {
         await openInvoiceEditor(id);
       } else if (action === 'booking-regenerate-invoice') {
@@ -2121,18 +2199,56 @@
         state.dashboard = null;
         await refreshView();
       } else if (action === 'booking-mark-paid') {
-        const method = window.prompt('Payment method', 'Cash');
-        if (!method) return;
-        const amount = window.prompt('Payment amount', '');
-        const transactionId = window.prompt('Transaction / reference id', '');
-        await apiFetch(`/api/admin/bookings/${id}/mark-paid`, {
-          method: 'POST',
-          body: JSON.stringify({ paymentMethod: method.trim(), paymentStatus: 'Paid', amount: amount ? Number(amount) : undefined, transactionId: transactionId || '' })
+        await openWorkflowModal({
+          title: 'Mark Payment',
+          eyebrow: 'Billing Workflow',
+          body: `
+            <form data-workflow-form>
+              <label class="field full">
+                <span>Payment method</span>
+                <select name="paymentMethod" required>
+                  <option value="Cash">Cash</option>
+                  <option value="UPI">UPI</option>
+                  <option value="Card">Card</option>
+                  <option value="Online payment link">Online payment link</option>
+                  <option value="Bank transfer">Bank transfer</option>
+                </select>
+              </label>
+              <label class="field full">
+                <span>Amount</span>
+                <input name="amount" type="number" min="0" step="1" placeholder="0" />
+              </label>
+              <label class="field full">
+                <span>Transaction / reference id</span>
+                <input name="transactionId" type="text" placeholder="Optional" />
+              </label>
+              <div class="form-actions">
+                <button class="primary-btn" type="submit">Mark paid</button>
+                <button class="secondary-btn" type="button" data-close-modal>Cancel</button>
+              </div>
+            </form>
+          `,
+          onSubmit: async (form) => {
+            const formData = new FormData(form);
+            const paymentMethod = String(formData.get('paymentMethod') || '').trim();
+            const amountRaw = String(formData.get('amount') || '').trim();
+            const transactionId = String(formData.get('transactionId') || '').trim();
+            await apiFetch(`/api/admin/bookings/${id}/mark-paid`, {
+              method: 'POST',
+              body: JSON.stringify({
+                paymentMethod,
+                paymentStatus: 'Paid',
+                amount: amountRaw ? Number(amountRaw) : undefined,
+                transactionId
+              })
+            });
+            closeModal();
+            toast('Payment recorded', 'Payment captured for booking');
+            state.bookings = null;
+            state.dashboard = null;
+            await refreshView();
+          }
         });
-        toast('Payment recorded', 'Payment captured for booking');
-        state.bookings = null;
-        state.dashboard = null;
-        await refreshView();
       } else if (action === 'booking-download-invoice') {
         try {
           const response = await fetch(`${API_BASE}/api/admin/bookings/${id}/invoice`, {
@@ -2177,12 +2293,32 @@
         toast('Refund complete', 'Payment processed');
         await refreshView();
       } else if (target.dataset.messageReply) {
-        const reply = window.prompt('Reply to customer');
-        if (!reply) return;
-        await apiFetch(`/api/admin/messages/${target.dataset.messageReply}/reply`, { method: 'POST', body: JSON.stringify({ reply }) });
-        state.messages = null;
-        toast('Message replied', 'Customer notified');
-        await refreshView();
+        const messageId = target.dataset.messageReply;
+        await openWorkflowModal({
+          title: 'Reply to Message',
+          eyebrow: 'Support Workflow',
+          body: `
+            <form data-workflow-form>
+              <label class="field full">
+                <span>Reply</span>
+                <textarea name="reply" rows="5" placeholder="Write a helpful reply to the customer"></textarea>
+              </label>
+              <div class="form-actions">
+                <button class="primary-btn" type="submit">Send reply</button>
+                <button class="secondary-btn" type="button" data-close-modal>Cancel</button>
+              </div>
+            </form>
+          `,
+          onSubmit: async (form) => {
+            const reply = String(new FormData(form).get('reply') || '').trim();
+            if (!reply) throw new Error('Reply is required');
+            await apiFetch(`/api/admin/messages/${messageId}/reply`, { method: 'POST', body: JSON.stringify({ reply }) });
+            closeModal();
+            state.messages = null;
+            toast('Message replied', 'Customer notified');
+            await refreshView();
+          }
+        });
       } else if (target.dataset.messageResolve) {
         await apiFetch(`/api/admin/messages/${target.dataset.messageResolve}/resolve`, { method: 'PATCH' });
         state.messages = null;
@@ -2377,7 +2513,7 @@
     el.refreshButton.addEventListener('click', refreshView);
     el.closeModal.addEventListener('click', closeModal);
     el.modalBackdrop.addEventListener('click', (event) => {
-      if (event.target === el.modalBackdrop) closeModal();
+      if (event.target === el.modalBackdrop || event.target.closest('[data-close-modal]')) closeModal();
     });
     el.viewRoot.addEventListener('click', handleTableActions);
     el.viewRoot.addEventListener('click', async (event) => {

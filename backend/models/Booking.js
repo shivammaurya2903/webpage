@@ -42,6 +42,7 @@ const bookingSchema = new mongoose.Schema(
     estimatedFare: { type: Number, required: true },
     totalFare: { type: Number, default: 0 },
     fareBreakdown: { type: Object, default: {} },
+    billingBreakdown: { type: Object, default: {} },
     extraCharges: {
       type: [
         {

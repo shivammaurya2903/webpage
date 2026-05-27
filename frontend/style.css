@@ -136,6 +136,25 @@
   flex: 1;
 }
 
+.auth-form__footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.auth-link-button {
+  border: 0;
+  background: transparent;
+  color: var(--primary-2);
+  font-weight: 700;
+  cursor: pointer;
+  padding: 6px 0;
+}
+
+.auth-link-button:hover {
+  text-decoration: underline;
+}
+
 .auth-modal__hint {
   margin-top: 14px;
 

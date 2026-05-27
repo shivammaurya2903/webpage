@@ -105,12 +105,17 @@ function mapSettingsPayload(body) {
       outstationMaxCharge: toNumber(body.outstationMaxCharge, 10500),
       weddingVipCharge: toNumber(body.weddingVipCharge, 12000),
       driverAllowance: toNumber(body.driverAllowance, 0),
+      driverAllowancePerDay: toNumber(body.driverAllowancePerDay ?? body.driverAllowance, 0),
       extraKmRate: toNumber(body.extraKmRate ?? body.extraKmCharge, 28),
       waitingChargePerHour: toNumber(body.waitingChargePerHour, 0),
       defaultIncludedKm: toNumber(body.defaultIncludedKm, 80),
       defaultIncludedHours: toNumber(body.defaultIncludedHours, 8),
       baseFare: toNumber(body.defaultBaseFare ?? body.localPackagePrice, 6500),
       pricePerKm: toNumber(body.defaultPricePerKm ?? body.extraKmCharge, 28)
+      ,
+      minimumFare: toNumber(body.minimumFare, 0),
+      surgeMultiplier: toNumber(body.surgeMultiplier, 1),
+      nightChargeFixed: toNumber(body.nightChargeFixed, 0)
     },
     notificationSettings: {
       emailEnabled: toBoolean(body.emailEnabled, true),
@@ -705,6 +710,7 @@ const refundPayment = asyncHandler(async (req, res) => {
     payment.booking.bookingStatus = 'Cancelled';
     payment.booking.paymentDate = new Date();
     payment.booking.balanceAmount = Number(payment.booking.totalFare || payment.booking.estimatedFare || payment.amount || 0);
+
     if (payment.booking.invoice) {
       const linkedInvoice = await Invoice.findById(payment.booking.invoice);
       if (linkedInvoice) {
@@ -715,18 +721,7 @@ const refundPayment = asyncHandler(async (req, res) => {
         await linkedInvoice.save();
       }
     }
-    payment.booking.paymentDate = new Date();
-    payment.booking.balanceAmount = Number(payment.booking.totalFare || payment.booking.estimatedFare || payment.amount || 0);
-    if (payment.booking.invoice) {
-      const linkedInvoice = await Invoice.findById(payment.booking.invoice);
-      if (linkedInvoice) {
-        linkedInvoice.paymentStatus = 'Refunded';
-        linkedInvoice.balanceAmount = Number(linkedInvoice.totalFare || payment.amount || 0);
-        linkedInvoice.paidAmount = 0;
-        linkedInvoice.paymentDate = new Date();
-        await linkedInvoice.save();
-      }
-    }
+
     await payment.booking.save();
   }
 

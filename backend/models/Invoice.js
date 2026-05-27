@@ -33,6 +33,7 @@ const invoiceSchema = new mongoose.Schema(
     rideSnapshot: { type: Object, default: {} },
     distance: { type: String, default: '' },
     fareBreakdown: { type: Object, default: {} },
+    billingBreakdown: { type: Object, default: {} },
     lineItems: { type: Array, default: [] },
     extraCharges: {
       type: [
