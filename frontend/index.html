@@ -41,6 +41,7 @@
         <a href="#services">Services</a>
         <a href="#about">About Us</a>
         <a href="#support">Support</a>
+        <a href="admin/index.html">Admin</a>
       </div>
 
       <div class="nav-right">
@@ -72,6 +73,7 @@
         <a href="#services">Services</a>
         <a href="#about">About Us</a>
         <a href="#support">Support</a>
+        <a href="admin/index.html">Admin</a>
 
         <div class="mobile-auth" aria-label="Mobile authentication">
           <button id="mobileLoginOpenBtn" class="btn btn-ghost" type="button">Login</button>
@@ -141,7 +143,7 @@
 
         <div class="hero-buttons">
           <a href="#booking" class="btn btn-primary" data-ripple>BOOK YOUR RIDE</a>
-          <a href="#packages" class="btn btn-secondary" data-ripple>EXPLORE PACKAGES</a>
+          <a href="#cars" class="btn btn-secondary" data-ripple>EXPLORE FLEET</a>
         </div>
       </div>
 
@@ -407,12 +409,12 @@
         </div>
 
         <div class="card feature-card terms-card" aria-label="Terms and conditions">
-          <h2 class="card-title">Terms &amp; Conditions</h2>
+          <h2 class="card-title">Travel Standards</h2>
           <ul class="check-list">
-            <li><i class="fa-solid fa-circle-check"></i> Toll extra</li>
-            <li><i class="fa-solid fa-circle-check"></i> Advance booking required</li>
-            <li><i class="fa-solid fa-circle-check"></i> Fuel included</li>
-            <li><i class="fa-solid fa-circle-check"></i> Night charges after 10 PM</li>
+            <li><i class="fa-solid fa-circle-check"></i> Clean, sanitized, chauffeur-driven vehicles</li>
+            <li><i class="fa-solid fa-circle-check"></i> Transparent fare estimates before confirmation</li>
+            <li><i class="fa-solid fa-circle-check"></i> Quick booking support for route changes and updates</li>
+            <li><i class="fa-solid fa-circle-check"></i> Premium assistance available throughout the journey</li>
           </ul>
         </div>
       </div>
@@ -431,47 +433,126 @@
         <div class="carousel" data-fleet-carousel>
           <div class="carousel-head">
             <div class="carousel-title">Luxury Car Models</div>
-            <div class="carousel-arrows" aria-label="Carousel controls">
-              <button class="icon-btn" type="button" data-fleet-prev aria-label="Previous">
-                <i class="fa-solid fa-chevron-left"></i>
-              </button>
-              <button class="icon-btn" type="button" data-fleet-next aria-label="Next">
-                <i class="fa-solid fa-chevron-right"></i>
-              </button>
-            </div>
+          </div>
+
+          <div class="fleet-carousel-nav" aria-label="Fleet navigation controls">
+            <button class="fleet-nav-btn fleet-nav-btn--prev" type="button" data-fleet-prev aria-label="Previous fleet vehicle">
+              <i class="fa-solid fa-chevron-left"></i>
+            </button>
+            <button class="fleet-nav-btn fleet-nav-btn--next" type="button" data-fleet-next aria-label="Next fleet vehicle">
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
           </div>
 
           <div class="carousel-viewport">
             <div class="carousel-track" data-fleet-track>
               <article class="fleet-card" data-fleet-card>
-                <img src="https://imgd.aeplcdn.com/664x374/n/cw/ec/137767/fortuner-legender-exterior-left-front-three-quarter-5.jpeg?isig=0&q=80" alt="Toyota Fortuner Legender" loading="lazy" decoding="async" />
-                <h4>Toyota Fortuner Legender</h4>
-                <p class="fleet-meta"><i class="fa-solid fa-user-group"></i> Seating: 7</p>
+                <div class="fleet-card__media">
+                  <img src="https://imgd.aeplcdn.com/664x374/n/cw/ec/137767/fortuner-legender-exterior-left-front-three-quarter-5.jpeg?isig=0&q=80" alt="Toyota Fortuner Legender" loading="lazy" decoding="async" />
+                  <span class="fleet-badge">Luxury SUV</span>
+                </div>
+                <div class="fleet-card__content">
+                  <div class="fleet-card__top">
+                    <h4>Toyota Fortuner Legender</h4>
+                    <span class="fleet-capacity"><i class="fa-solid fa-user-group"></i> 7 Passengers</span>
+                  </div>
+                  <div class="fleet-features">
+                    <span><i class="fa-solid fa-snowflake"></i> Dual AC</span>
+                    <span><i class="fa-solid fa-couch"></i> Luxury Seats</span>
+                    <span><i class="fa-solid fa-music"></i> Music System</span>
+                  </div>
+                  <a class="btn btn-secondary fleet-book-btn" href="#booking" data-ripple>Book Now</a>
+                </div>
               </article>
               <article class="fleet-card" data-fleet-card>
-                <img src="https://img.autocarpro.in/autocarpro/8c37bc4b-d4f8-43f5-b89b-c6592fc8a658_The-new-Hyundai-VERNA-_1_.jpg" alt="Hyundai Verna" loading="lazy" decoding="async" />
-                <h4>Hyundai Verna</h4>
-                <p class="fleet-meta"><i class="fa-solid fa-user-group"></i> Seating: 5</p>
+                <div class="fleet-card__media">
+                  <img src="https://img.autocarpro.in/autocarpro/8c37bc4b-d4f8-43f5-b89b-c6592fc8a658_The-new-Hyundai-VERNA-_1_.jpg" alt="Hyundai Verna" loading="lazy" decoding="async" />
+                  <span class="fleet-badge">Premium Sedan</span>
+                </div>
+                <div class="fleet-card__content">
+                  <div class="fleet-card__top">
+                    <h4>Hyundai Verna</h4>
+                    <span class="fleet-capacity"><i class="fa-solid fa-user-group"></i> 5 Passengers</span>
+                  </div>
+                  <div class="fleet-features">
+                    <span><i class="fa-solid fa-gauge-high"></i> Smooth Ride</span>
+                    <span><i class="fa-solid fa-couch"></i> Executive Comfort</span>
+                    <span><i class="fa-solid fa-snowflake"></i> Climate Control</span>
+                  </div>
+                  <a class="btn btn-secondary fleet-book-btn" href="#booking" data-ripple>Book Now</a>
+                </div>
               </article>
               <article class="fleet-card" data-fleet-card>
-                <img src="https://m.media-amazon.com/images/I/51DTZ3GOByL._AC_UF1000,1000_QL80_.jpg" alt="Innova Crysta" loading="lazy" decoding="async" />
-                <h4>Innova Crysta</h4>
-                <p class="fleet-meta"><i class="fa-solid fa-user-group"></i> Seating: 7</p>
+                <div class="fleet-card__media">
+                  <img src="https://m.media-amazon.com/images/I/51DTZ3GOByL._AC_UF1000,1000_QL80_.jpg" alt="Innova Crysta" loading="lazy" decoding="async" />
+                  <span class="fleet-badge">Family Travel</span>
+                </div>
+                <div class="fleet-card__content">
+                  <div class="fleet-card__top">
+                    <h4>Innova Crysta</h4>
+                    <span class="fleet-capacity"><i class="fa-solid fa-user-group"></i> 7 Passengers</span>
+                  </div>
+                  <div class="fleet-features">
+                    <span><i class="fa-solid fa-couch"></i> Reclining Seats</span>
+                    <span><i class="fa-solid fa-suitcase-rolling"></i> Spacious Cabin</span>
+                    <span><i class="fa-solid fa-snowflake"></i> Dual Zone AC</span>
+                  </div>
+                  <a class="btn btn-secondary fleet-book-btn" href="#booking" data-ripple>Book Now</a>
+                </div>
               </article>
               <article class="fleet-card" data-fleet-card>
-                <img src="https://mc.bajajfinserv.in/media/catalog/product/c/r/crysta_gx_7s_d_attitude_black_mica_base_4.jpeg" alt="Innova Hycross" loading="lazy" decoding="async" />
-                <h4>Innova Hycross</h4>
-                <p class="fleet-meta"><i class="fa-solid fa-user-group"></i> Seating: 6</p>
+                <div class="fleet-card__media">
+                  <img src="https://mc.bajajfinserv.in/media/catalog/product/c/r/crysta_gx_7s_d_attitude_black_mica_base_4.jpeg" alt="Innova Hycross" loading="lazy" decoding="async" />
+                  <span class="fleet-badge">Corporate Travel</span>
+                </div>
+                <div class="fleet-card__content">
+                  <div class="fleet-card__top">
+                    <h4>Innova Hycross</h4>
+                    <span class="fleet-capacity"><i class="fa-solid fa-user-group"></i> 6 Passengers</span>
+                  </div>
+                  <div class="fleet-features">
+                    <span><i class="fa-solid fa-bolt"></i> Hybrid Comfort</span>
+                    <span><i class="fa-solid fa-couch"></i> Premium Seats</span>
+                    <span><i class="fa-solid fa-briefcase"></i> Business Ready</span>
+                  </div>
+                  <a class="btn btn-secondary fleet-book-btn" href="#booking" data-ripple>Book Now</a>
+                </div>
               </article>
               <article class="fleet-card" data-fleet-card>
-                <img src="https://www.vpltravels.com/wp-content/uploads/2024/01/18-Seater-Tempo-Traveller-Rental-in-Chennai.webp" alt="Tempo Traveller" loading="lazy" decoding="async" />
-                <h4>Tempo Traveller</h4>
-                <p class="fleet-meta"><i class="fa-solid fa-user-group"></i> Seating: 12-14</p>
+                <div class="fleet-card__media">
+                  <img src="https://www.vpltravels.com/wp-content/uploads/2024/01/18-Seater-Tempo-Traveller-Rental-in-Chennai.webp" alt="Tempo Traveller" loading="lazy" decoding="async" />
+                  <span class="fleet-badge">Group Travel</span>
+                </div>
+                <div class="fleet-card__content">
+                  <div class="fleet-card__top">
+                    <h4>Tempo Traveller</h4>
+                    <span class="fleet-capacity"><i class="fa-solid fa-user-group"></i> 12-14 Passengers</span>
+                  </div>
+                  <div class="fleet-features">
+                    <span><i class="fa-solid fa-snowflake"></i> AC Coach</span>
+                    <span><i class="fa-solid fa-suitcase-rolling"></i> Large Luggage Space</span>
+                    <span><i class="fa-solid fa-users"></i> Group Friendly</span>
+                  </div>
+                  <a class="btn btn-secondary fleet-book-btn" href="#booking" data-ripple>Book Now</a>
+                </div>
               </article>
               <article class="fleet-card" data-fleet-card>
-                <img src="https://buscdn.cardekho.com/in/force/traveller-wider-body/force-traveller-wider-body-63641.jpg" alt="Force Traveller" loading="lazy" decoding="async" />
-                <h4>Force Traveller</h4>
-                <p class="fleet-meta"><i class="fa-solid fa-user-group"></i> Seating: 8-10</p>
+                <div class="fleet-card__media">
+                  <img src="https://buscdn.cardekho.com/in/force/traveller-wider-body/force-traveller-wider-body-63641.jpg" alt="Force Traveller" loading="lazy" decoding="async" />
+                  <span class="fleet-badge">Event Travel</span>
+                </div>
+                <div class="fleet-card__content">
+                  <div class="fleet-card__top">
+                    <h4>Force Traveller</h4>
+                    <span class="fleet-capacity"><i class="fa-solid fa-user-group"></i> 8-10 Passengers</span>
+                  </div>
+                  <div class="fleet-features">
+                    <span><i class="fa-solid fa-star"></i> Executive Seating</span>
+                    <span><i class="fa-solid fa-snowflake"></i> Climate Ready</span>
+                    <span><i class="fa-solid fa-road"></i> Long Route Friendly</span>
+                  </div>
+                  <a class="btn btn-secondary fleet-book-btn" href="#booking" data-ripple>Book Now</a>
+                </div>
               </article>
             </div>
           </div>
@@ -949,23 +1030,40 @@
         <p class="section-sub">Last updated: 2026</p>
       </div>
 
-      <div class="card policy-card">
-        <h3 class="policy-card__title">Overview</h3>
-        <p class="policy-card__copy">
-          We collect and use information that you provide when you request a booking, fare estimate, or support.
-          This policy is a template—replace with your actual legal wording.
-        </p>
+      <div class="privacy-grid" data-reveal>
+        <article class="card policy-card policy-card--lead">
+          <div class="policy-eyebrow"><i class="fa-solid fa-shield-halved"></i> Privacy Overview</div>
+          <h3 class="policy-card__title">Information We Collect</h3>
+          <p class="policy-card__copy">
+            We collect the information you provide when you request a booking, fare estimate, or support so we can deliver a smooth travel experience.
+          </p>
+        </article>
 
-        <ul class="check-list policy-card__list">
-          <li><i class="fa-solid fa-circle-check"></i> Information you provide: name, phone, email, pickup/drop details, and requirements.</li>
-          <li><i class="fa-solid fa-circle-check"></i> Purpose: to process bookings, estimate fares, and respond to support requests.</li>
-          <li><i class="fa-solid fa-circle-check"></i> Sharing: only with systems/people necessary for booking fulfillment (drivers/admin).</li>
-          <li><i class="fa-solid fa-circle-check"></i> Contact: use the Support section to request information or updates.</li>
-        </ul>
+        <article class="card policy-card">
+          <div class="policy-eyebrow"><i class="fa-solid fa-clipboard-list"></i> Data Points</div>
+          <h3 class="policy-card__title">What We Store</h3>
+          <ul class="check-list policy-card__list">
+            <li><i class="fa-solid fa-circle-check"></i> Name, phone, email, and booking details.</li>
+            <li><i class="fa-solid fa-circle-check"></i> Pickup and drop locations, trip dates, and preferences.</li>
+            <li><i class="fa-solid fa-circle-check"></i> Requirements shared through the booking or support forms.</li>
+          </ul>
+        </article>
 
-        <p class="policy-card__copy policy-card__footnote">
-          Note: If you add analytics/cookies later, update this section accordingly.
-        </p>
+        <article class="card policy-card">
+          <div class="policy-eyebrow"><i class="fa-solid fa-lock"></i> Usage</div>
+          <h3 class="policy-card__title">How We Use It</h3>
+          <p class="policy-card__copy">
+            Your information is used to process bookings, estimate fares, assign vehicles, and respond to travel support requests.
+          </p>
+        </article>
+
+        <article class="card policy-card">
+          <div class="policy-eyebrow"><i class="fa-solid fa-handshake-angle"></i> Sharing &amp; Support</div>
+          <h3 class="policy-card__title">Who Can Access It</h3>
+          <p class="policy-card__copy">
+            We share details only with the people and systems needed to fulfill your booking, including drivers and internal support staff.
+          </p>
+        </article>
       </div>
     </div>
   </section>
@@ -977,22 +1075,73 @@
         <p class="section-sub">Last updated: 2026</p>
       </div>
 
-      <div class="card policy-card">
-        <h3 class="policy-card__title">Booking Terms (Template)</h3>
-        <p class="policy-card__copy">
-          By submitting a booking request, you agree to the operational rules of the service. This text is a template—replace with your actual legal wording.
-        </p>
+      <div class="terms-grid" data-reveal>
+        <details class="card policy-accordion" open>
+          <summary>
+            <span class="policy-summary__title"><i class="fa-solid fa-calendar-check"></i> Booking Terms</span>
+            <i class="fa-solid fa-chevron-down policy-summary__chevron"></i>
+          </summary>
+          <div class="policy-card__body">
+            <p class="policy-card__copy">
+              By submitting a booking request, you agree to the operational rules of the service. Bookings may be reviewed and confirmed by the admin team before fulfillment.
+            </p>
+            <ul class="check-list policy-card__list">
+              <li><i class="fa-solid fa-circle-check"></i> Booking approval may be required before vehicle dispatch.</li>
+              <li><i class="fa-solid fa-circle-check"></i> Trip details should remain accurate for smooth planning.</li>
+              <li><i class="fa-solid fa-circle-check"></i> Driver and vehicle allocation can change based on availability.</li>
+            </ul>
+          </div>
+        </details>
 
-        <ul class="check-list policy-card__list">
-          <li><i class="fa-solid fa-circle-check"></i> Booking approval: bookings may be confirmed by admin before fulfillment.</li>
-          <li><i class="fa-solid fa-circle-check"></i> Pricing: final charges may vary based on distance, tolls, waiting time, and night charges.</li>
-          <li><i class="fa-solid fa-circle-check"></i> Payments: as per your published policy (e.g., pay after ride completion once invoiced).</li>
-          <li><i class="fa-solid fa-circle-check"></i> Cancellations/rescheduling: defined by your business policy.</li>
-        </ul>
+        <details class="card policy-accordion" open>
+          <summary>
+            <span class="policy-summary__title"><i class="fa-solid fa-indian-rupee-sign"></i> Pricing Terms</span>
+            <i class="fa-solid fa-chevron-down policy-summary__chevron"></i>
+          </summary>
+          <div class="policy-card__body">
+            <p class="policy-card__copy">
+              Final charges may vary based on route distance, tolls, waiting time, night charges, and the selected trip type.
+            </p>
+            <ul class="check-list policy-card__list">
+              <li><i class="fa-solid fa-circle-check"></i> Fare estimates are based on the details entered in the booking form.</li>
+              <li><i class="fa-solid fa-circle-check"></i> Extra charges may apply for tolls, delays, or route adjustments.</li>
+              <li><i class="fa-solid fa-circle-check"></i> Transparent invoicing applies after ride completion.</li>
+            </ul>
+          </div>
+        </details>
 
-        <p class="policy-card__copy policy-card__footnote">
-          For clarifications, contact support or call/WhatsApp from the Support section.
-        </p>
+        <details class="card policy-accordion" open>
+          <summary>
+            <span class="policy-summary__title"><i class="fa-solid fa-ban"></i> Cancellation Terms</span>
+            <i class="fa-solid fa-chevron-down policy-summary__chevron"></i>
+          </summary>
+          <div class="policy-card__body">
+            <p class="policy-card__copy">
+              Cancellation and rescheduling rules are defined by the service policy and may depend on timing, trip type, and vehicle allocation.
+            </p>
+            <ul class="check-list policy-card__list">
+              <li><i class="fa-solid fa-circle-check"></i> Please contact support as early as possible for changes.</li>
+              <li><i class="fa-solid fa-circle-check"></i> Advance notice helps avoid disruption to scheduled travel.</li>
+              <li><i class="fa-solid fa-circle-check"></i> Special events or long-route bookings may have stricter terms.</li>
+            </ul>
+          </div>
+        </details>
+
+        <details class="card policy-accordion policy-accordion--support" open>
+          <summary>
+            <span class="policy-summary__title"><i class="fa-solid fa-headset"></i> Support Information</span>
+            <i class="fa-solid fa-chevron-down policy-summary__chevron"></i>
+          </summary>
+          <div class="policy-card__body">
+            <p class="policy-card__copy">
+              For clarifications, contact support or call/WhatsApp from the Support section for quick assistance.
+            </p>
+            <div class="policy-support-actions">
+              <a class="btn btn-primary" href="tel:8081181368" data-ripple><i class="fa-solid fa-phone"></i> Call Now</a>
+              <a class="btn btn-secondary" href="https://wa.me/8081181368" target="_blank" rel="noopener" data-ripple><i class="fa-brands fa-whatsapp"></i> WhatsApp</a>
+            </div>
+          </div>
+        </details>
       </div>
     </div>
   </section>

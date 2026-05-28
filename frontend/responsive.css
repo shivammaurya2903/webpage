@@ -88,6 +88,38 @@
     gap: 16px;
   }
 
+  .privacy-grid,
+  .terms-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .support-ctas,
+  .policy-support-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .carousel-track {
+    grid-auto-columns: calc((100% - 18px) / 2);
+  }
+
+  .fleet-carousel-nav {
+    opacity: 1;
+    transform: none;
+    padding: 0 6px;
+  }
+
+  .fleet-nav-btn {
+    width: 52px;
+    height: 52px;
+  }
+
+  .carousel::before,
+  .carousel::after {
+    top: 68px;
+    bottom: 10px;
+    width: 56px;
+  }
+
   .faq-card,
   .faq-side-card {
     padding: 22px;
@@ -127,8 +159,8 @@
     grid-template-columns: 1fr !important;
   }
 
-  .booking-right {
-    order: -1;
+  .support-layout {
+    gap: 18px;
   }
 
   .booking-form {
@@ -149,6 +181,67 @@
 
   .booking-image img {
     min-height: 340px;
+  }
+
+  .booking-right {
+    display: none;
+  }
+
+  .carousel-track {
+    grid-auto-columns: 100%;
+  }
+
+  .fleet-carousel-nav {
+    opacity: 1;
+    padding: 0 4px;
+  }
+
+  .fleet-nav-btn {
+    width: 48px;
+    height: 48px;
+  }
+
+  .fleet-nav-btn--prev {
+    margin-left: 0;
+  }
+
+  .fleet-nav-btn--next {
+    margin-right: 0;
+  }
+
+  .carousel::before,
+  .carousel::after {
+    width: 44px;
+  }
+
+  .fleet-card__top {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .fleet-capacity {
+    white-space: normal;
+  }
+
+  .policy-card,
+  .policy-accordion > summary,
+  .policy-card__body {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  .policy-card__body {
+    padding-bottom: 20px;
+  }
+
+  .support-ctas,
+  .policy-support-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .support-ctas .btn,
+  .policy-support-actions .btn {
+    width: 100%;
   }
 
   .section-title {
@@ -203,6 +296,46 @@
     min-height: 210px;
   }
 
+  .booking-right {
+    display: none;
+  }
+
+  .carousel-head {
+    margin-bottom: 12px;
+  }
+
+  .carousel-title {
+    font-size: 20px;
+  }
+
+  .carousel-track {
+    gap: 14px;
+  }
+
+  .fleet-card {
+    border-radius: 20px;
+  }
+
+  .fleet-card__media {
+    aspect-ratio: 16 / 10;
+  }
+
+  .fleet-card__content {
+    padding: 16px;
+  }
+
+  .fleet-features {
+    gap: 8px;
+  }
+
+  .fleet-features span {
+    padding: 8px 9px;
+  }
+
+  .policy-card__title {
+    font-size: 24px;
+  }
+
   .booking-title,
   .booking-sub {
     text-align: left;
@@ -240,6 +373,22 @@
   
   .reviews-grid {
     grid-template-columns: 1fr;
+  }
+
+  .support-title {
+    font-size: 22px;
+  }
+
+  .support-card {
+    padding: 20px;
+  }
+
+  .support-lines {
+    gap: 8px;
+  }
+
+  .support-line {
+    font-size: 13px;
   }
 }
 

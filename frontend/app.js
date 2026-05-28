@@ -1108,6 +1108,9 @@
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     let index = 0;
+    let autoplayTimer = null;
+    let isHovering = false;
+    let isFocused = false;
 
     const getGap = () => {
       const style = window.getComputedStyle(track);
@@ -1137,8 +1140,8 @@
       const step = getStep();
       if (track) track.style.transform = `translateX(${-index * step}px)`;
 
-      if (prevBtn) prevBtn.disabled = false;
-      if (nextBtn) nextBtn.disabled = false;
+      if (prevBtn) prevBtn.disabled = cards.length < 2;
+      if (nextBtn) nextBtn.disabled = cards.length < 2;
 
       // mark active card for CSS animation
       cards.forEach((card, i) => {
@@ -1153,15 +1156,59 @@
     };
 
     const startAutoplay = () => {
-      return;
+      if (prefersReducedMotion || cards.length < 2) return;
+      if (autoplayTimer) return;
+      autoplayTimer = window.setInterval(() => {
+        if (document.hidden || isHovering || isFocused) return;
+        advance();
+      }, 3200);
     };
 
     const stopAutoplay = () => {
-      return;
+      if (autoplayTimer) {
+        window.clearInterval(autoplayTimer);
+        autoplayTimer = null;
+      }
     };
 
-    prevBtn?.addEventListener('click', () => update(index - 1, { loop: true }));
-    nextBtn?.addEventListener('click', () => update(index + 1, { loop: true }));
+    prevBtn?.addEventListener('click', () => {
+      stopAutoplay();
+      update(index - 1, { loop: true });
+      startAutoplay();
+    });
+    nextBtn?.addEventListener('click', () => {
+      stopAutoplay();
+      update(index + 1, { loop: true });
+      startAutoplay();
+    });
+
+    carousel.addEventListener('mouseenter', () => {
+      isHovering = true;
+      stopAutoplay();
+    });
+
+    carousel.addEventListener('mouseleave', () => {
+      isHovering = false;
+      startAutoplay();
+    });
+
+    carousel.addEventListener('focusin', () => {
+      isFocused = true;
+      stopAutoplay();
+    });
+
+    carousel.addEventListener('focusout', () => {
+      isFocused = false;
+      startAutoplay();
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        stopAutoplay();
+      } else {
+        startAutoplay();
+      }
+    });
 
     // Keyboard support (Left/Right) when carousel is focused
     // - Works even if buttons are not focused
@@ -1191,6 +1238,7 @@
 
     window.addEventListener('resize', () => update(index));
     update(0);
+    startAutoplay();
   }
 
   // --- Auth modal behavior and form handlers ---
