@@ -1,6 +1,9 @@
 (() => {
   const APP_CONFIG = window.APP_CONFIG || {};
-  const API_BASE_URL = String(APP_CONFIG.API_BASE_URL || window.API_BASE_URL || '').replace(/\/$/, '');
+  const FALLBACK_API_BASE_URL = window.location.hostname === 'localhost'
+    ? 'http://localhost:5000'
+    : 'https://webpage-96yf.onrender.com';
+  const API_BASE_URL = String(APP_CONFIG.API_BASE_URL || window.API_BASE_URL || FALLBACK_API_BASE_URL).replace(/\/$/, '');
   const SOCKET_BASE_URL = String(APP_CONFIG.SOCKET_BASE_URL || window.SOCKET_BASE_URL || API_BASE_URL).replace(/\/$/, '');
   const DEFAULT_TIMEOUT_MS = Number(APP_CONFIG.DEFAULT_TIMEOUT_MS || 12000);
   const STORAGE_TOKEN = 'admin_token';
@@ -301,10 +304,16 @@
   async function safeJson(response) {
     const text = await response.text();
     if (!text) return null;
+
+    const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+    if (contentType.includes('text/html') || /^\s*</.test(text)) {
+      return { message: 'Unable to connect to server. Please try again later.' };
+    }
+
     try {
       return JSON.parse(text);
     } catch (_) {
-      return { message: text };
+      return { message: 'Unable to connect to server. Please try again later.' };
     }
   }
 
@@ -341,7 +350,7 @@
 
     const body = await safeJson(response);
     if (!response.ok) {
-      const message = body?.message || body?.error || 'Request failed';
+      const message = body?.message || body?.error || 'Unable to connect to server. Please try again later.';
       throw new Error(message);
     }
     return body;
