@@ -77,6 +77,37 @@
     grid-template-columns: 1fr;
   }
 
+  .carousel-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .fleet-carousel-nav {
+    display: none;
+  }
+
+  .fleet-nav-btn {
+    width: 46px;
+    height: 46px;
+    border-color: rgba(106, 27, 154, .14);
+    background: rgba(255, 255, 255, .78);
+    color: var(--primary);
+    box-shadow: 0 14px 30px rgba(48, 16, 84, .12);
+  }
+
+  .fleet-nav-btn:hover {
+    background: rgba(106, 27, 154, .10);
+    color: var(--primary);
+    box-shadow: 0 16px 34px rgba(48, 16, 84, .16);
+  }
+
+  .fleet-nav-btn--prev,
+  .fleet-nav-btn--next {
+    margin-left: 0;
+    margin-right: 0;
+  }
+
   .submit-btn,
   .btn-whatsapp {
     grid-column: span 1;
@@ -304,24 +335,65 @@
     margin-bottom: 12px;
   }
 
+  .fleet-carousel-nav {
+    display: none;
+  }
+
   .carousel-title {
-    font-size: 20px;
+    font-size: 19px;
+  }
+
+  .carousel {
+    padding: 0;
+  }
+
+  .carousel::before,
+  .carousel::after {
+    display: none;
+  }
+
+  .carousel-viewport {
+    padding-top: 0;
   }
 
   .carousel-track {
-    gap: 14px;
+    gap: 12px;
   }
 
   .fleet-card {
-    border-radius: 20px;
+    width: 100%;
+    min-width: 100%;
+    max-width: 100%;
+    border-radius: 22px;
+    box-shadow:
+      0 14px 30px rgba(22, 10, 44, .08),
+      inset 0 1px 0 rgba(255, 255, 255, .38);
   }
 
   .fleet-card__media {
-    aspect-ratio: 16 / 10;
+    aspect-ratio: 4 / 3;
   }
 
   .fleet-card__content {
-    padding: 16px;
+    padding: 14px 14px 16px;
+    gap: 10px;
+  }
+
+  .fleet-card__top {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    min-height: 0;
+  }
+
+  .fleet-card__top h4 {
+    font-size: 18px;
+    min-height: 0;
+  }
+
+  .fleet-capacity {
+    font-size: 11px;
+    padding: 7px 10px;
   }
 
   .fleet-features {
@@ -329,7 +401,12 @@
   }
 
   .fleet-features span {
-    padding: 8px 9px;
+    padding: 7px 8px;
+    font-size: 11px;
+  }
+
+  .fleet-book-btn {
+    min-height: 48px;
   }
 
   .policy-card__title {

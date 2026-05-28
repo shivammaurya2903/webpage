@@ -1949,12 +1949,21 @@ td:last-child {
 .submit-btn {
   grid-column: span 2;
   justify-self: start;
-  min-width: 180px;
+  min-width: 228px;
+  padding-inline: 28px;
+  min-height: 56px;
+  border-radius: 18px;
+  font-size: 15px;
+  white-space: nowrap;
 }
 
 .btn-whatsapp {
   grid-column: span 2;
   justify-content: center;
+  min-height: 56px;
+  padding-inline: 28px;
+  border-radius: 18px;
+  font-size: 15px;
   background: linear-gradient(135deg, rgba(18, 140, 86, .98), rgba(14, 121, 75, .98));
   border: 1px solid rgba(18, 140, 86, .24);
   color: #fff;
