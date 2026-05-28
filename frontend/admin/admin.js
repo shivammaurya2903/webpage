@@ -1,21 +1,10 @@
 (() => {
-  const DEFAULT_API_PORT = '5000';
-  const DEFAULT_TIMEOUT_MS = 12000;
+  const APP_CONFIG = window.APP_CONFIG || {};
+  const API_BASE_URL = String(APP_CONFIG.API_BASE_URL || window.API_BASE_URL || '').replace(/\/$/, '');
+  const SOCKET_BASE_URL = String(APP_CONFIG.SOCKET_BASE_URL || window.SOCKET_BASE_URL || API_BASE_URL).replace(/\/$/, '');
+  const DEFAULT_TIMEOUT_MS = Number(APP_CONFIG.DEFAULT_TIMEOUT_MS || 12000);
   const STORAGE_TOKEN = 'admin_token';
   const STORAGE_ADMIN = 'admin_profile';
-
-  const API_BASE = (() => {
-    const override = document.documentElement.dataset.apiBase || window.__API_BASE__;
-    if (override) return String(override).replace(/\/$/, '');
-    const { protocol, hostname } = window.location;
-    if (protocol === 'http:' || protocol === 'https:') {
-      if (hostname === 'localhost' || hostname === '127.0.0.1') {
-        return `${protocol}//${hostname}:${String(document.documentElement.dataset.apiPort || window.__API_PORT__ || DEFAULT_API_PORT)}`;
-      }
-      return window.location.origin.replace(/\/$/, '');
-    }
-    return `http://localhost:${DEFAULT_API_PORT}`;
-  })();
 
   const el = {
     loginView: document.getElementById('loginView'),
@@ -319,17 +308,37 @@
     }
   }
 
+  function normalizeRequestError(error) {
+    if (error?.name === 'AbortError') {
+      return new Error('Server temporarily unavailable. Please try again later.');
+    }
+
+    const message = String(error?.message || error || '').toLowerCase();
+    if (message.includes('failed to fetch') || message.includes('networkerror') || message.includes('network') || message.includes('load failed')) {
+      return new Error('Server temporarily unavailable. Please try again later.');
+    }
+
+    return error instanceof Error ? error : new Error('Request failed');
+  }
+
   async function apiFetch(path, options = {}) {
-    const response = await fetch(`${API_BASE}${path}`, {
-      credentials: 'include',
-      ...options,
-      headers: {
-        Accept: 'application/json',
-        ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
-        ...(options.headers || {}),
-        ...(state.token ? { Authorization: `Bearer ${state.token}` } : {})
-      }
-    });
+    let response;
+
+    try {
+      response = await fetch(`${API_BASE_URL}${path}`, {
+        credentials: 'include',
+        ...options,
+        headers: {
+          Accept: 'application/json',
+          ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+          ...(options.headers || {}),
+          ...(state.token ? { Authorization: `Bearer ${state.token}` } : {})
+        }
+      });
+    } catch (error) {
+      throw normalizeRequestError(error);
+    }
+
     const body = await safeJson(response);
     if (!response.ok) {
       const message = body?.message || body?.error || 'Request failed';
@@ -689,7 +698,7 @@
     if (!window.io || !state.token) return;
 
     disconnectRealtimeSocket();
-    state.socket = window.io(API_BASE, {
+    state.socket = window.io(SOCKET_BASE_URL, {
       withCredentials: true,
       transports: ['websocket', 'polling'],
       auth: { token: state.token }
@@ -2251,7 +2260,7 @@
         });
       } else if (action === 'booking-download-invoice') {
         try {
-          const response = await fetch(`${API_BASE}/api/admin/bookings/${id}/invoice`, {
+          const response = await fetch(`${API_BASE_URL}/api/admin/bookings/${id}/invoice`, {
             credentials: 'include',
             headers: {
               Accept: 'application/pdf',

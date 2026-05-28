@@ -40,14 +40,27 @@ initSocket(server);
 const frontendPath = path.resolve(__dirname, '../frontend');
 const adminPath = path.resolve(__dirname, '../frontend/admin');
 const uploadsPath = path.resolve(__dirname, './uploads');
-const corsOrigins = (process.env.CORS_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:5000,http://127.0.0.1:5000')
-  .split(',')
-  .map((origin) => origin.trim())
-  .filter(Boolean);
+const defaultAllowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5000',
+  'http://localhost:5500',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:5000',
+  'http://127.0.0.1:5500',
+  'https://rkrishnatravels.netlify.app'
+];
+const corsOrigins = new Set([
+  ...defaultAllowedOrigins,
+  ...(process.env.CORS_ORIGIN || process.env.FRONTEND_URL || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+]);
 
 function isAllowedOrigin(origin) {
   if (!origin) return true;
-  if (corsOrigins.includes(origin)) return true;
+  if (corsOrigins.has(origin)) return true;
+  if (/^https:\/\/[a-z0-9-]+\.netlify\.app$/i.test(origin)) return true;
   if (process.env.NODE_ENV !== 'production' && origin === 'null') return true;
   if (process.env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) {
     return true;
@@ -120,7 +133,7 @@ app.get('*', (req, res, next) => {
 app.use(notFound);
 app.use(errorHandler);
 
-const port = process.env.PORT || 5000 ;
+const PORT = process.env.PORT || 5000;
 
 async function start() {
   await connectDB();
@@ -128,7 +141,7 @@ async function start() {
   server.on('error', (error) => {
     if (error && error.code === 'EADDRINUSE') {
       // eslint-disable-next-line no-console
-      console.error(`Port ${port} is already in use. Update PORT in backend/.env or stop the conflicting process.`);
+      console.error(`Port ${PORT} is already in use. Update PORT in backend/.env or stop the conflicting process.`);
       process.exit(1);
     }
 
@@ -137,9 +150,9 @@ async function start() {
     process.exit(1);
   });
 
-  server.listen(port, () => {
+  server.listen(PORT, () => {
     // eslint-disable-next-line no-console
-    console.log(`Server running on port ${port}`);
+    console.log(`Server running on port ${PORT}`);
   });
 }
 

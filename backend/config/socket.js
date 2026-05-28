@@ -38,13 +38,22 @@ async function resolveSocketIdentity(socket) {
 }
 
 function initSocket(server) {
-  const origins = (process.env.CORS_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:5000')
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean);
+  const origins = new Set([
+    'http://localhost:3000',
+    'http://localhost:5000',
+    'http://localhost:5500',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:5000',
+    'http://127.0.0.1:5500',
+    'https://rkrishnatravels.netlify.app',
+    ...(process.env.CORS_ORIGIN || process.env.FRONTEND_URL || '')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean)
+  ]);
 
   io = new Server(server, {
-    cors: { origin: origins, credentials: true }
+    cors: { origin: Array.from(origins), credentials: true }
   });
 
   io.use(async (socket, next) => {

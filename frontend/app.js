@@ -1,32 +1,16 @@
 /* Luxury Tour & Travels - Vanilla JS */
 
 (() => {
-  const DEFAULT_API_PORT = '5000';
-  const DEFAULT_TIMEOUT_MS = 12000;
-  const API_RETRY_DELAY_MS = 500;
-
-  const API_BASE = (() => {
-    const override = window.__API_BASE__ || document.documentElement.dataset.apiBase;
-    if (override) return String(override).replace(/\/$/, '');
-
-    if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
-      const { hostname, protocol } = window.location;
-
-      if (hostname === 'localhost' || hostname === '127.0.0.1') {
-        const forcedPort = String(window.__API_PORT__ || document.documentElement.dataset.apiPort || DEFAULT_API_PORT).trim();
-        if (forcedPort) return `${protocol}//${hostname}:${forcedPort}`;
-      }
-
-      return window.location.origin.replace(/\/$/, '');
-    }
-
-    return `http://localhost:${DEFAULT_API_PORT}`;
-  })();
+  const APP_CONFIG = window.APP_CONFIG || {};
+  const API_BASE_URL = String(APP_CONFIG.API_BASE_URL || window.API_BASE_URL || '').replace(/\/$/, '');
+  const SOCKET_BASE_URL = String(APP_CONFIG.SOCKET_BASE_URL || window.SOCKET_BASE_URL || API_BASE_URL).replace(/\/$/, '');
+  const DEFAULT_TIMEOUT_MS = Number(APP_CONFIG.DEFAULT_TIMEOUT_MS || 12000);
+  const API_RETRY_DELAY_MS = Number(APP_CONFIG.API_RETRY_DELAY_MS || 500);
 
   function apiUrl(path) {
     if (/^https?:\/\//i.test(path)) return path;
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-    return `${API_BASE}${normalizedPath}`;
+    return `${API_BASE_URL}${normalizedPath}`;
   }
   async function safeJson(response) {
     const text = await response.text();
@@ -64,11 +48,11 @@
 
   function normalizeRequestError(error, url) {
     if (error?.name === 'AbortError') {
-      return new Error(`Request timed out. Please try again. (${url})`);
+      return new Error('Server temporarily unavailable. Please try again later.');
     }
 
     if (isNetworkFailure(error)) {
-      return new Error(`Unable to connect to server. Check backend status and API URL. (${url})`);
+      return new Error('Server temporarily unavailable. Please try again later.');
     }
 
     return error instanceof Error ? error : new Error('Unexpected request error');
@@ -188,7 +172,7 @@
     }
 
     if (text.includes('failed to fetch') || text.includes('networkerror') || text.includes('network') || text.includes('unable to connect') || text.includes('failed after retries')) {
-      return 'Unable to connect to the server. Please check your internet and try again.';
+      return 'Server temporarily unavailable. Please try again later.';
     }
 
     if (text.includes('timed out') || text.includes('timeout')) {
@@ -206,7 +190,7 @@
     if (text.includes('mongo') || text.includes('server') || text.includes('internal')) {
       return context === 'register'
         ? 'Unable to create account. Please try again later.'
-        : 'Server is currently unavailable. Please try again later.';
+        : 'Server temporarily unavailable. Please try again later.';
     }
 
     return raw;
@@ -372,7 +356,7 @@
 
     disconnectRealtimeSocket();
     realtimeSocketUserId = String(user.id);
-    realtimeSocket = window.io(API_BASE, {
+    realtimeSocket = window.io(SOCKET_BASE_URL, {
       withCredentials: true,
       transports: ['websocket', 'polling'],
       auth: { token }
