@@ -284,6 +284,8 @@
   // --- Simple frontend auth helpers (store JWT in localStorage) ---
   const AUTH_TOKEN_KEY = 'auth_token';
   const AUTH_USER_KEY = 'auth_user';
+  const ADMIN_TOKEN_KEY = 'admin_token';
+  const ADMIN_USER_KEY = 'admin_profile';
 
   function getToken() {
     return localStorage.getItem(AUTH_TOKEN_KEY);
@@ -307,6 +309,19 @@
   function getUser() {
     try {
       const raw = sessionStorage.getItem(AUTH_USER_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function getAdminToken() {
+    return localStorage.getItem(ADMIN_TOKEN_KEY) || sessionStorage.getItem(ADMIN_TOKEN_KEY);
+  }
+
+  function getAdminUser() {
+    try {
+      const raw = localStorage.getItem(ADMIN_USER_KEY) || sessionStorage.getItem(ADMIN_USER_KEY);
       return raw ? JSON.parse(raw) : null;
     } catch (e) {
       return null;
@@ -869,8 +884,9 @@
     const existingMyBookings = document.getElementById('myBookingsBtn');
     const existingAdminPanel = document.getElementById('adminPanelBtn');
 
-    const user = getUser();
-    const isLoggedIn = Boolean(getToken() || user);
+    const user = getUser() || getAdminUser();
+    const token = getToken() || getAdminToken();
+    const isLoggedIn = Boolean(token || user);
     const isAdmin = user?.role === 'admin';
 
     if (isLoggedIn) {

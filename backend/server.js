@@ -34,6 +34,7 @@ const contactRoutes = require('./routes/contactRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 
 const app = express();
+app.set('trust proxy', 1);
 const server = http.createServer(app);
 initSocket(server);
 
