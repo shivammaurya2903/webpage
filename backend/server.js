@@ -60,7 +60,6 @@ const corsOrigins = new Set([
 function isAllowedOrigin(origin) {
   if (!origin) return true;
   if (corsOrigins.has(origin)) return true;
-  if (/^https:\/\/[a-z0-9-]+\.netlify\.app$/i.test(origin)) return true;
   if (process.env.NODE_ENV !== 'production' && origin === 'null') return true;
   if (process.env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) {
     return true;

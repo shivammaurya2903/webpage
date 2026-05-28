@@ -16,6 +16,10 @@ function getTokenFromRequest(req) {
   return null;
 }
 
+function isValidTokenType(type) {
+  return type === 'user' || type === 'admin';
+}
+
 const protect = asyncHandler(async (req, res, next) => {
   const token = getTokenFromRequest(req);
 
@@ -35,6 +39,10 @@ const protect = asyncHandler(async (req, res, next) => {
       throw new ApiError(401, 'Authentication token has expired');
     }
 
+    throw new ApiError(401, 'Invalid authentication token');
+  }
+
+  if (!isValidTokenType(decoded.type)) {
     throw new ApiError(401, 'Invalid authentication token');
   }
 
@@ -62,6 +70,9 @@ const optionalProtect = asyncHandler(async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (!isValidTokenType(decoded.type)) {
+      return next();
+    }
     const model = decoded.type === 'admin' ? Admin : User;
     const user = await model.findById(decoded.id);
 

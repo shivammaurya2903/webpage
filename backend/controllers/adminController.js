@@ -14,12 +14,17 @@ const SiteSettings = require('../models/SiteSettings');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { attachAdminToken } = require('../utils/generateToken');
+const { clearAuthCookie } = require('../utils/generateToken');
 const { sanitizeImageUrl } = require('../utils/imageUrl');
 const { normalizePaymentMethod: normalizeBillingPaymentMethod, normalizePaymentStatus: normalizeBillingPaymentStatus } = require('../utils/billingWorkflow');
 const { notifyAdmins, notifyBookingStatusChange } = require('../services/notificationService');
 const { sendEmail } = require('../services/emailService');
 const { sendWhatsApp } = require('../services/whatsappService');
 const { bookingAccepted, driverAssigned, rideCompleted } = require('../services/emailTemplates');
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
+}
 
 function escapeRegExp(value) {
   return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -163,7 +168,7 @@ const me = asyncHandler(async (req, res) => {
 });
 
 const logout = asyncHandler(async (req, res) => {
-  res.clearCookie('token');
+  clearAuthCookie(res);
   res.json({ success: true, message: 'Logged out successfully' });
 });
 
@@ -773,7 +778,7 @@ const replyMessage = asyncHandler(async (req, res) => {
   await sendEmail({
     to: message.email,
     subject: `Re: ${message.subject}`,
-    html: `<div style="font-family:Arial,sans-serif"><h2>Thanks for contacting us</h2><p>${reply}</p></div>`
+    html: `<div style="font-family:Arial,sans-serif"><h2>Thanks for contacting us</h2><p>${escapeHtml(reply).replace(/\n/g, '<br>')}</p></div>`
   }).catch(() => undefined);
 
   await sendWhatsApp({ to: message.phone, message: reply }).catch(() => undefined);

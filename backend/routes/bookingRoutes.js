@@ -1,9 +1,18 @@
 const router = require('express').Router();
 const { body } = require('express-validator');
+const rateLimit = require('express-rate-limit');
 const { createBooking, getBookings, getBookingById, updateBookingStatus, assignDriver, downloadBookingInvoice } = require('../controllers/bookingController');
 const { protect, optionalProtect, authorize } = require('../middleware/auth');
 const { validateRequest } = require('../middleware/validate');
 const { deleteBooking } = require('../controllers/bookingController');
+
+const bookingCreateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many booking submissions. Please try again later.' }
+});
 
 function parseLocalDateOnly(value) {
   const match = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(String(value || '').trim());
@@ -40,9 +49,9 @@ function normalizeIndianPhone(value) {
 const bookingValidators = [
   body('customerName')
     .customSanitizer((value, { req }) => String(value || req.body.fullName || '').trim())
-    .isLength({ min: 2 })
+    .isLength({ min: 2, max: 120 })
     .withMessage('Customer name is required'),
-  body('email').trim().isEmail().withMessage('Valid email is required'),
+  body('email').trim().isEmail().normalizeEmail().withMessage('Valid email is required'),
   body('phone')
     .customSanitizer((value) => normalizeIndianPhone(value))
     .custom((value) => {
@@ -51,8 +60,8 @@ const bookingValidators = [
       }
       return true;
     }),
-  body('pickupLocation').trim().isLength({ min: 2 }).withMessage('Pickup location is required'),
-  body('dropLocation').trim().isLength({ min: 2 }).withMessage('Drop location is required'),
+  body('pickupLocation').trim().isLength({ min: 2, max: 200 }).withMessage('Pickup location is required'),
+  body('dropLocation').trim().isLength({ min: 2, max: 200 }).withMessage('Drop location is required'),
   body('pickupDate')
     .trim()
     .custom((value) => {
@@ -86,16 +95,16 @@ const bookingValidators = [
       return true;
     }),
   body('pickupTime').matches(/^([01]\d|2[0-3]):([0-5]\d)$/).withMessage('Valid pickup time is required'),
-  body('passengers').trim().notEmpty().withMessage('Passenger count is required'),
-  body('selectedCar').trim().notEmpty().withMessage('Selected car is required'),
-  body('vehicleId').trim().notEmpty().withMessage('Vehicle selection is required'),
+  body('passengers').trim().isLength({ min: 1, max: 20 }).withMessage('Passenger count is required'),
+  body('selectedCar').trim().isLength({ min: 1, max: 120 }).withMessage('Selected car is required'),
+  body('vehicleId').trim().isLength({ min: 1, max: 128 }).withMessage('Vehicle selection is required'),
   body('selectedPackage')
     .customSanitizer((value, { req }) => String(value || req.body.tripType || '').trim())
-    .isLength({ min: 2 })
+    .isLength({ min: 2, max: 120 })
     .withMessage('Selected package is required')
 ];
 
-router.post('/', optionalProtect, bookingValidators, validateRequest, createBooking);
+router.post('/', bookingCreateLimiter, optionalProtect, bookingValidators, validateRequest, createBooking);
 router.get('/', protect, getBookings);
 router.get('/:id', protect, getBookingById);
 router.get('/:id/invoice/download', protect, downloadBookingInvoice);

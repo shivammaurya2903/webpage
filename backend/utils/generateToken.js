@@ -10,16 +10,19 @@ function signToken(payload) {
   });
 }
 
+function getCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
+  };
+}
+
 function attachToken(res, user, statusCode = 200) {
   const token = signToken({ id: user._id, type: 'user' });
   const cookieDays = Number(process.env.JWT_COOKIE_EXPIRES_IN || 7);
 
-  const cookieOptions = {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    maxAge: cookieDays * 24 * 60 * 60 * 1000
-  };
+  const cookieOptions = { ...getCookieOptions(), maxAge: cookieDays * 24 * 60 * 60 * 1000 };
 
   res.cookie('token', token, cookieOptions);
   return res.status(statusCode).json({
@@ -33,12 +36,7 @@ function attachAdminToken(res, admin, statusCode = 200) {
   const token = signToken({ id: admin._id, type: 'admin' });
   const cookieDays = Number(process.env.JWT_COOKIE_EXPIRES_IN || 7);
 
-  const cookieOptions = {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    maxAge: cookieDays * 24 * 60 * 60 * 1000
-  };
+  const cookieOptions = { ...getCookieOptions(), maxAge: cookieDays * 24 * 60 * 60 * 1000 };
 
   res.cookie('token', token, cookieOptions);
   return res.status(statusCode).json({
@@ -48,4 +46,8 @@ function attachAdminToken(res, admin, statusCode = 200) {
   });
 }
 
-module.exports = { signToken, attachToken, attachAdminToken };
+function clearAuthCookie(res) {
+  res.clearCookie('token', getCookieOptions());
+}
+
+module.exports = { signToken, attachToken, attachAdminToken, clearAuthCookie, getCookieOptions };

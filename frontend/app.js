@@ -313,6 +313,39 @@
     }
   }
 
+  function getSessionUser() {
+    return getUser();
+  }
+
+  function getSessionRole() {
+    return String(getSessionUser()?.role || '').toLowerCase();
+  }
+
+  function isAdminSession() {
+    return getSessionRole() === 'admin';
+  }
+
+  function isAuthenticatedSession() {
+    return Boolean(getToken() || getSessionUser());
+  }
+
+  function getLogoutEndpoint() {
+    return isAdminSession() ? '/api/admin/auth/logout' : '/api/auth/logout';
+  }
+
+  async function performLogout() {
+    try {
+      if (isAuthenticatedSession()) {
+        await performRequest(apiUrl(getLogoutEndpoint()), { method: 'POST' }, { suppressAuthModal: true, retries: 0 });
+      }
+    } catch (_) {
+      // ignore logout failures and still clear the local session state
+    } finally {
+      setToken(null);
+      setUser(null);
+    }
+  }
+
   let realtimeSocket = null;
   let realtimeSocketUserId = '';
 
@@ -822,6 +855,8 @@
     const mobileLoginBtn = document.getElementById('mobileLoginOpenBtn');
     const mobileRegisterBtn = document.getElementById('mobileRegisterOpenBtn');
     const navRight = document.querySelector('.nav-right');
+    const desktopAdminPanelLink = document.querySelector('[data-admin-panel-link]');
+    const mobileAdminPanelLink = document.querySelector('[data-mobile-admin-panel-link]');
     const mobileAccount = document.querySelector('[data-mobile-account]');
     const mobileAvatar = document.querySelector('[data-mobile-avatar]');
     const mobileName = document.querySelector('[data-mobile-name]');
@@ -832,72 +867,98 @@
 
     const existingLogout = document.getElementById('logoutBtn');
     const existingMyBookings = document.getElementById('myBookingsBtn');
+    const existingAdminPanel = document.getElementById('adminPanelBtn');
 
     const user = getUser();
-    if (getToken()) {
+    const isLoggedIn = Boolean(getToken() || user);
+    const isAdmin = user?.role === 'admin';
+
+    if (isLoggedIn) {
       if (loginBtn) loginBtn.style.display = 'none';
       if (registerBtn) registerBtn.style.display = 'none';
       if (mobileLoginBtn) mobileLoginBtn.style.display = 'none';
       if (mobileRegisterBtn) mobileRegisterBtn.style.display = 'none';
       if (mobileAccount) mobileAccount.classList.remove('is-hidden');
 
-      if (!existingMyBookings) {
-        const mb = document.createElement('button');
-        mb.id = 'myBookingsBtn';
-        mb.className = 'btn btn-ghost desktop-only-action';
-        mb.type = 'button';
-        mb.textContent = 'My Bookings';
-        mb.addEventListener('click', async () => {
-          const modal = document.getElementById('bookingsModal');
-          const list = document.getElementById('bookingsList');
-          if (modal && list) {
-            __bookingViewMode = 'list';
-            list.innerHTML = renderBookingsModalNotice('Loading bookings...', 'Please wait while we fetch your trips.');
-            modal.style.display = 'flex';
-            modal.setAttribute('aria-hidden', 'false');
-          }
-          try {
-            const res = await authFetch(apiUrl('/api/bookings'), {}, { retries: 1 });
-            const body = await safeJson(res);
-            if (!res.ok) throw new Error(body?.message || 'Booking failed to load');
-            showBookingsModal(body.bookings || []);
-          } catch (e) {
-            if (modal && list) {
-              list.innerHTML = renderBookingsModalNotice('Booking failed to load', 'Please try again in a moment.');
-              modal.style.display = 'flex';
-              modal.setAttribute('aria-hidden', 'false');
-            }
-            showGlobalNotification('Booking failed to load');
-          }
-        });
-        navRight.insertBefore(mb, menuBtn);
-      }
+      if (desktopAdminPanelLink) desktopAdminPanelLink.hidden = !isAdmin;
+      if (mobileAdminPanelLink) mobileAdminPanelLink.hidden = !isAdmin;
 
-      if (mobileMyBookingsBtn) {
-        mobileMyBookingsBtn.onclick = async () => {
-          closeMenu();
-          const modal = document.getElementById('bookingsModal');
-          const list = document.getElementById('bookingsList');
-          if (modal && list) {
-            __bookingViewMode = 'list';
-            list.innerHTML = renderBookingsModalNotice('Loading bookings...', 'Please wait while we fetch your trips.');
-            modal.style.display = 'flex';
-            modal.setAttribute('aria-hidden', 'false');
-          }
-          try {
-            const res = await authFetch(apiUrl('/api/bookings'), {}, { retries: 1 });
-            const body = await safeJson(res);
-            if (!res.ok) throw new Error(body?.message || 'Booking failed to load');
-            showBookingsModal(body.bookings || []);
-          } catch (e) {
+      if (isAdmin) {
+        if (existingMyBookings) existingMyBookings.remove();
+        if (mobileMyBookingsBtn) {
+          mobileMyBookingsBtn.style.display = 'none';
+          mobileMyBookingsBtn.onclick = null;
+        }
+
+        if (!existingAdminPanel) {
+          const adminLink = document.createElement('a');
+          adminLink.id = 'adminPanelBtn';
+          adminLink.className = 'btn btn-ghost desktop-only-action';
+          adminLink.href = 'admin/index.html';
+          adminLink.textContent = 'Admin Panel';
+          navRight.insertBefore(adminLink, menuBtn);
+        }
+      } else {
+        if (existingAdminPanel) existingAdminPanel.remove();
+        if (!existingMyBookings) {
+          const mb = document.createElement('button');
+          mb.id = 'myBookingsBtn';
+          mb.className = 'btn btn-ghost desktop-only-action';
+          mb.type = 'button';
+          mb.textContent = 'My Bookings';
+          mb.addEventListener('click', async () => {
+            const modal = document.getElementById('bookingsModal');
+            const list = document.getElementById('bookingsList');
             if (modal && list) {
-              list.innerHTML = renderBookingsModalNotice('Booking failed to load', 'Please try again in a moment.');
+              __bookingViewMode = 'list';
+              list.innerHTML = renderBookingsModalNotice('Loading bookings...', 'Please wait while we fetch your trips.');
               modal.style.display = 'flex';
               modal.setAttribute('aria-hidden', 'false');
             }
-            showGlobalNotification('Booking failed to load');
-          }
-        };
+            try {
+              const res = await authFetch(apiUrl('/api/bookings'), {}, { retries: 1 });
+              const body = await safeJson(res);
+              if (!res.ok) throw new Error(body?.message || 'Booking failed to load');
+              showBookingsModal(body.bookings || []);
+            } catch (e) {
+              if (modal && list) {
+                list.innerHTML = renderBookingsModalNotice('Booking failed to load', 'Please try again in a moment.');
+                modal.style.display = 'flex';
+                modal.setAttribute('aria-hidden', 'false');
+              }
+              showGlobalNotification('Booking failed to load');
+            }
+          });
+          navRight.insertBefore(mb, menuBtn);
+        }
+
+        if (mobileMyBookingsBtn) {
+          mobileMyBookingsBtn.style.display = '';
+          mobileMyBookingsBtn.onclick = async () => {
+            closeMenu();
+            const modal = document.getElementById('bookingsModal');
+            const list = document.getElementById('bookingsList');
+            if (modal && list) {
+              __bookingViewMode = 'list';
+              list.innerHTML = renderBookingsModalNotice('Loading bookings...', 'Please wait while we fetch your trips.');
+              modal.style.display = 'flex';
+              modal.setAttribute('aria-hidden', 'false');
+            }
+            try {
+              const res = await authFetch(apiUrl('/api/bookings'), {}, { retries: 1 });
+              const body = await safeJson(res);
+              if (!res.ok) throw new Error(body?.message || 'Booking failed to load');
+              showBookingsModal(body.bookings || []);
+            } catch (e) {
+              if (modal && list) {
+                list.innerHTML = renderBookingsModalNotice('Booking failed to load', 'Please try again in a moment.');
+                modal.style.display = 'flex';
+                modal.setAttribute('aria-hidden', 'false');
+              }
+              showGlobalNotification('Booking failed to load');
+            }
+          };
+        }
       }
 
       if (!existingLogout) {
@@ -907,8 +968,7 @@
         lb.type = 'button';
         lb.textContent = 'Logout';
         lb.addEventListener('click', () => {
-          setToken(null);
-          setUser(null);
+          void performLogout();
           showGlobalNotification('Logged out', false);
         });
         navRight.insertBefore(lb, menuBtn);
@@ -917,8 +977,7 @@
       if (mobileLogoutBtn) {
         mobileLogoutBtn.onclick = () => {
           closeMenu();
-          setToken(null);
-          setUser(null);
+          void performLogout();
           showGlobalNotification('Logged out', false);
         };
       }
@@ -930,23 +989,24 @@
         userLabel.id = 'userLabel';
         userLabel.className = 'btn btn-ghost desktop-only-action';
         userLabel.type = 'button';
-        userLabel.textContent = user.name || user.email || 'Me';
+        userLabel.textContent = user.name || user.email || 'Profile';
         navRight.insertBefore(userLabel, menuBtn);
       } else if (userLabel && user) {
-        userLabel.textContent = user.name || user.email || 'Me';
+        userLabel.textContent = user.name || user.email || 'Profile';
       } else if (userLabel && !user) {
         userLabel.remove();
       }
 
       if (mobileAvatar) mobileAvatar.textContent = (user?.name || user?.email || 'Me').slice(0, 2).toUpperCase();
       if (mobileName) mobileName.textContent = user?.name || user?.email || 'My Account';
-      if (mobileEmail) mobileEmail.textContent = user?.email || 'Manage bookings and profile';
+      if (mobileEmail) mobileEmail.textContent = user?.email || (isAdmin ? 'Admin account' : 'Manage bookings and profile');
     } else {
       if (loginBtn) loginBtn.style.display = '';
       if (registerBtn) registerBtn.style.display = '';
       if (mobileLoginBtn) mobileLoginBtn.style.display = '';
       if (mobileRegisterBtn) mobileRegisterBtn.style.display = '';
       if (existingMyBookings) existingMyBookings.remove();
+      if (existingAdminPanel) existingAdminPanel.remove();
       if (existingLogout) existingLogout.remove();
       const userLabel = document.getElementById('userLabel');
       if (userLabel) userLabel.remove();
@@ -956,6 +1016,8 @@
       if (mobileEmail) mobileEmail.textContent = 'Sign in to manage your trips';
       if (mobileMyBookingsBtn) mobileMyBookingsBtn.onclick = null;
       if (mobileLogoutBtn) mobileLogoutBtn.onclick = null;
+      if (desktopAdminPanelLink) desktopAdminPanelLink.hidden = true;
+      if (mobileAdminPanelLink) mobileAdminPanelLink.hidden = true;
     }
   }
 
@@ -963,10 +1025,8 @@
   renderAuthButtons();
   syncRealtimeSocket();
 
-  // Try to auto-login by fetching profile if token exists and no cached user
+  // Try to auto-login by fetching profile if we do not already have a cached user.
   async function fetchProfileOnLoad() {
-    const token = getToken();
-    if (!token) return;
     const cached = getUser();
     if (cached) return; // already have user info
     try {
@@ -982,7 +1042,6 @@
       setUser(body.user);
     } catch (e) {
       console.error('Profile fetch failed', e);
-      showErrorModal(e?.message || 'Authentication failed', { title: 'Authentication Required', context: 'session' });
       setToken(null);
       setUser(null);
     }

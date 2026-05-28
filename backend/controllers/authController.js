@@ -2,7 +2,7 @@ const User = require('../models/User');
 const crypto = require('crypto');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
-const { attachToken } = require('../utils/generateToken');
+const { attachToken, clearAuthCookie } = require('../utils/generateToken');
 const { sendTemplateEmail } = require('../services/emailService');
 
 function normalizeEmail(email) {
@@ -21,8 +21,12 @@ function normalizeIndianPhone(value) {
   return /^[6-9][0-9]{9}$/.test(digits) ? `+91${digits}` : '';
 }
 
-function buildOrigin(req) {
-  return String(req.get('origin') || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+function buildOrigin() {
+  const configuredOrigin = String(process.env.FRONTEND_URL || process.env.PUBLIC_FRONTEND_URL || '').trim();
+  if (configuredOrigin) return configuredOrigin.replace(/\/$/, '');
+
+  const fallbackOrigins = String(process.env.CORS_ORIGIN || '').split(',').map((origin) => origin.trim()).filter(Boolean);
+  return (fallbackOrigins[0] || 'http://localhost:5000').replace(/\/$/, '');
 }
 
 const register = asyncHandler(async (req, res) => {
@@ -110,7 +114,7 @@ const requestPasswordReset = asyncHandler(async (req, res) => {
   user.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000);
   await user.save();
 
-  const resetUrl = `${buildOrigin(req)}/?resetToken=${rawToken}`;
+  const resetUrl = `${buildOrigin()}/?resetToken=${rawToken}`;
   await sendTemplateEmail('passwordReset', user.email, [user.name, resetUrl, 15], 'Reset your password');
 
   const response = {
@@ -150,4 +154,10 @@ const resetPassword = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Password updated successfully' });
 });
 
-module.exports = { register, login, profile, requestPasswordReset, resetPassword };
+const logout = asyncHandler(async (req, res) => {
+  clearAuthCookie(res);
+
+  res.json({ success: true, message: 'Logged out successfully' });
+});
+
+module.exports = { register, login, profile, requestPasswordReset, resetPassword, logout };

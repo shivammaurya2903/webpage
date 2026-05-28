@@ -40,6 +40,11 @@ function errorHandler(err, req, res, next) {
     message = 'Authentication token has expired';
   }
 
+  if (statusCode >= 500) {
+    message = 'Something went wrong.';
+    details = null;
+  }
+
   if (process.env.NODE_ENV !== 'production') {
     // eslint-disable-next-line no-console
     console.error(err);

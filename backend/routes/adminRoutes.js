@@ -1,14 +1,24 @@
 const router = require('express').Router();
 const { body } = require('express-validator');
+const rateLimit = require('express-rate-limit');
 const { protect, authorize } = require('../middleware/auth');
 const { validateRequest } = require('../middleware/validate');
 const adminController = require('../controllers/adminController');
 const invoiceController = require('../controllers/invoiceController');
 const { isValidImageUrl } = require('../utils/imageUrl');
 
+const adminLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many admin login attempts. Please try again later.' }
+});
+
 router.post(
 	'/auth/login',
-	[body('email').isEmail().withMessage('Valid email is required'), body('password').notEmpty().withMessage('Password is required')],
+	[body('email').trim().isEmail().normalizeEmail().withMessage('Valid email is required'), body('password').isLength({ min: 1, max: 128 }).withMessage('Password is required')],
+	adminLoginLimiter,
 	validateRequest,
 	adminController.login
 );
@@ -66,7 +76,7 @@ router.get('/invoices', adminController.listInvoices);
 router.post('/payments/:id/refund', adminController.refundPayment);
 
 router.get('/messages', adminController.listMessages);
-router.post('/messages/:id/reply', [body('reply').notEmpty().withMessage('Reply is required')], validateRequest, adminController.replyMessage);
+router.post('/messages/:id/reply', [body('reply').trim().isLength({ min: 1, max: 4000 }).withMessage('Reply is required')], validateRequest, adminController.replyMessage);
 router.patch('/messages/:id/resolve', adminController.resolveMessage);
 router.delete('/messages/:id', adminController.deleteMessage);
 

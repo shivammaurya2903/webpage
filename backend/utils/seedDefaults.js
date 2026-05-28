@@ -22,11 +22,15 @@ async function seedCollection(Model, seedRows, uniqueKey) {
 }
 
 async function seedDefaults() {
+  if (!process.env.ADMIN_EMAIL || !process.env.ADMIN_PASSWORD || !process.env.ADMIN_PHONE) {
+    return;
+  }
+
   const adminSeed = {
     name: process.env.ADMIN_NAME || 'Site Admin',
-    email: process.env.ADMIN_EMAIL || 'admin@example.com',
-    password: process.env.ADMIN_PASSWORD || 'Admin@12345',
-    phone: process.env.ADMIN_PHONE || '9000000000',
+    email: process.env.ADMIN_EMAIL,
+    password: process.env.ADMIN_PASSWORD,
+    phone: process.env.ADMIN_PHONE,
     role: 'admin',
     isActive: true
   };
