@@ -1948,13 +1948,13 @@ td:last-child {
 
 .submit-btn {
   grid-column: span 2;
-  justify-self: start;
-  min-width: 228px;
-  padding-inline: 28px;
+  justify-content: center;
   min-height: 56px;
+  padding-inline: 28px;
   border-radius: 18px;
   font-size: 15px;
-  white-space: nowrap;
+  color: #fff;
+  box-shadow: 0 20px 50px rgba(18, 140, 86, .22);
 }
 
 .btn-whatsapp {
