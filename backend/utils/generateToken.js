@@ -10,6 +10,16 @@ function signToken(payload) {
   });
 }
 
+function buildTokenPayload(account, type) {
+  return {
+    id: account._id,
+    userId: account._id,
+    email: account.email,
+    role: account.role,
+    type
+  };
+}
+
 function getCookieOptions() {
   return {
     httpOnly: true,
@@ -19,7 +29,7 @@ function getCookieOptions() {
 }
 
 function attachToken(res, user, statusCode = 200) {
-  const token = signToken({ id: user._id, type: 'user' });
+  const token = signToken(buildTokenPayload(user, user.role === 'admin' ? 'admin' : 'user'));
   const cookieDays = Number(process.env.JWT_COOKIE_EXPIRES_IN || 7);
 
   const cookieOptions = { ...getCookieOptions(), maxAge: cookieDays * 24 * 60 * 60 * 1000 };
@@ -33,7 +43,7 @@ function attachToken(res, user, statusCode = 200) {
 }
 
 function attachAdminToken(res, admin, statusCode = 200) {
-  const token = signToken({ id: admin._id, type: 'admin' });
+  const token = signToken(buildTokenPayload(admin, 'admin'));
   const cookieDays = Number(process.env.JWT_COOKIE_EXPIRES_IN || 7);
 
   const cookieOptions = { ...getCookieOptions(), maxAge: cookieDays * 24 * 60 * 60 * 1000 };
@@ -42,6 +52,7 @@ function attachAdminToken(res, admin, statusCode = 200) {
   return res.status(statusCode).json({
     success: true,
     token,
+    user: admin.toSafeJSON ? admin.toSafeJSON() : admin,
     admin: admin.toSafeJSON ? admin.toSafeJSON() : admin
   });
 }

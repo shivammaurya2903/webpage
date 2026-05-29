@@ -2,7 +2,8 @@
 
 (() => {
   const APP_CONFIG = window.APP_CONFIG || {};
-  const FALLBACK_API_BASE_URL = window.location.hostname === 'localhost'
+  const isLocalHost = /^(localhost|127\.0\.0\.1)$/i.test(String(window.location.hostname || ''));
+  const FALLBACK_API_BASE_URL = isLocalHost || window.location.protocol === 'file:'
     ? 'http://localhost:5000'
     : 'https://webpage-96yf.onrender.com';
   const API_BASE_URL = String(APP_CONFIG.API_BASE_URL || window.API_BASE_URL || FALLBACK_API_BASE_URL).replace(/\/$/, '');
@@ -294,7 +295,10 @@
   function setToken(token) {
     if (token) localStorage.setItem(AUTH_TOKEN_KEY, token);
     else localStorage.removeItem(AUTH_TOKEN_KEY);
-    if (!token) setUser(null);
+    if (!token) {
+      setUser(null);
+      setAdminSession(null, null);
+    }
     renderAuthButtons();
     syncRealtimeSocket();
   }
@@ -304,6 +308,14 @@
     else sessionStorage.removeItem(AUTH_USER_KEY);
     renderAuthButtons();
     syncRealtimeSocket();
+  }
+
+  function setAdminSession(token, user) {
+    if (token) localStorage.setItem(ADMIN_TOKEN_KEY, token);
+    else localStorage.removeItem(ADMIN_TOKEN_KEY);
+
+    if (user) localStorage.setItem(ADMIN_USER_KEY, JSON.stringify(user));
+    else localStorage.removeItem(ADMIN_USER_KEY);
   }
 
   function getUser() {
@@ -329,7 +341,7 @@
   }
 
   function getSessionUser() {
-    return getUser();
+    return getUser() || getAdminUser();
   }
 
   function getSessionRole() {
@@ -341,7 +353,7 @@
   }
 
   function isAuthenticatedSession() {
-    return Boolean(getToken() || getSessionUser());
+    return Boolean(getToken() || getAdminToken() || getSessionUser());
   }
 
   function getLogoutEndpoint() {
@@ -358,6 +370,7 @@
     } finally {
       setToken(null);
       setUser(null);
+      setAdminSession(null, null);
     }
   }
 
@@ -841,6 +854,56 @@
     }
   }
 
+  async function loadAndShowBookingsModal() {
+    if (!isAuthenticatedSession()) {
+      window.history.replaceState({}, document.title, '/login?redirect=/my-bookings');
+      showLoginRequiredModal({
+        message: 'Please login to access My Bookings.',
+        route: '/my-bookings',
+        afterAuthAction: loadAndShowBookingsModal
+      });
+      return false;
+    }
+
+    const modal = document.getElementById('bookingsModal');
+    const list = document.getElementById('bookingsList');
+
+    if (modal && list) {
+      __bookingViewMode = 'list';
+      list.innerHTML = renderBookingsModalNotice('Loading bookings...', 'Please wait while we fetch your trips.');
+      modal.style.display = 'flex';
+      modal.setAttribute('aria-hidden', 'false');
+    }
+
+    try {
+      const res = await authFetch(apiUrl('/api/bookings'), {}, { retries: 1, suppressAuthModal: true });
+      if (res.status === 401 || res.status === 403) {
+        setToken(null);
+        setUser(null);
+        showLoginRequiredModal({
+          message: 'Please login to continue.',
+          route: '/my-bookings',
+          afterAuthAction: loadAndShowBookingsModal
+        });
+        window.history.replaceState({}, document.title, '/login?redirect=/my-bookings');
+        return false;
+      }
+
+      const body = await safeJson(res);
+      if (!res.ok) throw new Error(body?.message || 'Booking failed to load');
+      showBookingsModal(body.bookings || []);
+      return true;
+    } catch (error) {
+      if (modal && list) {
+        list.innerHTML = renderBookingsModalNotice('Booking failed to load', 'Please try again in a moment.');
+        modal.style.display = 'flex';
+        modal.setAttribute('aria-hidden', 'false');
+      }
+      showGlobalNotification('Booking failed to load');
+      return false;
+    }
+  }
+
   function escapeHtml(s) {
     if (!s) return '';
     return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -922,57 +985,17 @@
           mb.className = 'btn btn-ghost desktop-only-action';
           mb.type = 'button';
           mb.textContent = 'My Bookings';
-          mb.addEventListener('click', async () => {
-            const modal = document.getElementById('bookingsModal');
-            const list = document.getElementById('bookingsList');
-            if (modal && list) {
-              __bookingViewMode = 'list';
-              list.innerHTML = renderBookingsModalNotice('Loading bookings...', 'Please wait while we fetch your trips.');
-              modal.style.display = 'flex';
-              modal.setAttribute('aria-hidden', 'false');
-            }
-            try {
-              const res = await authFetch(apiUrl('/api/bookings'), {}, { retries: 1 });
-              const body = await safeJson(res);
-              if (!res.ok) throw new Error(body?.message || 'Booking failed to load');
-              showBookingsModal(body.bookings || []);
-            } catch (e) {
-              if (modal && list) {
-                list.innerHTML = renderBookingsModalNotice('Booking failed to load', 'Please try again in a moment.');
-                modal.style.display = 'flex';
-                modal.setAttribute('aria-hidden', 'false');
-              }
-              showGlobalNotification('Booking failed to load');
-            }
+          mb.addEventListener('click', () => {
+            void loadAndShowBookingsModal();
           });
           navRight.insertBefore(mb, menuBtn);
         }
 
         if (mobileMyBookingsBtn) {
           mobileMyBookingsBtn.style.display = '';
-          mobileMyBookingsBtn.onclick = async () => {
+          mobileMyBookingsBtn.onclick = () => {
             closeMenu();
-            const modal = document.getElementById('bookingsModal');
-            const list = document.getElementById('bookingsList');
-            if (modal && list) {
-              __bookingViewMode = 'list';
-              list.innerHTML = renderBookingsModalNotice('Loading bookings...', 'Please wait while we fetch your trips.');
-              modal.style.display = 'flex';
-              modal.setAttribute('aria-hidden', 'false');
-            }
-            try {
-              const res = await authFetch(apiUrl('/api/bookings'), {}, { retries: 1 });
-              const body = await safeJson(res);
-              if (!res.ok) throw new Error(body?.message || 'Booking failed to load');
-              showBookingsModal(body.bookings || []);
-            } catch (e) {
-              if (modal && list) {
-                list.innerHTML = renderBookingsModalNotice('Booking failed to load', 'Please try again in a moment.');
-                modal.style.display = 'flex';
-                modal.setAttribute('aria-hidden', 'false');
-              }
-              showGlobalNotification('Booking failed to load');
-            }
+            void loadAndShowBookingsModal();
           };
         }
       }
@@ -1044,7 +1067,8 @@
   // Try to auto-login by fetching profile if we do not already have a cached user.
   async function fetchProfileOnLoad() {
     const cached = getUser();
-    if (cached) return; // already have user info
+    const token = getToken();
+    if (cached || !token) return; // already have user info or no session to restore
     try {
       const res = await authFetch(apiUrl('/api/auth/profile'), {}, { suppressAuthModal: true });
       const body = await safeJson(res);
@@ -1057,13 +1081,41 @@
       }
       setUser(body.user);
     } catch (e) {
-      console.error('Profile fetch failed', e);
+      console.warn('Profile fetch failed', e);
       setToken(null);
       setUser(null);
     }
   }
 
   fetchProfileOnLoad();
+
+  function handleLandingRoute() {
+    const pathname = window.location.pathname.replace(/\/+$/, '') || '/';
+
+    if (pathname.endsWith('/login')) {
+      openAuth('login');
+      return;
+    }
+
+    if (pathname.endsWith('/register')) {
+      openAuth('register');
+      return;
+    }
+
+    if (pathname.endsWith('/my-bookings')) {
+      if (!isAuthenticatedSession()) {
+        window.history.replaceState({}, document.title, '/login?redirect=/my-bookings');
+        showLoginRequiredModal({
+          message: 'Please login to access My Bookings.',
+          route: '/my-bookings',
+          afterAuthAction: loadAndShowBookingsModal
+        });
+        return;
+      }
+
+      void loadAndShowBookingsModal();
+    }
+  }
 
   const setActiveLink = (id) => {
     if (!id) return;
@@ -1334,8 +1386,21 @@
   const forgotBackToLogin = document.getElementById('forgotBackToLogin');
   const resetBackToLogin = document.getElementById('resetBackToLogin');
   const authTitle = document.getElementById('authTitle');
+  const loginRequiredModal = document.getElementById('loginRequiredModal');
+  const loginRequiredCloseBtn = document.getElementById('loginRequiredCloseBtn');
+  const loginRequiredLoginBtn = document.getElementById('loginRequiredLoginBtn');
+  const loginRequiredRegisterBtn = document.getElementById('loginRequiredRegisterBtn');
+  const loginRequiredCancelBtn = document.getElementById('loginRequiredCancelBtn');
+  const loginRequiredTitle = document.getElementById('loginRequiredTitle');
+  const loginRequiredMessage = document.getElementById('loginRequiredMessage');
   const resetTokenParam = new URLSearchParams(window.location.search).get('resetToken');
   let pendingResetToken = resetTokenParam || '';
+  let pendingPostAuthAction = null;
+  let pendingPostAuthRoute = '';
+  let loginRequiredLoginAction = null;
+  let loginRequiredRegisterAction = null;
+
+  handleLandingRoute();
 
   function setResetToken(token) {
     pendingResetToken = token || '';
@@ -1377,6 +1442,76 @@
     authModal.setAttribute('aria-hidden', 'true');
   }
 
+  function closeLoginRequiredModal() {
+    if (!loginRequiredModal) return;
+    loginRequiredModal.classList.remove('is-open');
+    loginRequiredModal.setAttribute('aria-hidden', 'true');
+  }
+
+  function setPendingPostAuthAction(action, route = '') {
+    pendingPostAuthAction = typeof action === 'function' ? action : null;
+    pendingPostAuthRoute = route || '';
+  }
+
+  function clearPendingPostAuthAction() {
+    pendingPostAuthAction = null;
+    pendingPostAuthRoute = '';
+  }
+
+  function resumePendingPostAuthAction() {
+    const action = pendingPostAuthAction;
+    const route = pendingPostAuthRoute;
+    clearPendingPostAuthAction();
+
+    if (route) {
+      window.history.replaceState({}, document.title, route);
+    }
+
+    if (typeof action === 'function') {
+      window.setTimeout(() => {
+        try {
+          action();
+        } catch (error) {
+          console.warn('Unable to resume protected action', error);
+        }
+      }, 0);
+    }
+  }
+
+  function showLoginRequiredModal({
+    title = 'Login Required',
+    message = 'You must login or create an account before booking a ride.',
+    route = '',
+    onLogin,
+    onRegister,
+    afterAuthAction
+  } = {}) {
+    if (typeof afterAuthAction === 'function') {
+      setPendingPostAuthAction(afterAuthAction, route);
+    }
+
+    if (!loginRequiredModal) {
+      showGlobalNotification(message, true);
+      return;
+    }
+
+    if (loginRequiredTitle) loginRequiredTitle.textContent = title;
+    if (loginRequiredMessage) loginRequiredMessage.textContent = message;
+
+    loginRequiredModal.classList.add('is-open');
+    loginRequiredModal.setAttribute('aria-hidden', 'false');
+
+    loginRequiredLoginAction = typeof onLogin === 'function' ? onLogin : () => {
+      closeLoginRequiredModal();
+      openAuth('login');
+    };
+
+    loginRequiredRegisterAction = typeof onRegister === 'function' ? onRegister : () => {
+      closeLoginRequiredModal();
+      openAuth('register');
+    };
+  }
+
   function syncResetTokenFromLocation() {
     const token = new URLSearchParams(window.location.search).get('resetToken');
     if (token) {
@@ -1406,12 +1541,35 @@
   forgotBackToLogin?.addEventListener('click', () => openAuth('login'));
   resetBackToLogin?.addEventListener('click', () => openAuth('login'));
 
+  loginRequiredLoginBtn?.addEventListener('click', () => {
+    const action = loginRequiredLoginAction;
+    closeLoginRequiredModal();
+    if (typeof action === 'function') action();
+  });
+
+  loginRequiredRegisterBtn?.addEventListener('click', () => {
+    const action = loginRequiredRegisterAction;
+    closeLoginRequiredModal();
+    if (typeof action === 'function') action();
+  });
+
+  loginRequiredCancelBtn?.addEventListener('click', () => {
+    clearPendingPostAuthAction();
+    closeLoginRequiredModal();
+  });
+
+  loginRequiredCloseBtn?.addEventListener('click', () => {
+    clearPendingPostAuthAction();
+    closeLoginRequiredModal();
+  });
+
 
   loginForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.currentTarget;
     const email = form.querySelector('[name="email"]').value.trim();
     const password = form.querySelector('[name="password"]').value;
+    const shouldResumePostAuthAction = Boolean(pendingPostAuthAction);
     setFormSubmitting(form, true, 'Logging in...');
     try {
       const res = await performRequest(apiUrl('/api/auth/login'), {
@@ -1420,22 +1578,48 @@
         body: JSON.stringify({ email, password })
       });
       const body = await safeJson(res);
-      if (!res.ok || !body || !body.token) throw new Error((body && body.message) || 'Login failed');
+      const signedInUser = body?.user || body?.admin || null;
+      const role = String(signedInUser?.role || '').toLowerCase();
+
+      if (!res.ok || !body || !body.token || !signedInUser) throw new Error((body && body.message) || 'Login failed');
+
       setToken(body.token);
-      setUser(body.user || null);
+      setUser(signedInUser);
+
+      if (role === 'admin') {
+        setAdminSession(body.token, signedInUser);
+        closeAuth();
+        showSuccessModal('Redirecting to admin dashboard...', {
+          title: 'Admin Login Successful',
+          actionLabel: 'Continue',
+          autoCloseMs: 1200
+        });
+        window.setTimeout(() => {
+          window.location.href = 'admin/index.html';
+        }, 350);
+        return;
+      }
+
       closeAuth();
-      showSuccessModal('Redirecting to dashboard...', {
+      showSuccessModal(shouldResumePostAuthAction ? 'Signing you in and continuing your request...' : 'Redirecting to homepage...', {
         title: 'Login Successful',
         actionLabel: 'Continue',
         autoCloseMs: 1800
       });
+      if (shouldResumePostAuthAction) {
+        window.setTimeout(() => resumePendingPostAuthAction(), 1900);
+      } else {
+        window.setTimeout(() => {
+          window.location.href = '/';
+        }, 350);
+      }
     } catch (err) {
       showErrorModal((err && err.message) || 'Login failed', {
         title: 'Login Failed',
         context: 'login',
         actionLabel: 'Try Again'
       });
-      console.error(err);
+      console.warn('Login failed', err);
     } finally {
       setFormSubmitting(form, false);
     }
@@ -1448,6 +1632,7 @@
     const email = form.querySelector('[name="email"]').value.trim();
     const phone = form.querySelector('[name="phone"]').value.trim();
     const password = form.querySelector('[name="password"]').value;
+    const shouldResumePostAuthAction = Boolean(pendingPostAuthAction);
     setFormSubmitting(form, true, 'Creating account...');
     try {
       const res = await performRequest(apiUrl('/api/auth/register'), {
@@ -1456,22 +1641,48 @@
         body: JSON.stringify({ name, email, phone, password })
       });
       const body = await safeJson(res);
-      if (!res.ok || !body || !body.token) throw new Error((body && body.message) || 'Registration failed');
+      const signedInUser = body?.user || body?.admin || null;
+      const role = String(signedInUser?.role || '').toLowerCase();
+
+      if (!res.ok || !body || !body.token || !signedInUser) throw new Error((body && body.message) || 'Login failed');
+
       setToken(body.token);
-      setUser(body.user || null);
+      setUser(signedInUser);
+
+      if (role === 'admin') {
+        setAdminSession(body.token, signedInUser);
+        closeAuth();
+        showSuccessModal('Redirecting to admin dashboard...', {
+          title: 'Admin Login Successful',
+          actionLabel: 'Continue',
+          autoCloseMs: 1200
+        });
+        window.setTimeout(() => {
+          window.location.href = 'admin/index.html';
+        }, 350);
+        return;
+      }
+
       closeAuth();
-      showSuccessModal('Your account has been created successfully.', {
+      showSuccessModal(shouldResumePostAuthAction ? 'Your account is ready. Continuing your request...' : 'Redirecting to homepage...', {
         title: 'Registration Successful',
         actionLabel: 'Continue',
         autoCloseMs: 2100
       });
+      if (shouldResumePostAuthAction) {
+        window.setTimeout(() => resumePendingPostAuthAction(), 2300);
+      } else {
+        window.setTimeout(() => {
+          window.location.href = '/';
+        }, 350);
+      }
     } catch (err) {
       showErrorModal((err && err.message) || 'Registration failed', {
         title: 'Registration Failed',
         context: 'register',
         actionLabel: 'Try Again'
       });
-      console.error(err);
+      console.warn('Registration failed', err);
     } finally {
       setFormSubmitting(form, false);
     }
@@ -1514,7 +1725,7 @@
         context: 'session',
         actionLabel: 'Try Again'
       });
-      console.error(err);
+      console.warn('Password reset request failed', err);
     } finally {
       setFormSubmitting(form, false);
     }
@@ -1555,7 +1766,7 @@
         context: 'session',
         actionLabel: 'Try Again'
       });
-      console.error(err);
+      console.warn('Password reset failed', err);
     } finally {
       setFormSubmitting(form, false);
     }
@@ -2266,6 +2477,15 @@
       event.preventDefault();
       if (!validate()) return;
 
+      if (!isAuthenticatedSession()) {
+        setPendingPostAuthAction(() => form.requestSubmit());
+        showLoginRequiredModal({
+          message: 'You must login or create an account before booking a ride.',
+          afterAuthAction: () => form.requestSubmit()
+        });
+        return;
+      }
+
       const section = document.querySelector('#booking');
       setSubmitLoading(true);
 
@@ -2296,7 +2516,18 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
-        });
+        }, { suppressAuthModal: true });
+
+        if (bookingResponse.status === 401 || bookingResponse.status === 403) {
+          setToken(null);
+          setUser(null);
+          setPendingPostAuthAction(() => form.requestSubmit());
+          showLoginRequiredModal({
+            message: 'Please login to continue.',
+            afterAuthAction: () => form.requestSubmit()
+          });
+          return;
+        }
 
         const bookingResult = await safeJson(bookingResponse);
         if (!bookingResponse.ok || !bookingResult || !bookingResult.success) {

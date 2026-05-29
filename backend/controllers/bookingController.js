@@ -187,6 +187,10 @@ async function resolveSelectedCar({ vehicleId, selectedCar }) {
 }
 
 const createBooking = asyncHandler(async (req, res) => {
+  if (!req.user) {
+    throw new ApiError(401, 'Please login to book a ride.');
+  }
+
   const customerName = String(req.body.customerName || req.body.fullName || '').trim();
   if (customerName.length < 2) throw validationError('customerName', 'Customer name is required');
 

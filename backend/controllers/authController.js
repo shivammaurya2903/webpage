@@ -1,8 +1,9 @@
 const User = require('../models/User');
+const Admin = require('../models/Admin');
 const crypto = require('crypto');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
-const { attachToken, clearAuthCookie } = require('../utils/generateToken');
+const { attachToken, attachAdminToken, clearAuthCookie } = require('../utils/generateToken');
 const { sendTemplateEmail } = require('../services/emailService');
 
 function normalizeEmail(email) {
@@ -74,19 +75,30 @@ const login = asyncHandler(async (req, res) => {
   }
 
   const user = await User.findOne({ email: normalizedEmail }).select('+password');
+  if (user && await user.comparePassword(password)) {
+    if (user.isBlocked) {
+      throw new ApiError(403, 'This account has been blocked');
+    }
 
-  if (!user || !(await user.comparePassword(password))) {
-    throw new ApiError(401, 'Invalid email or password');
+    user.lastLoginAt = new Date();
+    await user.save();
+
+    return attachToken(res, user, 200);
   }
 
-  if (user.isBlocked) {
-    throw new ApiError(403, 'This account has been blocked');
+  const admin = await Admin.findOne({ email: normalizedEmail }).select('+password');
+  if (admin && await admin.comparePassword(password)) {
+    if (!admin.isActive) {
+      throw new ApiError(403, 'This admin account has been disabled');
+    }
+
+    admin.lastLoginAt = new Date();
+    await admin.save();
+
+    return attachAdminToken(res, admin, 200);
   }
 
-  user.lastLoginAt = new Date();
-  await user.save();
-
-  return attachToken(res, user, 200);
+  throw new ApiError(401, 'Invalid email or password');
 });
 
 const profile = asyncHandler(async (req, res) => {

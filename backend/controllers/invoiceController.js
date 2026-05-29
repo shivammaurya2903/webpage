@@ -602,12 +602,14 @@ const markBookingPaid = asyncHandler(async (req, res) => {
   if (!invoice) throw new ApiError(400, 'Generate an invoice before marking payment');
 
   const billingState = calculateBillingDraft({ booking, invoice, settings, draft: { ...buildInvoiceDraftSnapshot(booking, invoice), ...getBillingDraftInput(req.body || {}) } });
+  const totalDue = Number(billingState.totalFare || invoice.totalFare || booking.totalFare || booking.estimatedFare || 0);
+  const requestedPaymentStatus = normalizePaymentStatus(req.body.paymentStatus || 'Paid');
   const paymentMethod = billingState.paymentMethod;
-  const paymentStatus = billingState.paymentStatus === 'Partial' || billingState.paymentStatus === 'Refunded' ? billingState.paymentStatus : 'Paid';
-  const amount = Math.max(0, Number(req.body.amount || billingState.totalFare || invoice.totalFare || booking.totalFare || booking.estimatedFare || 0));
-  const isPartial = paymentStatus === 'Partial' || amount < Number(billingState.totalFare || invoice.totalFare || booking.totalFare || 0);
-  const paidAmount = isPartial ? amount : billingState.totalFare;
-  const balanceAmount = Math.max(0, Number(billingState.totalFare || invoice.totalFare || booking.totalFare || 0) - paidAmount);
+  const amount = Math.max(0, Number(req.body.amount || totalDue));
+  const isPartial = requestedPaymentStatus === 'Partial' || requestedPaymentStatus === 'Refunded' || amount < totalDue;
+  const paymentStatus = isPartial ? (requestedPaymentStatus === 'Refunded' ? 'Refunded' : 'Partial') : 'Paid';
+  const paidAmount = isPartial ? amount : totalDue;
+  const balanceAmount = Math.max(0, totalDue - paidAmount);
   const paymentDate = req.body.paymentDate || new Date();
   const transactionId = String(req.body.transactionId || req.body.reference || req.body.transactionReference || '').trim() || `RCPT-${invoice.invoiceId}`;
 
@@ -618,12 +620,12 @@ const markBookingPaid = asyncHandler(async (req, res) => {
     provider: 'manual',
     paymentType: paymentMethod || 'manual',
     paymentMethod,
-    paymentStatus: isPartial ? 'Partial' : 'Paid',
-    amount: isPartial ? amount : Number(billingState.totalFare || amount),
+    paymentStatus,
+    amount: paidAmount,
     paidAmount,
     balanceAmount,
     currency: 'inr',
-    status: isPartial ? 'Partially Paid' : 'Completed',
+    status: paymentStatus === 'Paid' ? 'Completed' : (paymentStatus === 'Refunded' ? 'Refunded' : 'Partially Paid'),
     metadata: {
       bookingId: booking.bookingId,
       invoiceId: invoice.invoiceId
@@ -638,8 +640,8 @@ const markBookingPaid = asyncHandler(async (req, res) => {
   });
 
   booking.paymentMethod = paymentMethod;
-  booking.paymentStatus = isPartial ? 'Partial' : 'Paid';
-  booking.bookingStatus = isPartial ? 'Invoice Generated' : 'Paid';
+  booking.paymentStatus = paymentStatus;
+  booking.bookingStatus = paymentStatus === 'Paid' ? 'Paid' : 'Invoice Generated';
   booking.paidAt = paymentDate;
   booking.paymentDate = paymentDate;
   booking.transactionId = transactionId;
@@ -649,7 +651,7 @@ const markBookingPaid = asyncHandler(async (req, res) => {
   booking.statusHistory.push({
     status: booking.bookingStatus,
     at: new Date(),
-    note: isPartial ? 'Partial payment recorded' : 'Payment recorded'
+    note: paymentStatus === 'Paid' ? 'Payment recorded' : 'Partial payment recorded'
   });
   invoice.paymentMethod = paymentMethod;
   invoice.paymentStatus = booking.paymentStatus;

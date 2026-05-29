@@ -20,46 +20,57 @@ function isValidTokenType(type) {
   return type === 'user' || type === 'admin';
 }
 
-const protect = asyncHandler(async (req, res, next) => {
-  const token = getTokenFromRequest(req);
+function getDecodedTokenType(decoded) {
+  return decoded?.type || decoded?.role || null;
+}
 
-  if (!token) {
-    throw new ApiError(401, 'Authentication required');
-  }
+function createProtectMiddleware(authenticationRequiredMessage = 'Authentication required') {
+  return asyncHandler(async (req, res, next) => {
+    const token = getTokenFromRequest(req);
 
-  if (!process.env.JWT_SECRET) {
-    throw new ApiError(500, 'JWT_SECRET is not configured');
-  }
-
-  let decoded;
-  try {
-    decoded = jwt.verify(token, process.env.JWT_SECRET);
-  } catch (error) {
-    if (error.name === 'TokenExpiredError') {
-      throw new ApiError(401, 'Authentication token has expired');
+    if (!token) {
+      throw new ApiError(401, authenticationRequiredMessage);
     }
 
-    throw new ApiError(401, 'Invalid authentication token');
-  }
+    if (!process.env.JWT_SECRET) {
+      throw new ApiError(500, 'JWT_SECRET is not configured');
+    }
 
-  if (!isValidTokenType(decoded.type)) {
-    throw new ApiError(401, 'Invalid authentication token');
-  }
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (error) {
+      if (error.name === 'TokenExpiredError') {
+        throw new ApiError(401, 'Authentication token has expired');
+      }
 
-  const model = decoded.type === 'admin' ? Admin : User;
-  const user = await model.findById(decoded.id);
+      throw new ApiError(401, 'Invalid authentication token');
+    }
 
-  if (!user) {
-    throw new ApiError(401, 'User no longer exists');
-  }
+    const tokenType = getDecodedTokenType(decoded);
 
-  if (user.isBlocked) {
-    throw new ApiError(403, 'This account has been blocked');
-  }
+    if (!isValidTokenType(tokenType)) {
+      throw new ApiError(401, 'Invalid authentication token');
+    }
 
-  req.user = user;
-  next();
-});
+    const userId = decoded.id || decoded.userId;
+    const model = tokenType === 'admin' ? Admin : User;
+    const user = await model.findById(userId);
+
+    if (!user) {
+      throw new ApiError(401, 'User no longer exists');
+    }
+
+    if (user.isBlocked) {
+      throw new ApiError(403, 'This account has been blocked');
+    }
+
+    req.user = user;
+    next();
+  });
+}
+
+const protect = createProtectMiddleware();
 
 const optionalProtect = asyncHandler(async (req, res, next) => {
   const token = getTokenFromRequest(req);
@@ -70,11 +81,14 @@ const optionalProtect = asyncHandler(async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (!isValidTokenType(decoded.type)) {
+    const tokenType = getDecodedTokenType(decoded);
+
+    if (!isValidTokenType(tokenType)) {
       return next();
     }
-    const model = decoded.type === 'admin' ? Admin : User;
-    const user = await model.findById(decoded.id);
+    const userId = decoded.id || decoded.userId;
+    const model = tokenType === 'admin' ? Admin : User;
+    const user = await model.findById(userId);
 
     if (user) {
       req.user = user;
@@ -94,4 +108,4 @@ const authorize = (...roles) => (req, res, next) => {
   return next();
 };
 
-module.exports = { protect, optionalProtect, authorize };
+module.exports = { protect, optionalProtect, authorize, createProtectMiddleware };

@@ -42,6 +42,7 @@ const frontendPath = path.resolve(__dirname, '../frontend');
 const adminPath = path.resolve(__dirname, '../frontend/admin');
 const uploadsPath = path.resolve(__dirname, './uploads');
 const defaultAllowedOrigins = [
+  'https://webpage-96yf.onrender.com',
   'http://localhost:3000',
   'http://localhost:5000',
   'http://localhost:5500',
@@ -68,9 +69,18 @@ function isAllowedOrigin(origin) {
   return false;
 }
 
+function logOriginCheck(origin, allowed, source = 'http') {
+  const label = origin || 'no-origin';
+  const prefix = allowed ? 'allowed' : 'blocked';
+  console.log(`[cors:${source}] ${prefix} origin: ${label}`);
+}
+
 const corsOptions = {
   origin(origin, callback) {
-    if (isAllowedOrigin(origin)) {
+    const allowed = isAllowedOrigin(origin);
+    logOriginCheck(origin, allowed, 'http');
+
+    if (allowed) {
       return callback(null, true);
     }
 

@@ -2,7 +2,7 @@ const router = require('express').Router();
 const { body } = require('express-validator');
 const rateLimit = require('express-rate-limit');
 const { createBooking, getBookings, getBookingById, updateBookingStatus, assignDriver, downloadBookingInvoice } = require('../controllers/bookingController');
-const { protect, optionalProtect, authorize } = require('../middleware/auth');
+const { protect, createProtectMiddleware, authorize } = require('../middleware/auth');
 const { validateRequest } = require('../middleware/validate');
 const { deleteBooking } = require('../controllers/bookingController');
 
@@ -104,7 +104,7 @@ const bookingValidators = [
     .withMessage('Selected package is required')
 ];
 
-router.post('/', bookingCreateLimiter, optionalProtect, bookingValidators, validateRequest, createBooking);
+router.post('/', bookingCreateLimiter, createProtectMiddleware('Please login to book a ride.'), bookingValidators, validateRequest, createBooking);
 router.get('/', protect, getBookings);
 router.get('/:id', protect, getBookingById);
 router.get('/:id/invoice/download', protect, downloadBookingInvoice);

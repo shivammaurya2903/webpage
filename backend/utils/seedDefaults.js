@@ -5,6 +5,34 @@ const Driver = require('../models/Driver');
 const Admin = require('../models/Admin');
 const SiteSettings = require('../models/SiteSettings');
 
+const FULL_ADMIN_PERMISSIONS = Admin.fullPermissions || [
+  'manage_users',
+  'manage_bookings',
+  'manage_vehicles',
+  'manage_drivers',
+  'manage_invoices',
+  'manage_payments',
+  'manage_notifications',
+  'manage_routes',
+  'manage_packages',
+  'view_analytics',
+  'manage_crud'
+];
+
+function normalizeAdminEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function normalizeAdminPhone(value) {
+  return String(value || '').trim();
+}
+
+function hasAllAdminPermissions(permissions) {
+  if (!Array.isArray(permissions)) return false;
+  const current = new Set(permissions.map((permission) => String(permission || '').trim()).filter(Boolean));
+  return FULL_ADMIN_PERMISSIONS.every((permission) => current.has(permission));
+}
+
 async function seedCollection(Model, seedRows, uniqueKey) {
   const count = await Model.countDocuments();
   if (count > 0) return;
@@ -22,41 +50,61 @@ async function seedCollection(Model, seedRows, uniqueKey) {
 }
 
 async function seedDefaults() {
-  if (!process.env.ADMIN_EMAIL || !process.env.ADMIN_PASSWORD || !process.env.ADMIN_PHONE) {
-    return;
+  const adminCount = await Admin.countDocuments();
+  const adminEmail = normalizeAdminEmail(process.env.ADMIN_EMAIL);
+  const adminPassword = String(process.env.ADMIN_PASSWORD || '').trim();
+  const adminPhone = normalizeAdminPhone(process.env.ADMIN_PHONE);
+  const adminName = String(process.env.ADMIN_NAME || 'Super Admin').trim() || 'Super Admin';
+
+  if (adminCount === 0) {
+    if (!adminEmail || !adminPassword || !adminPhone) {
+      console.warn('Admin seed skipped: set ADMIN_EMAIL, ADMIN_PASSWORD, and ADMIN_PHONE to create the default super admin account.');
+    } else {
+      await Admin.create({
+        name: adminName,
+        email: adminEmail,
+        password: adminPassword,
+        phone: adminPhone,
+        role: 'admin',
+        permissions: [...FULL_ADMIN_PERMISSIONS],
+        isActive: true
+      });
+    }
   }
 
-  const adminSeed = {
-    name: process.env.ADMIN_NAME || 'Site Admin',
-    email: process.env.ADMIN_EMAIL,
-    password: process.env.ADMIN_PASSWORD,
-    phone: process.env.ADMIN_PHONE,
-    role: 'admin',
-    isActive: true
-  };
-
-  const existingAdmin = await Admin.findOne({ email: adminSeed.email }).select('+password');
-  if (!existingAdmin) {
-    await Admin.create(adminSeed);
-  } else {
+  const existingAdmins = await Admin.find({ role: 'admin' }).select('+password');
+  for (const existingAdmin of existingAdmins) {
     let shouldRepair = false;
+
     if (!existingAdmin.name) {
-      existingAdmin.name = adminSeed.name;
+      existingAdmin.name = adminName;
       shouldRepair = true;
     }
     if (!existingAdmin.phone) {
-      existingAdmin.phone = adminSeed.phone;
+      existingAdmin.phone = adminPhone || existingAdmin.phone;
       shouldRepair = true;
     }
     if (!existingAdmin.password || !/^\$2[aby]\$/.test(existingAdmin.password)) {
-      existingAdmin.set('password', adminSeed.password);
-      existingAdmin.markModified('password');
+      if (adminPassword) {
+        existingAdmin.set('password', adminPassword);
+        existingAdmin.markModified('password');
+        shouldRepair = true;
+      }
+    }
+    if (!hasAllAdminPermissions(existingAdmin.permissions)) {
+      existingAdmin.permissions = [...FULL_ADMIN_PERMISSIONS];
+      existingAdmin.markModified('permissions');
       shouldRepair = true;
     }
     if (!existingAdmin.isActive) {
       existingAdmin.isActive = true;
       shouldRepair = true;
     }
+    if (existingAdmin.role !== 'admin') {
+      existingAdmin.role = 'admin';
+      shouldRepair = true;
+    }
+
     if (shouldRepair) {
       await existingAdmin.save();
     }

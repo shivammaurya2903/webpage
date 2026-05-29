@@ -23,13 +23,14 @@ async function resolveSocketIdentity(socket) {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const model = decoded.type === 'admin' ? Admin : User;
-    const actor = await model.findById(decoded.id).lean();
+    const tokenType = decoded.type || decoded.role;
+    const model = tokenType === 'admin' ? Admin : User;
+    const actor = await model.findById(decoded.id || decoded.userId).lean();
     if (!actor || actor.isBlocked) return null;
 
     return {
       id: String(actor._id),
-      role: actor.role || decoded.type,
+      role: actor.role || tokenType,
       name: actor.name || actor.adminName || actor.email || ''
     };
   } catch (_) {
@@ -39,6 +40,7 @@ async function resolveSocketIdentity(socket) {
 
 function initSocket(server) {
   const origins = new Set([
+    'https://webpage-96yf.onrender.com',
     'http://localhost:3000',
     'http://localhost:5000',
     'http://localhost:5500',
@@ -54,6 +56,17 @@ function initSocket(server) {
 
   io = new Server(server, {
     cors: { origin: Array.from(origins), credentials: true }
+  });
+
+  io.engine.on('connection_error', (error) => {
+    const origin = error?.req?.headers?.origin || 'no-origin';
+    console.log(`[cors:socket] blocked origin: ${origin}`);
+  });
+
+  io.engine.on('initial_headers', (headers, req) => {
+    const origin = req?.headers?.origin || 'no-origin';
+    const allowed = !origin || origins.has(origin);
+    console.log(`[cors:socket] ${allowed ? 'allowed' : 'blocked'} origin: ${origin}`);
   });
 
   io.use(async (socket, next) => {
