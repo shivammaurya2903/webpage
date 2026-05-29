@@ -59,6 +59,8 @@ async function seedDefaults() {
   if (adminCount === 0) {
     if (!adminEmail || !adminPassword || !adminPhone) {
       console.warn('Admin seed skipped: set ADMIN_EMAIL, ADMIN_PASSWORD, and ADMIN_PHONE to create the default super admin account.');
+    } else if (process.env.ALLOW_AUTO_ADMIN_SEED !== 'true') {
+      console.warn('Admin seed is disabled by default. To enable automatic admin creation set ALLOW_AUTO_ADMIN_SEED=true in environment or create admin manually using the tools/createAdmin.js script.');
     } else {
       await Admin.create({
         name: adminName,
@@ -85,10 +87,12 @@ async function seedDefaults() {
       shouldRepair = true;
     }
     if (!existingAdmin.password || !/^\$2[aby]\$/.test(existingAdmin.password)) {
-      if (adminPassword) {
+      if (adminPassword && process.env.ALLOW_AUTO_ADMIN_SEED === 'true') {
         existingAdmin.set('password', adminPassword);
         existingAdmin.markModified('password');
         shouldRepair = true;
+      } else if (!existingAdmin.password) {
+        console.warn(`Found admin ${existingAdmin.email} with missing password; automatic repair is disabled.`);
       }
     }
     if (!hasAllAdminPermissions(existingAdmin.permissions)) {

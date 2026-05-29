@@ -3611,6 +3611,76 @@ section[id] {
     padding: 0 15px;
   }
 
+  .auth-modal,
+  .login-required-modal {
+    padding: 12px;
+  }
+
+  .auth-modal__panel,
+  .login-required-modal__panel {
+    padding: 20px;
+  }
+
+  .auth-modal__header {
+    margin-bottom: 4px;
+  }
+
+  .auth-modal__title {
+    font-size: 30px;
+  }
+
+  .auth-form {
+    margin-top: 10px;
+  }
+
+  .auth-form .field {
+    margin-bottom: 10px;
+  }
+
+  .auth-form__actions,
+  .login-required-modal__actions {
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 12px;
+  }
+
+  .auth-form__actions .btn,
+  .login-required-modal__actions .btn {
+    width: 100%;
+    min-height: 52px;
+    max-height: 56px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  .login-required-modal__actions .btn {
+    flex: none;
+  }
+
+  .login-required-modal__actions .btn-primary {
+    background: linear-gradient(135deg, var(--primary), #8e44ad);
+    color: #fff;
+    border-color: rgba(212, 175, 55, .22);
+    box-shadow: 0 18px 44px rgba(106, 27, 154, .18);
+  }
+
+  #loginRequiredRegisterBtn {
+    background: rgba(255, 255, 255, .94);
+    color: var(--primary);
+    border-color: rgba(106, 27, 154, .20);
+    box-shadow: 0 12px 26px rgba(48, 16, 84, .06);
+  }
+
+  #loginRequiredCancelBtn {
+    background: rgba(243, 245, 247, .98);
+    color: #334155;
+    border-color: rgba(15, 23, 42, .08);
+    box-shadow: none;
+  }
+
   .section {
     padding: 64px 0;
   }

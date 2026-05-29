@@ -94,9 +94,9 @@ app.use(helmet({
     useDefaults: true,
     directives: {
       imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
-      styleSrc: ["'self'", "'unsafe-inline'", 'https:'],
+      styleSrc: ["'self'", 'https:'],
       fontSrc: ["'self'", 'data:', 'https:'],
-      scriptSrc: ["'self'", "'unsafe-inline'", 'https:'],
+      scriptSrc: ["'self'", 'https:'],
       connectSrc: ["'self'", 'http:', 'https:', 'ws:', 'wss:']
     }
   }
@@ -113,7 +113,13 @@ app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.static(frontendPath));
 app.use('/frontend', express.static(frontendPath));
 app.use('/admin', express.static(adminPath));
-app.use('/uploads', express.static(uploadsPath));
+app.use('/uploads', (req, res, next) => {
+  // Prevent content-type sniffing and clickjacking for user-uploaded files
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  next();
+}, express.static(uploadsPath));
 app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, limit: 300, standardHeaders: true, legacyHeaders: false }));
 
 app.get('/api/health', (req, res) => {
