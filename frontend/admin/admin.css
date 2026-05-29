@@ -2825,12 +2825,125 @@ details > summary {
   background: rgba(0, 0, 0, 0.45);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-  z-index: 1000;
+  z-index: 990;
 }
 
 /* Ensure app shell is above the global fixed backdrop so sidebar items are clickable */
 .app-shell {
-  z-index: 1002; /* higher than .sidebar-backdrop (1000) */
+  z-index: 1;
+}
+
+/* -----------------------------------------------------
+   Global stacking-context reset for overlays, modals,
+   dropdowns, drawers, tooltips, and toast layers.
+   ----------------------------------------------------- */
+.app-shell,
+.view-root,
+.view,
+.booking-view,
+.table-shell {
+  position: relative;
+  z-index: 1;
+}
+
+.card,
+.table-card,
+.stack-card,
+.chart-card,
+.mobile-table-card {
+  position: relative;
+  z-index: 10;
+}
+
+.topbar,
+.booking-toolbar-container,
+.page-header,
+.booking-page-head,
+.dropdown-panel {
+  position: relative;
+  z-index: 600;
+}
+
+.sidebar {
+  z-index: 500;
+}
+
+.dropdown-panel,
+.topbar-dropdown[open] .dropdown-panel,
+.dropdown-panel--notifications {
+  z-index: 900;
+  max-height: calc(100vh - 96px);
+  overflow: auto;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  overflow: auto;
+}
+
+.modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1100;
+  width: min(100%, 1040px);
+  max-height: 92vh;
+  overflow: auto;
+  border-radius: 28px;
+  padding: 22px;
+}
+
+.toast-host {
+  z-index: 1200;
+}
+
+.sidebar-backdrop[hidden],
+.modal-backdrop[hidden] {
+  display: none !important;
+}
+
+.sidebar,
+.topbar,
+.dropdown-panel,
+.modal,
+.toast-host,
+.sidebar-backdrop,
+.modal-backdrop {
+  will-change: transform;
+}
+
+.sidebar,
+.topbar,
+.dropdown-panel,
+.modal,
+.toast-host {
+  overflow: visible;
+}
+
+.card,
+.table-card,
+.stack-card,
+.chart-card,
+.mobile-table-card,
+.booking-table-card,
+.booking-toolbar-container {
+  overflow: visible;
+}
+
+.booking-more-panel {
+  z-index: 900;
+}
+
+.booking-table-card .table-wrap,
+.table-shell .table-wrap {
+  overflow: auto;
 }
 
 .topbar-menu-toggle {
@@ -3320,6 +3433,15 @@ textarea::placeholder {
 }
 
 @media (min-width: 768px) and (max-width: 1024px) {
+  .modal {
+    width: min(92vw, 920px);
+    max-width: 92vw;
+  }
+
+  .modal-backdrop {
+    padding: 16px;
+  }
+
   .view:not(.view-dashboard) .section-grid,
   .view:not(.view-dashboard) .subgrid,
   .view:not(.view-dashboard) .split-grid,
