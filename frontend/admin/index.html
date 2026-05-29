@@ -130,6 +130,9 @@
         </div>
 
         <div class="topbar-actions">
+          <button type="button" id="sidebarToggleMobile" class="icon-button icon-button--soft topbar-menu-toggle" aria-label="Open navigation">
+            <i class="fa-solid fa-bars"></i>
+          </button>
           <div class="topbar-search-slot" id="topbarSearchSlot">
             <label class="search-pill" aria-label="Search current view">
               <i class="fa-solid fa-magnifying-glass"></i>
@@ -170,6 +173,8 @@
       <main id="viewRoot" class="view-root"></main>
     </div>
   </section>
+
+  <div id="sidebarBackdrop" class="sidebar-backdrop" hidden></div>
 
   <div id="modalBackdrop" class="modal-backdrop" hidden>
     <div class="modal glass">

@@ -109,6 +109,8 @@
     togglePassword: document.getElementById('togglePassword'),
     logoutButton: document.getElementById('logoutButton'),
     sidebarToggle: document.getElementById('sidebarToggle'),
+    sidebarToggleMobile: document.getElementById('sidebarToggleMobile'),
+    sidebarBackdrop: document.getElementById('sidebarBackdrop'),
     appShell: document.querySelector('.app-shell'),
     sideNav: document.getElementById('sideNav'),
     sidebarNavRoot: document.querySelector('#appView .sidebar'),
@@ -531,6 +533,15 @@
     el.topbar.classList.toggle('is-scrolled', window.scrollY > 8);
   }
 
+  function isMobileDrawerMode() {
+    return window.matchMedia('(max-width: 767px)').matches;
+  }
+
+  function setSidebarBackdropVisible(visible) {
+    if (!el.sidebarBackdrop) return;
+    el.sidebarBackdrop.hidden = !visible;
+  }
+
   function getActiveBookingFilters() {
     return {
       search: '',
@@ -747,10 +758,22 @@
 
   function syncSidebarMode() {
     if (!el.appShell) return;
-    const isMobile = window.matchMedia('(max-width: 980px)').matches;
-    if (!isMobile) {
+    if (isMobileDrawerMode()) {
+      el.appShell.classList.remove('sidebar-collapsed');
       el.appShell.classList.remove('sidebar-open');
       document.body.classList.remove('shell-open');
+      setSidebarBackdropVisible(false);
+      return;
+    }
+
+    el.appShell.classList.remove('sidebar-open');
+    document.body.classList.remove('shell-open');
+    setSidebarBackdropVisible(false);
+
+    if (window.matchMedia('(min-width: 768px) and (max-width: 1024px)').matches) {
+      el.appShell.classList.add('sidebar-collapsed');
+    } else if (window.matchMedia('(min-width: 1025px)').matches) {
+      el.appShell.classList.remove('sidebar-collapsed');
     }
   }
 
@@ -817,10 +840,10 @@
 
   function toggleSidebarShell() {
     if (!el.appShell) return;
-    const isMobile = window.matchMedia('(max-width: 980px)').matches;
-    if (isMobile) {
+    if (isMobileDrawerMode()) {
       const isOpen = el.appShell.classList.toggle('sidebar-open');
       document.body.classList.toggle('shell-open', isOpen);
+      setSidebarBackdropVisible(isOpen);
       return;
     }
     el.appShell.classList.toggle('sidebar-collapsed');
@@ -1066,10 +1089,10 @@
     const preview = calculateInvoicePreview(booking, draft);
     const rows = preview.rows.map((row) => `
       <tr class="${row.isDiscount ? 'is-discount' : row.isTax ? 'is-tax' : ''}">
-        <td>${escapeHtml(row.description)}</td>
-        <td>${escapeHtml(String(row.quantity || 1))}</td>
-        <td>${fmtMoney(row.rate || 0)}</td>
-        <td>${fmtMoney(row.amount || 0)}</td>
+        <td data-label="Description">${escapeHtml(row.description)}</td>
+        <td data-label="Qty">${escapeHtml(String(row.quantity || 1))}</td>
+        <td data-label="Rate">${fmtMoney(row.rate || 0)}</td>
+        <td data-label="Amount">${fmtMoney(row.amount || 0)}</td>
       </tr>
     `).join('');
 
@@ -1275,19 +1298,51 @@
     return `<div class="row-actions">${buttons.join('')}</div>`;
   }
 
-  function tableShell(headers, rowsHtml, emptyText = 'No records found') {
+  function tableShell(headers, rowsHtml, emptyText = 'No records found', mobileCardsHtml = '') {
     if (!rowsHtml) {
       return `<div class="empty-state">${escapeHtml(emptyText)}</div>`;
     }
     return `
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead>
-            <tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr>
-          </thead>
-          <tbody>${rowsHtml}</tbody>
-        </table>
+      <div class="table-shell">
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div>
+        ${mobileCardsHtml ? `<div class="mobile-table-cards">${mobileCardsHtml}</div>` : ''}
       </div>
+    `;
+  }
+
+  function renderTableCardField(label, value, { html = false, full = false } = {}) {
+    const content = html ? String(value || '—') : escapeHtml(value || '—');
+    return `
+      <div class="mobile-table-card__field${full ? ' mobile-table-card__field--full' : ''}">
+        <span>${escapeHtml(label)}</span>
+        <strong>${content}</strong>
+      </div>
+    `;
+  }
+
+  function renderTableCard({ title, subtitle = '', eyebrow = '', badges = [], fields = [], actions = '' }) {
+    return `
+      <article class="mobile-table-card card">
+        <div class="mobile-table-card__header">
+          <div>
+            ${eyebrow ? `<p class="eyebrow">${escapeHtml(eyebrow)}</p>` : ''}
+            <h4>${escapeHtml(title)}</h4>
+            ${subtitle ? `<p class="mobile-table-card__subtitle">${subtitle}</p>` : ''}
+          </div>
+          ${badges.length ? `<div class="mobile-table-card__badges">${badges.join('')}</div>` : ''}
+        </div>
+        <div class="mobile-table-card__fields">
+          ${fields.map((field) => renderTableCardField(field.label, field.value, field)).join('')}
+        </div>
+        ${actions ? `<div class="mobile-table-card__actions">${actions}</div>` : ''}
+      </article>
     `;
   }
 
@@ -1342,6 +1397,17 @@
     const recentPayments = dashboard.recentPayments || [];
     const recentMessages = dashboard.recentMessages || [];
     const notifications = dashboard.notifications || [];
+    const notificationCards = notifications.map((item) => renderTableCard({
+      title: item.title || item.type || 'Notification',
+      subtitle: item.message || 'Update available',
+      eyebrow: fmtDateTime(item.createdAt),
+      fields: [
+        { label: 'Customer', value: getNotificationSummary(item).customerName },
+        { label: 'Ride', value: getNotificationSummary(item).rideType },
+        { label: 'Status', value: getNotificationSummary(item).bookingStatus || 'Pending' }
+      ],
+      badges: [renderBadge(item.readAt ? 'Read' : 'Unread')]
+    })).join('');
 
     el.viewRoot.innerHTML = `
       <div class="view view-dashboard">
@@ -1404,7 +1470,7 @@
                 <td>${escapeHtml(item.message || '')}</td>
                 <td>${escapeHtml(fmtDateTime(item.createdAt))}</td>
               </tr>
-            `).join(''), 'No notifications available')}
+            `).join(''), 'No notifications available', notificationCards)}
           </article>
         </section>
       </div>
@@ -1520,6 +1586,47 @@
   function renderBookingsView() {
     renderTopbarSurface();
     const bookings = state.bookings || [];
+    const cards = bookings.map((booking) => renderTableCard({
+      title: booking.bookingId || '—',
+      subtitle: `${booking.pickupLocation || '—'} → ${booking.dropLocation || '—'}`,
+      eyebrow: fmtDateTime(booking.createdAt),
+      fields: [
+        { label: 'Customer', value: booking.customerName || '—' },
+        { label: 'Contact', value: `${escapeHtml(booking.email || '—')} ${booking.phone ? `<br>${escapeHtml(booking.phone)}` : ''}`, html: true },
+        { label: 'Route', value: `${escapeHtml(booking.pickupDate ? fmtDate(booking.pickupDate) : '—')} ${escapeHtml(booking.pickupTime || '')}`, html: true },
+        { label: 'Vehicle', value: booking.selectedCar || booking.vehicleId || '—' },
+        { label: 'Status', value: renderBadge(booking.bookingStatus || '—'), html: true },
+        { label: 'Payment', value: renderBadge(booking.paymentStatus || '—'), html: true },
+        { label: 'Driver', value: booking.assignedDriver?.driverName || '—' },
+        { label: 'Invoice', value: booking.invoiceId || booking.invoice?.invoiceId || '—' },
+        { label: 'Fare', value: fmtMoney(booking.totalFare || booking.estimatedFare || 0) }
+      ],
+      actions: `
+        <div class="booking-actions-cluster">
+          <div class="booking-actions-primary">
+            <button class="small-btn gold" data-action="booking-status" data-id="${booking._id}" data-status="Approved">Approve</button>
+            <button class="small-btn gold" data-action="booking-assign" data-id="${booking._id}">Assign</button>
+            <button class="small-btn" data-action="booking-status" data-id="${booking._id}" data-status="Ride Started">Start</button>
+            <button class="small-btn" data-action="booking-status" data-id="${booking._id}" data-status="Ride Completed">Complete</button>
+          </div>
+          <details class="booking-more-menu">
+            <summary class="small-btn booking-more-trigger" aria-label="More booking actions">
+              <i class="fa-solid fa-ellipsis-vertical"></i>
+              <span>More</span>
+            </summary>
+            <div class="booking-more-panel">
+              <button class="small-btn primary" data-action="booking-edit-invoice" data-id="${booking._id}">Invoice editor</button>
+              ${booking.invoiceId || booking.invoice?.invoiceId ? `<button class="small-btn" data-action="booking-regenerate-invoice" data-id="${booking._id}">Regenerate</button>` : ''}
+              ${booking.invoiceId || booking.invoice?.invoiceId ? `<button class="small-btn gold" data-action="booking-send-invoice" data-id="${booking._id}">Resend</button>` : ''}
+              <button class="small-btn gold" data-action="booking-mark-paid" data-id="${booking._id}">Mark paid</button>
+              <button class="small-btn danger" data-action="booking-reject" data-id="${booking._id}">Reject</button>
+              ${booking.invoiceId || booking.invoice?.invoiceId ? `<button class="small-btn" data-action="booking-download-invoice" data-id="${booking._id}">Download invoice</button>` : ''}
+              <button class="small-btn danger" data-action="booking-delete" data-id="${booking._id}">Delete</button>
+            </div>
+          </details>
+        </div>
+      `
+    })).join('');
     const rows = bookings.map((booking) => `
       <tr class="booking-row">
         <td data-label="Booking">
@@ -1589,7 +1696,7 @@
         </section>
 
         <section class="card table-card booking-table-card">
-          ${tableShell(['Booking', 'Customer', 'Route', 'Vehicle', 'Status', 'Payment', 'Driver', 'Actions'], rows, 'No bookings found')}
+          ${tableShell(['Booking', 'Customer', 'Route', 'Vehicle', 'Status', 'Payment', 'Driver', 'Actions'], rows, 'No bookings found', cards)}
         </section>
       </div>
     `;
@@ -1597,6 +1704,20 @@
 
   function renderDriversView() {
     const drivers = state.drivers || [];
+    const cards = drivers.map((driver) => renderTableCard({
+      title: driver.driverName || '—',
+      subtitle: driver.currentLocation || 'No location set',
+      fields: [
+        { label: 'Phone', value: driver.phone || '—' },
+        { label: 'License', value: driver.licenseNumber || '—' },
+        { label: 'Assigned vehicle', value: driver.vehicleAssigned || '—' },
+        { label: 'Availability', value: renderBadge(driver.availability ? 'Available' : 'Busy'), html: true }
+      ],
+      actions: renderButtons([
+        `<button class="small-btn primary" data-entity-edit="driver" data-id="${driver._id}">Edit</button>`,
+        `<button class="small-btn danger" data-entity-delete="driver" data-id="${driver._id}">Delete</button>`
+      ])
+    })).join('');
     const rows = drivers.map((driver) => `
       <tr>
         <td><strong>${escapeHtml(driver.driverName)}</strong><div class="helper">${escapeHtml(driver.currentLocation || '')}</div></td>
@@ -1620,7 +1741,7 @@
           <div class="helper">Use the add button to open the driver form. Edit from the table.</div>
         </section>
         <section class="card table-card">
-          ${tableShell(['Driver', 'Phone', 'License', 'Assigned vehicle', 'Availability', 'Actions'], rows, 'No drivers found')}
+          ${tableShell(['Driver', 'Phone', 'License', 'Assigned vehicle', 'Availability', 'Actions'], rows, 'No drivers found', cards)}
         </section>
       </div>
     `;
@@ -1628,6 +1749,25 @@
 
   function renderCarsView() {
     const cars = state.cars || [];
+    const cards = cars.map((car) => renderTableCard({
+      title: car.carName || '—',
+      subtitle: car.category || 'Fleet vehicle',
+      badges: [renderBadge(car.availability ? 'Available' : 'Unavailable')],
+      fields: [
+        { label: 'Seats', value: String(car.seatingCapacity || '—') },
+        { label: 'Fuel', value: car.fuelType || '—' },
+        { label: 'Transmission', value: car.transmission || '—' },
+        { label: 'Base fare', value: fmtMoney(car.baseFare || car.pricePerDay || 0) },
+        { label: 'Price / km', value: fmtMoney(car.pricePerKm || 0) },
+        { label: 'Included km', value: `${String(car.includedKm || 0)} km` },
+        { label: 'Extra / km', value: fmtMoney(car.extraKmRate || 0) },
+        { label: 'Features', value: (car.features || []).join(', ') || '—' }
+      ],
+      actions: renderButtons([
+        `<button class="small-btn primary" data-entity-edit="car" data-id="${car._id}">Edit</button>`,
+        `<button class="small-btn danger" data-entity-delete="car" data-id="${car._id}">Delete</button>`
+      ])
+    })).join('');
     const rows = cars.map((car) => `
       <tr>
         <td>
@@ -1658,7 +1798,7 @@
           <div class="helper">Cars support direct image URLs and feature lists separated by commas or new lines.</div>
         </section>
         <section class="card table-card">
-          ${tableShell(['Car', 'Seats', 'Fuel', 'Base fare', 'Price/km', 'Availability', 'Included km', 'Features', 'Actions'], rows, 'No cars found')}
+          ${tableShell(['Car', 'Seats', 'Fuel', 'Base fare', 'Price/km', 'Availability', 'Included km', 'Features', 'Actions'], rows, 'No cars found', cards)}
         </section>
       </div>
     `;
@@ -1666,6 +1806,19 @@
 
   function renderPackagesView() {
     const packages = state.packages || [];
+    const cards = packages.map((item) => renderTableCard({
+      title: item.packageName || '—',
+      subtitle: item.duration || 'Package',
+      fields: [
+        { label: 'Price', value: fmtMoney(item.price || 0) },
+        { label: 'Destinations', value: (item.destinations || []).join(', ') || '—' },
+        { label: 'Description', value: item.description || '—' }
+      ],
+      actions: renderButtons([
+        `<button class="small-btn primary" data-entity-edit="package" data-id="${item._id}">Edit</button>`,
+        `<button class="small-btn danger" data-entity-delete="package" data-id="${item._id}">Delete</button>`
+      ])
+    })).join('');
     const rows = packages.map((item) => `
       <tr>
         <td>
@@ -1690,7 +1843,7 @@
           <div class="helper">Destination, inclusion, and exclusion lists accept comma or line-separated values. Package artwork is managed by image URL.</div>
         </section>
         <section class="card table-card">
-          ${tableShell(['Package', 'Price', 'Destinations', 'Description', 'Actions'], rows, 'No packages found')}
+          ${tableShell(['Package', 'Price', 'Destinations', 'Description', 'Actions'], rows, 'No packages found', cards)}
         </section>
       </div>
     `;
@@ -1698,6 +1851,18 @@
 
   function renderRoutesView() {
     const routes = state.routes || [];
+    const cards = routes.map((item) => renderTableCard({
+      title: `${item.from || '—'} → ${item.to || '—'}`,
+      subtitle: item.estimatedTime || 'Route pricing',
+      fields: [
+        { label: 'Distance', value: item.distance || '—' },
+        { label: 'Price', value: fmtMoney(item.price || 0) }
+      ],
+      actions: renderButtons([
+        `<button class="small-btn primary" data-entity-edit="route" data-id="${item._id}">Edit</button>`,
+        `<button class="small-btn danger" data-entity-delete="route" data-id="${item._id}">Delete</button>`
+      ])
+    })).join('');
     const rows = routes.map((item) => `
       <tr>
         <td><strong>${escapeHtml(item.from)}</strong></td>
@@ -1718,7 +1883,7 @@
           <div class="card-header"><div><h3>Route pricing</h3><p>Update route fares and travel estimates</p></div><button class="primary-btn" data-open-form="route">Add route</button></div>
         </section>
         <section class="card table-card">
-          ${tableShell(['From', 'To', 'Distance', 'Time', 'Price', 'Actions'], rows, 'No routes found')}
+          ${tableShell(['From', 'To', 'Distance', 'Time', 'Price', 'Actions'], rows, 'No routes found', cards)}
         </section>
       </div>
     `;
@@ -1726,6 +1891,19 @@
 
   function renderCustomersView() {
     const customers = state.customers || [];
+    const cards = customers.map((customer) => renderTableCard({
+      title: customer.name || '—',
+      subtitle: customer.email || 'Customer',
+      badges: [renderBadge(customer.isBlocked ? 'Blocked' : 'Active')],
+      fields: [
+        { label: 'Phone', value: customer.phone || '—' },
+        { label: 'Joined', value: fmtDateTime(customer.createdAt) }
+      ],
+      actions: renderButtons([
+        `<button class="small-btn ${customer.isBlocked ? 'gold' : 'primary'}" data-customer-block="${customer._id}" data-blocked="${customer.isBlocked ? 'false' : 'true'}">${customer.isBlocked ? 'Unblock' : 'Block'}</button>`,
+        `<button class="small-btn danger" data-customer-delete="${customer._id}">Delete</button>`
+      ])
+    })).join('');
     const rows = customers.map((customer) => `
       <tr>
         <td><strong>${escapeHtml(customer.name)}</strong><div class="helper">${escapeHtml(customer.email || '')}</div></td>
@@ -1742,7 +1920,7 @@
     el.viewRoot.innerHTML = `
       <div class="view">
         <section class="card table-card">
-          ${tableShell(['Customer', 'Phone', 'Status', 'Joined', 'Actions'], rows, 'No customers found')}
+          ${tableShell(['Customer', 'Phone', 'Status', 'Joined', 'Actions'], rows, 'No customers found', cards)}
         </section>
       </div>
     `;
@@ -1750,6 +1928,19 @@
 
   function renderPaymentsView() {
     const payments = state.payments || [];
+    const cards = payments.map((payment) => renderTableCard({
+      title: payment.booking?.bookingId || payment.metadata?.bookingId || payment._id || 'Payment',
+      subtitle: payment.provider || 'Settlement',
+      badges: [renderBadge(payment.status || 'Pending')],
+      fields: [
+        { label: 'Amount', value: fmtMoney(payment.amount || 0) },
+        { label: 'Type', value: payment.paymentType || '—' },
+        { label: 'Created', value: fmtDateTime(payment.createdAt) }
+      ],
+      actions: renderButtons([
+        `<button class="small-btn gold" data-payment-refund="${payment._id}">Refund</button>`
+      ])
+    })).join('');
     const rows = payments.map((payment) => `
       <tr>
         <td><strong>${escapeHtml(payment.booking?.bookingId || payment.metadata?.bookingId || payment._id)}</strong></td>
@@ -1767,7 +1958,7 @@
     el.viewRoot.innerHTML = `
       <div class="view">
         <section class="card table-card">
-          ${tableShell(['Booking', 'Amount', 'Type', 'Status', 'Provider', 'Created', 'Actions'], rows, 'No payments found')}
+          ${tableShell(['Booking', 'Amount', 'Type', 'Status', 'Provider', 'Created', 'Actions'], rows, 'No payments found', cards)}
         </section>
       </div>
     `;
@@ -1775,6 +1966,25 @@
 
   function renderInvoicesView() {
     const invoices = state.invoices || [];
+    const cards = invoices.map((invoice) => {
+      const bookingId = invoice.booking?._id || invoice.booking;
+      return renderTableCard({
+        title: invoice.invoiceId || '—',
+        subtitle: invoice.customerName || 'Invoice',
+        fields: [
+          { label: 'Booking', value: invoice.bookingId || '—' },
+          { label: 'Amount', value: fmtMoney(invoice.totalFare || 0) },
+          { label: 'Status', value: renderBadge(invoice.paymentStatus || 'Pending'), html: true },
+          { label: 'Created', value: fmtDateTime(invoice.createdAt) }
+        ],
+        actions: bookingId ? renderButtons([
+          `<button class="small-btn primary" data-action="booking-edit-invoice" data-id="${bookingId}">Edit</button>`,
+          `<button class="small-btn" data-action="booking-download-invoice" data-id="${bookingId}">Download</button>`,
+          `<button class="small-btn gold" data-action="booking-send-invoice" data-id="${bookingId}">Resend</button>`,
+          `<button class="small-btn primary" data-action="booking-regenerate-invoice" data-id="${bookingId}">Regenerate</button>`
+        ]) : '<span class="helper">Booking not linked</span>'
+      });
+    }).join('');
     const rows = invoices.map((invoice) => {
       const bookingId = invoice.booking?._id || invoice.booking;
       return `
@@ -1799,7 +2009,7 @@
     el.viewRoot.innerHTML = `
       <div class="view">
         <section class="card table-card">
-          ${tableShell(['Invoice', 'Customer', 'Amount', 'Status', 'Created', 'Actions'], rows, 'No invoices found')}
+          ${tableShell(['Invoice', 'Customer', 'Amount', 'Status', 'Created', 'Actions'], rows, 'No invoices found', cards)}
         </section>
       </div>
     `;
@@ -1807,6 +2017,22 @@
 
   function renderMessagesView() {
     const messages = state.messages || [];
+    const cards = messages.map((message) => renderTableCard({
+      title: message.name || '—',
+      subtitle: message.subject || 'General inquiry',
+      badges: [renderBadge(message.status || 'open')],
+      fields: [
+        { label: 'Email', value: message.email || '—' },
+        { label: 'Phone', value: message.phone || '—' },
+        { label: 'Message', value: message.message || '—', full: true },
+        { label: 'Received', value: fmtDateTime(message.createdAt) }
+      ],
+      actions: renderButtons([
+        `<button class="small-btn primary" data-message-reply="${message._id}">Reply</button>`,
+        `<button class="small-btn gold" data-message-resolve="${message._id}">Resolve</button>`,
+        `<button class="small-btn danger" data-message-delete="${message._id}">Delete</button>`
+      ])
+    })).join('');
     const rows = messages.map((message) => `
       <tr>
         <td><strong>${escapeHtml(message.name)}</strong><div class="helper">${escapeHtml(message.email || '')}<br>${escapeHtml(message.phone || '')}</div></td>
@@ -1825,7 +2051,7 @@
     el.viewRoot.innerHTML = `
       <div class="view">
         <section class="card table-card">
-          ${tableShell(['Sender', 'Subject', 'Message', 'Status', 'Received', 'Actions'], rows, 'No messages found')}
+          ${tableShell(['Sender', 'Subject', 'Message', 'Status', 'Received', 'Actions'], rows, 'No messages found', cards)}
         </section>
       </div>
     `;
@@ -1937,6 +2163,22 @@
 
   function renderNotificationsView() {
     const notifications = state.notifications || [];
+    const cards = notifications.map((item) => renderTableCard({
+      title: item.title || item.type || 'Notification',
+      subtitle: item.message || 'System alert',
+      badges: [renderBadge(item.readAt ? 'Read' : 'Unread')],
+      fields: [
+        { label: 'Customer', value: getNotificationSummary(item).customerName },
+        { label: 'Ride', value: getNotificationSummary(item).rideType },
+        { label: 'Booking', value: item.bookingId || item.metadata?.bookingId || '—' },
+        { label: 'State', value: getNotificationSummary(item).bookingStatus || 'Pending' },
+        { label: 'Created', value: fmtDateTime(item.createdAt) }
+      ],
+      actions: renderButtons([
+        `<button class="small-btn primary" data-notification-read="${item._id}">Mark read</button>`,
+        `<button class="small-btn danger" data-notification-delete="${item._id}">Delete</button>`
+      ])
+    })).join('');
     const rows = notifications.map((item) => `
       <tr>
         <td><strong>${escapeHtml(item.title || item.type || '')}</strong><div class="helper">${escapeHtml(item.type || '')}</div></td>
@@ -1955,7 +2197,7 @@
     el.viewRoot.innerHTML = `
       <div class="view">
         <section class="card table-card">
-          ${tableShell(['Title', 'Message', 'Customer', 'Booking', 'State', 'Created', 'Actions'], rows, 'No notifications found')}
+          ${tableShell(['Title', 'Message', 'Customer', 'Booking', 'State', 'Created', 'Actions'], rows, 'No notifications found', cards)}
         </section>
       </div>
     `;
@@ -2561,15 +2803,23 @@
     });
     el.logoutButton.addEventListener('click', logout);
     el.sidebarToggle.addEventListener('click', toggleSidebarShell);
+    el.sidebarToggleMobile?.addEventListener('click', toggleSidebarShell);
+    el.sidebarBackdrop?.addEventListener('click', () => {
+      if (!el.appShell) return;
+      el.appShell.classList.remove('sidebar-open');
+      document.body.classList.remove('shell-open');
+      setSidebarBackdropVisible(false);
+    });
     window.addEventListener('resize', syncSidebarMode);
     window.addEventListener('scroll', syncTopbarSurface, { passive: true });
     document.addEventListener('click', (event) => {
       const notificationItem = event.target.closest('.notification-item[data-view="notifications"]');
       if (notificationItem) {
         setView('notifications');
-        if (window.matchMedia('(max-width: 980px)').matches) {
+        if (isMobileDrawerMode()) {
           el.appShell.classList.remove('sidebar-open');
           document.body.classList.remove('shell-open');
+          setSidebarBackdropVisible(false);
         }
         return;
       }
@@ -2585,6 +2835,7 @@
       setView(button.dataset.view);
       el.appShell.classList.remove('sidebar-open');
       document.body.classList.remove('shell-open');
+      setSidebarBackdropVisible(false);
       try {
         if (button.dataset.view === 'dashboard' || button.dataset.view === 'analytics') {
           await loadDashboard(true);
@@ -2641,7 +2892,7 @@
       const filterButton = event.target.closest('[data-filter-status]');
       if (filterButton && state.view === 'bookings') {
         state.search = '';
-        const searchInput = document.getElementById('bookingSearch');
+        const searchInput = document.getElementById('bookingSearchInput');
         if (searchInput) searchInput.value = '';
         const status = filterButton.dataset.filterStatus;
         const query = new URLSearchParams();
@@ -2654,7 +2905,7 @@
       if (saveContentBtn) await saveContent();
     });
     el.viewRoot.addEventListener('input', async (event) => {
-      const search = event.target.closest('#bookingSearch');
+      const search = event.target.closest('#bookingSearchInput');
       if (search) {
         state.search = search.value.trim();
         const body = await apiFetch(`/api/admin/bookings?search=${encodeURIComponent(state.search)}`);

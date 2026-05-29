@@ -1016,7 +1016,7 @@ body.shell-open { overflow: hidden; }
   justify-content: space-between;
   gap: 14px;
   min-height: 220px;
-  aspect-ratio: 1 / 1;
+  height: 100%;
   padding: 20px;
 }
 
@@ -1056,8 +1056,9 @@ body.shell-open { overflow: hidden; }
 
   .dashboard-stat-row {
     min-height: 190px;
-  .image-preview { min-height: 160px; }
   }
+
+  .image-preview { min-height: 160px; }
 }
 
 .dashboard-feed {
@@ -1777,20 +1778,11 @@ body.shell-open { overflow: hidden; }
     width: min(90vw, 336px);
     transform: translateX(-112%);
     transition: transform 0.24s ease;
-    z-index: 32;
+    z-index: 1001;
     margin: 0;
     height: calc(100vh - 24px);
   }
   .app-shell.sidebar-open .sidebar { transform: translateX(0); }
-  .app-shell.sidebar-open::after {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background: rgba(31, 10, 49, 0.22);
-    -webkit-backdrop-filter: blur(4px);
-    backdrop-filter: blur(4px);
-    z-index: 24;
-  }
   .sidebar-toggle { display: inline-grid; }
   .app-content { padding: 0; }
   .topbar { margin-right: 0; }
@@ -2364,6 +2356,748 @@ details > summary {
   white-space: nowrap;
 }
 
+@media (min-width: 768px) and (max-width: 1024px) {
+  .app-shell {
+    grid-template-columns: 96px minmax(0, 1fr);
+  }
+
+  .sidebar {
+    position: sticky;
+    top: 16px;
+    inset: auto;
+    width: 96px;
+    height: calc(100vh - 32px);
+    margin: 16px 0 16px 16px;
+    padding: 14px 10px;
+  }
+
+  .sidebar .brand-row,
+  .sidebar .sidebar-profile,
+  .sidebar .sidebar-section,
+  .sidebar .sidebar-footer,
+  .sidebar .sidebar-title,
+  .sidebar .sidebar-label,
+  .sidebar .sidebar-contact,
+  .sidebar .sidebar-note,
+  .sidebar .eyebrow,
+  .sidebar .nav-item span {
+    display: none;
+  }
+
+  .sidebar-toggle {
+    display: inline-grid;
+    margin-left: auto;
+  }
+
+  .topbar-menu-toggle {
+    display: none;
+  }
+
+  .topbar-actions {
+    grid-template-columns: minmax(220px, 1fr) auto auto auto;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 767px) {
+  .topbar-menu-toggle {
+    display: inline-grid;
+    flex: 0 0 auto;
+  }
+
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: fixed;
+    inset: 12px auto 12px 12px;
+    width: min(88vw, 340px);
+    height: calc(100vh - 24px);
+    margin: 0;
+    padding: 16px;
+    transform: translateX(-112%);
+    transition: transform 0.24s ease;
+    z-index: 1001;
+  }
+
+  .app-shell.sidebar-open .sidebar {
+    transform: translateX(0);
+  }
+
+  .app-content {
+    padding: 12px;
+  }
+
+  .topbar {
+    margin-right: 0;
+    padding: 12px 14px;
+  }
+
+  .topbar-actions {
+    display: flex;
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .topbar-search-slot {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .topbar-actions .search-pill {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .table-wrap {
+    display: none;
+  }
+
+  .mobile-table-cards {
+    display: grid;
+  }
+
+  .mobile-table-card {
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .mobile-table-card__fields {
+    grid-template-columns: 1fr;
+  }
+
+  .mobile-table-card__header {
+    flex-direction: column;
+  }
+
+  .mobile-table-card__badges {
+    justify-content: flex-start;
+  }
+
+  .mobile-table-card__actions .small-btn,
+  .mobile-table-card__actions .primary-btn,
+  .mobile-table-card__actions .secondary-btn {
+    width: 100%;
+  }
+
+  .booking-toolbar,
+  .booking-toolbar-container {
+    padding: 12px;
+  }
+
+  .booking-toolbar__filters--inline {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .booking-toolbar__filters--inline .booking-filter-field,
+  .booking-toolbar__actions .secondary-btn,
+  .booking-toolbar__actions .primary-btn {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+
+  .booking-toolbar__actions {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .booking-page-head,
+  .booking-toolbar__actions,
+  .booking-toolbar__filters--inline {
+    width: 100%;
+  }
+
+  .modal-backdrop {
+    padding: 12px;
+  }
+
+  .modal {
+    width: 95vw;
+    max-width: 95vw;
+    max-height: 90vh;
+    padding: 16px;
+    border-radius: 20px;
+  }
+
+  .dropdown-panel--notifications {
+    position: fixed;
+    inset: 76px 12px auto 12px;
+    width: auto;
+    max-width: none;
+  }
+
+  .invoice-editor-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .invoice-editor-card,
+  .invoice-preview-card {
+    grid-column: 1 / -1;
+  }
+
+  .invoice-preview-stack {
+    display: grid;
+    gap: 12px;
+  }
+
+  .invoice-preview-table {
+    min-width: 0;
+    width: 100%;
+    display: block;
+  }
+
+  .invoice-preview-table thead {
+    display: none;
+  }
+
+  .invoice-preview-table tbody {
+    display: grid;
+    gap: 10px;
+  }
+
+  .invoice-preview-table tr {
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+    border-radius: 16px;
+    border: 1px solid rgba(106, 27, 154, 0.12);
+    background: rgba(255, 255, 255, 0.92);
+  }
+
+  .invoice-preview-table td {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    border: 0;
+    padding: 0;
+  }
+
+  .invoice-preview-table td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 700;
+  }
+
+  .invoice-preview-summary {
+    padding: 14px;
+  }
+
+  .topbar-copy h2,
+  .login-panel h1 {
+    font-size: clamp(1.35rem, 5vw, 1.7rem);
+  }
+}
+
+@media (max-width: 420px) {
+  .brand-mark {
+    width: 58px;
+    height: 58px;
+  }
+
+  .topbar-actions .icon-button,
+  .topbar-menu-toggle {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+@media (max-width: 767px) {
+  .login-screen {
+    padding: 16px;
+  }
+
+  .login-panel {
+    padding: 18px;
+  }
+
+  .card {
+    padding: 14px;
+    border-radius: 20px;
+  }
+
+  .view-root,
+  .view {
+    gap: 12px;
+  }
+
+  .topbar {
+    padding: 12px 14px;
+  }
+
+  .topbar-copy h2,
+  .login-panel h1 {
+    font-size: clamp(1.35rem, 5vw, 1.7rem);
+  }
+
+  .topbar-actions {
+    gap: 8px;
+  }
+
+  .search-pill {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .topbar-dropdown .dropdown-panel,
+  .dropdown-panel--notifications {
+    width: min(95vw, 420px);
+    max-width: 95vw;
+  }
+
+  .dropdown-panel--notifications {
+    position: fixed;
+    inset: 76px 12px auto 12px;
+  }
+
+  .modal-backdrop {
+    padding: 12px;
+  }
+
+  .modal {
+    width: 95vw;
+    max-width: 95vw;
+    max-height: 90vh;
+    padding: 16px;
+    border-radius: 20px;
+  }
+
+  .modal-header {
+    align-items: flex-start;
+  }
+
+  .modal-body {
+    margin-top: 10px;
+  }
+
+  .invoice-editor-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .invoice-editor-card,
+  .invoice-preview-card {
+    grid-column: 1 / -1;
+  }
+
+  .invoice-preview-stack {
+    display: grid;
+    gap: 12px;
+  }
+
+  .invoice-preview-table {
+    min-width: 0;
+    width: 100%;
+    display: block;
+  }
+
+  .invoice-preview-table thead {
+    display: none;
+  }
+
+  .invoice-preview-table tbody {
+    display: grid;
+    gap: 10px;
+  }
+
+  .invoice-preview-table tr {
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+    border-radius: 16px;
+    border: 1px solid rgba(106, 27, 154, 0.12);
+    background: rgba(255, 255, 255, 0.92);
+  }
+
+  .invoice-preview-table td {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    border: 0;
+    padding: 0;
+  }
+
+  .invoice-preview-table td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 700;
+  }
+
+  .invoice-preview-summary {
+    padding: 14px;
+  }
+
+  .table-shell {
+    gap: 12px;
+  }
+
+  .mobile-table-card__fields {
+    grid-template-columns: 1fr;
+  }
+
+  .mobile-table-card {
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .booking-toolbar-container,
+  .booking-toolbar {
+    padding: 12px;
+  }
+
+  .booking-page-head,
+  .booking-toolbar__actions,
+  .booking-toolbar__filters--inline {
+    width: 100%;
+  }
+
+  .booking-toolbar__filters--inline {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .booking-toolbar__filters--inline .booking-filter-field,
+  .booking-toolbar__actions .secondary-btn,
+  .booking-toolbar__actions .primary-btn {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+
+  .form-actions,
+  .action-row,
+  .filter-row,
+  .row-actions {
+    width: 100%;
+  }
+
+  .row-actions {
+    gap: 8px;
+  }
+
+  .row-actions .small-btn,
+  .row-actions .primary-btn,
+  .row-actions .secondary-btn {
+    flex: 1 1 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .brand-mark {
+    width: 58px;
+    height: 58px;
+  }
+
+  .topbar-actions .icon-button,
+  .topbar-menu-toggle {
+    width: 40px;
+    height: 40px;
+  }
+
+  .mobile-table-card__header {
+    flex-direction: column;
+  }
+
+  .mobile-table-card__badges {
+    justify-content: flex-start;
+  }
+
+  .mobile-table-card__actions .small-btn,
+  .mobile-table-card__actions .primary-btn,
+  .mobile-table-card__actions .secondary-btn {
+    width: 100%;
+  }
+}
+
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  z-index: 1000;
+}
+
+/* Ensure app shell is above the global fixed backdrop so sidebar items are clickable */
+.app-shell {
+  z-index: 1002; /* higher than .sidebar-backdrop (1000) */
+}
+
+.topbar-menu-toggle {
+  display: none;
+}
+
+.table-shell {
+  display: grid;
+  gap: 14px;
+}
+
+.mobile-table-cards {
+  display: none;
+  gap: 12px;
+}
+
+.mobile-table-card {
+  display: grid;
+  gap: 14px;
+}
+
+.mobile-table-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mobile-table-card__header h4 {
+  margin: 0;
+  font-size: 1.08rem;
+  line-height: 1.25;
+}
+
+.mobile-table-card__subtitle {
+  margin: 6px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.mobile-table-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.mobile-table-card__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mobile-table-card__field {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.mobile-table-card__field--full {
+  grid-column: 1 / -1;
+}
+
+.mobile-table-card__field span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.mobile-table-card__field strong {
+  color: var(--text);
+  font-size: 0.95rem;
+  line-height: 1.45;
+  font-weight: 700;
+  word-break: break-word;
+}
+
+.mobile-table-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mobile-table-card__actions .small-btn,
+.mobile-table-card__actions .primary-btn,
+.mobile-table-card__actions .secondary-btn {
+  width: auto;
+}
+
+.sidebar-collapsed .sidebar {
+  width: 96px;
+}
+
+.sidebar-collapsed .sidebar .brand-row,
+.sidebar-collapsed .sidebar .sidebar-profile,
+.sidebar-collapsed .sidebar .sidebar-section,
+.sidebar-collapsed .sidebar .sidebar-footer,
+.sidebar-collapsed .sidebar .sidebar-title,
+.sidebar-collapsed .sidebar .sidebar-label,
+.sidebar-collapsed .sidebar .sidebar-contact,
+.sidebar-collapsed .sidebar .sidebar-note,
+.sidebar-collapsed .sidebar .eyebrow,
+.sidebar-collapsed .sidebar .nav-item span {
+  display: none;
+}
+
+.sidebar-collapsed .sidebar .nav-item {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.sidebar-collapsed .sidebar .nav-item i {
+  width: auto;
+}
+
+@media (min-width: 768px) and (max-width: 1024px) {
+  .app-shell {
+    grid-template-columns: 96px minmax(0, 1fr);
+  }
+
+  .sidebar {
+    position: sticky;
+    top: 16px;
+    inset: auto;
+    width: 96px;
+    height: calc(100vh - 32px);
+    margin: 16px 0 16px 16px;
+    padding: 14px 10px;
+  }
+
+  .sidebar .brand-row,
+  .sidebar .sidebar-profile,
+  .sidebar .sidebar-section,
+  .sidebar .sidebar-footer,
+  .sidebar .sidebar-title,
+  .sidebar .sidebar-label,
+  .sidebar .sidebar-contact,
+  .sidebar .sidebar-note,
+  .sidebar .eyebrow,
+  .sidebar .nav-item span {
+    display: none;
+  }
+
+  .sidebar-toggle {
+    display: inline-grid;
+    margin-left: auto;
+  }
+
+  .topbar-menu-toggle {
+    display: none;
+  }
+
+  .topbar-actions {
+    grid-template-columns: minmax(220px, 1fr) auto auto auto;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 767px) {
+  .topbar-menu-toggle {
+    display: inline-grid;
+    flex: 0 0 auto;
+  }
+
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: fixed;
+    inset: 12px auto 12px 12px;
+    width: min(88vw, 340px);
+    height: calc(100vh - 24px);
+    margin: 0;
+    padding: 16px;
+    transform: translateX(-112%);
+    transition: transform 0.24s ease;
+    z-index: 1001;
+  }
+
+  .app-shell.sidebar-open .sidebar {
+    transform: translateX(0);
+  }
+
+  .sidebar-backdrop {
+    z-index: 1000;
+  }
+
+  .app-content {
+    padding: 12px;
+  }
+
+  .topbar {
+    margin-right: 0;
+    padding: 12px 14px;
+  }
+
+  .topbar-actions {
+    display: flex;
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .topbar-search-slot {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .topbar-actions .search-pill {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .table-wrap {
+    display: none;
+  }
+
+  .mobile-table-cards {
+    display: grid;
+  }
+
+  .mobile-table-card {
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .mobile-table-card__fields {
+    grid-template-columns: 1fr;
+  }
+
+  .mobile-table-card__actions .small-btn,
+  .mobile-table-card__actions .primary-btn,
+  .mobile-table-card__actions .secondary-btn {
+    width: 100%;
+  }
+
+  .booking-toolbar {
+    padding: 12px;
+  }
+
+  .booking-toolbar__filters--inline {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .booking-toolbar__filters--inline .booking-filter-field {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .booking-toolbar__actions {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .booking-toolbar__actions .secondary-btn,
+  .booking-toolbar__actions .primary-btn {
+    flex: 1 1 100%;
+  }
+}
+
 .field label,
 .field span {
   font-weight: 600;
@@ -2411,6 +3145,215 @@ textarea::placeholder {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* -----------------------------------------------------
+   Management layout refactor: full-width content cards
+   Applies to Drivers, Cars, Packages, Routes, Payments,
+   Invoices, Users, Notifications, Settings, and similar
+   management sections.
+   ----------------------------------------------------- */
+.app-content,
+.view-root,
+.view,
+.booking-view,
+.booking-toolbar-container,
+.table-shell {
+  width: 100%;
+  max-width: none;
+}
+
+.view,
+.booking-view,
+.table-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+.view:not(.view-dashboard) > *,
+.booking-view > *,
+.table-shell > * {
+  width: 100%;
+  max-width: none;
+}
+
+.view:not(.view-dashboard) .card,
+.view:not(.view-dashboard) .table-card,
+.view:not(.view-dashboard) .stack-card,
+.view:not(.view-dashboard) .chart-card,
+.view:not(.view-dashboard) .section-grid,
+.view:not(.view-dashboard) .subgrid,
+.view:not(.view-dashboard) .split-grid,
+.view:not(.view-dashboard) .table-shell,
+.booking-view .card,
+.booking-view .table-card,
+.booking-view .table-shell {
+  width: 100%;
+  max-width: 100%;
+}
+
+.view:not(.view-dashboard) .card,
+.booking-view .card,
+.table-shell > .card,
+.table-card {
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+  padding: 24px;
+}
+
+.view:not(.view-dashboard) .section-grid,
+.view:not(.view-dashboard) .subgrid,
+.view:not(.view-dashboard) .split-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  align-items: start;
+}
+
+.view:not(.view-dashboard) .table-card,
+.booking-view .table-card {
+  overflow: hidden;
+}
+
+.view:not(.view-dashboard) .card-header,
+.booking-page-head,
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.view:not(.view-dashboard) .card-header > div,
+.booking-page-head > div,
+.page-header > div {
+  min-width: 0;
+  flex: 1 1 320px;
+}
+
+.view:not(.view-dashboard) .card-header h3,
+.view:not(.view-dashboard) .card-header h4,
+.booking-page-head h3,
+.page-header h3 {
+  margin: 0;
+  line-height: 1.1;
+}
+
+.view:not(.view-dashboard) .card-header p,
+.booking-page-head p,
+.page-header p {
+  margin: 6px 0 0;
+}
+
+.view:not(.view-dashboard) .table-wrap,
+.booking-view .table-wrap,
+.table-shell .table-wrap {
+  width: 100%;
+  max-width: 100%;
+}
+
+.view:not(.view-dashboard) .mobile-table-cards,
+.booking-view .mobile-table-cards,
+.table-shell .mobile-table-cards {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  width: 100%;
+}
+
+.mobile-table-card {
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+  padding: 24px;
+}
+
+.empty-state,
+.loading-state {
+  width: 100%;
+  max-width: 100%;
+  display: grid;
+  place-items: center;
+  gap: 14px;
+  padding: 32px 24px;
+  text-align: center;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+}
+
+.empty-state::before,
+.loading-state::before {
+  content: '';
+  width: 60px;
+  height: 60px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(106, 27, 154, 0.12), rgba(212, 175, 55, 0.18));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.empty-state {
+  color: var(--muted);
+  min-height: 220px;
+}
+
+.empty-state .btn,
+.empty-state button,
+.empty-state a {
+  margin-top: 6px;
+}
+
+.empty-state--compact {
+  min-height: auto;
+  padding: 18px 20px;
+}
+
+.empty-state--compact::before {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+}
+
+@media (min-width: 768px) and (max-width: 1024px) {
+  .view:not(.view-dashboard) .section-grid,
+  .view:not(.view-dashboard) .subgrid,
+  .view:not(.view-dashboard) .split-grid,
+  .view:not(.view-dashboard) .mobile-table-cards,
+  .booking-view .mobile-table-cards,
+  .table-shell .mobile-table-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .view:not(.view-dashboard) .section-grid,
+  .view:not(.view-dashboard) .subgrid,
+  .view:not(.view-dashboard) .split-grid,
+  .view:not(.view-dashboard) .mobile-table-cards,
+  .booking-view .mobile-table-cards,
+  .table-shell .mobile-table-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .view:not(.view-dashboard) .card,
+  .booking-view .card,
+  .table-card,
+  .mobile-table-card,
+  .empty-state,
+  .loading-state {
+    padding: 20px;
+    border-radius: 20px;
+  }
+
+  .view:not(.view-dashboard) .card-header,
+  .booking-page-head,
+  .page-header {
+    gap: 10px;
   }
 }
 
