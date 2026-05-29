@@ -893,7 +893,7 @@
       form.addEventListener('submit', handleEntityFormSubmit);
     }
     el.modalBackdrop.hidden = false;
-    document.body.style.overflow = 'hidden';
+    document.body.classList.add('modal-open');
   }
 
   function renderDriverOptions(drivers, selectedDriverId = '') {
@@ -913,7 +913,7 @@
   function closeModal() {
     el.modalBackdrop.hidden = true;
     el.modalBody.innerHTML = '';
-    document.body.style.overflow = '';
+    document.body.classList.remove('modal-open');
   }
 
   async function openWorkflowModal({ title, eyebrow = 'Edit', body, onSubmit }) {

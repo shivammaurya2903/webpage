@@ -18,6 +18,58 @@
   color-scheme: dark;
 }
 
+/* ==========================
+   Unified modal, form, z-index
+   ========================== */
+
+:root {
+  --z-content: 1;
+  --z-cards: 10;
+  --z-sidebar: 500;
+  --z-navbar: 600;
+  --z-dropdown: 1150;
+  --z-overlay: 1000;
+  --z-modal: 1100;
+  --z-toast: 1200;
+}
+
+/* Ensure cards don't clip interactive children */
+.card { z-index: var(--z-cards); overflow: visible; }
+.table-card { overflow: visible; }
+
+/* Standardize inputs and textareas */
+.field { font-size: 0.95rem; }
+.field input, .field select, .search-pill input { height: 48px; padding: 10px 14px; border-radius: 12px; box-sizing: border-box; }
+.field textarea { min-height: 120px; resize: vertical; padding: 12px 14px; }
+
+/* Buttons */
+.primary-btn, .secondary-btn { height: 48px; border-radius: 12px; }
+.primary-btn { background: linear-gradient(135deg,#6a1b9a,#8b5cf6); color: #fff; }
+
+/* Form grid: 2-column desktop, single column on small screens */
+.form-grid .field { grid-column: span 6; }
+.form-grid .field.wide { grid-column: span 12; }
+
+/* Modal overlay and modal container (unified system) */
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: var(--z-overlay); }
+.modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(900px, 95vw); max-height: 90vh; overflow-y: auto; overflow-x: visible; border-radius: 16px; padding: 20px; z-index: var(--z-modal); background: var(--panel-strong); border: 1px solid var(--panel-border); box-shadow: var(--shadow); }
+.modal-body { margin-top: 12px; }
+
+/* Prevent body scroll when modal open using class toggling */
+body.modal-open { overflow: hidden; }
+
+/* Dropdowns (including datepickers/selects) should float above modal */
+.dropdown-panel, .topbar-dropdown .dropdown-panel { position: absolute; z-index: var(--z-dropdown); }
+
+/* Toasts above modals */
+.toast-host { z-index: var(--z-toast); }
+
+/* Responsive form adjustments */
+@media (max-width: 1180px) {
+  .form-grid .field { grid-column: span 12; }
+}
+
+
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; }
 [hidden] { display: none !important; }
