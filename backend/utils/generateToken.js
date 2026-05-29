@@ -37,6 +37,7 @@ function attachToken(res, user, statusCode = 200) {
   res.cookie('token', token, cookieOptions);
   return res.status(statusCode).json({
     success: true,
+    token,
     user: user.toSafeJSON ? user.toSafeJSON() : user
   });
 }
@@ -50,6 +51,7 @@ function attachAdminToken(res, admin, statusCode = 200) {
   res.cookie('token', token, cookieOptions);
   return res.status(statusCode).json({
     success: true,
+    token,
     user: admin.toSafeJSON ? admin.toSafeJSON() : admin,
     admin: admin.toSafeJSON ? admin.toSafeJSON() : admin
   });

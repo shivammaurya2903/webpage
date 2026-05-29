@@ -23,11 +23,12 @@ function normalizeIndianPhone(value) {
 }
 
 function buildOrigin() {
-  const configuredOrigin = String(process.env.FRONTEND_URL || process.env.PUBLIC_FRONTEND_URL || '').trim();
+  const configuredOrigin = String(process.env.PUBLIC_FRONTEND_URL || process.env.FRONTEND_URL || '').trim();
   if (configuredOrigin) return configuredOrigin.replace(/\/$/, '');
 
   const fallbackOrigins = String(process.env.CORS_ORIGIN || '').split(',').map((origin) => origin.trim()).filter(Boolean);
-  return (fallbackOrigins[0] || 'http://localhost:5000').replace(/\/$/, '');
+  const preferredOrigin = fallbackOrigins.find((origin) => /^https?:\/\//i.test(origin)) || fallbackOrigins[0] || 'http://localhost:5000';
+  return preferredOrigin.replace(/\/$/, '');
 }
 
 const register = asyncHandler(async (req, res) => {

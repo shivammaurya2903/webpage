@@ -1,5 +1,27 @@
 const ApiError = require('../utils/ApiError');
 
+function redactLogValue(key, value) {
+  const sensitiveKeys = ['password', 'confirmPassword', 'token', 'authorization', 'secret'];
+  if (sensitiveKeys.includes(String(key || '').toLowerCase())) {
+    return '[redacted]';
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => redactLogValue('', item));
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([entryKey, entryValue]) => [entryKey, redactLogValue(entryKey, entryValue)]));
+  }
+
+  return value;
+}
+
+function getRequestBody(req) {
+  if (!req || !req.body || typeof req.body !== 'object') return undefined;
+  return redactLogValue('', req.body);
+}
+
 function notFound(req, res, next) {
   next(new ApiError(404, `Not found - ${req.originalUrl}`));
 }
@@ -47,7 +69,18 @@ function errorHandler(err, req, res, next) {
 
   if (process.env.NODE_ENV !== 'production') {
     // eslint-disable-next-line no-console
-    console.error(err);
+    console.error('[api:error]', {
+      method: req.method,
+      endpoint: req.originalUrl,
+      statusCode,
+      requestBody: getRequestBody(req),
+      responseBody: {
+        success: false,
+        message,
+        details
+      },
+      cause: err?.stack || err?.message || err
+    });
   }
 
   res.status(statusCode).json({

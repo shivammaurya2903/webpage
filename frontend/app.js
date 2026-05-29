@@ -10,6 +10,99 @@
   const SOCKET_BASE_URL = String(APP_CONFIG.SOCKET_BASE_URL || window.SOCKET_BASE_URL || API_BASE_URL).replace(/\/$/, '');
   const DEFAULT_TIMEOUT_MS = Number(APP_CONFIG.DEFAULT_TIMEOUT_MS || 12000);
   const API_RETRY_DELAY_MS = Number(APP_CONFIG.API_RETRY_DELAY_MS || 500);
+  const FETCH_LOG_PREFIX = '[fetch:public]';
+
+  function redactLogValue(key, value) {
+    const sensitiveKeys = ['password', 'confirmPassword', 'token', 'authorization', 'secret'];
+    if (sensitiveKeys.includes(String(key || '').toLowerCase())) {
+      return '[redacted]';
+    }
+
+    if (Array.isArray(value)) {
+      return value.map((item) => redactLogValue('', item));
+    }
+
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value).map(([entryKey, entryValue]) => [entryKey, redactLogValue(entryKey, entryValue)]));
+    }
+
+    return value;
+  }
+
+  function describeRequestPayload(options = {}) {
+    const body = options.body;
+    if (body == null) return undefined;
+
+    if (typeof body === 'string') {
+      try {
+        return redactLogValue('', JSON.parse(body));
+      } catch (_) {
+        return body.length > 800 ? `${body.slice(0, 800)}…` : body;
+      }
+    }
+
+    if (body instanceof FormData || body instanceof URLSearchParams) {
+      return redactLogValue('', Object.fromEntries(Array.from(body.entries())));
+    }
+
+    if (typeof body === 'object') {
+      return redactLogValue('', body);
+    }
+
+    return String(body);
+  }
+
+  async function describeResponseBody(response) {
+    if (!response) return undefined;
+    const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+    if (!contentType.includes('json') && !contentType.includes('text') && !contentType.includes('application/problem+json')) {
+      return '[non-text response omitted]';
+    }
+
+    try {
+      const text = await response.clone().text();
+      if (!text) return null;
+      try {
+        return redactLogValue('', JSON.parse(text));
+      } catch (_) {
+        return text.length > 1200 ? `${text.slice(0, 1200)}…` : text;
+      }
+    } catch (error) {
+      return { error: error.message || 'Unable to read response body for logging' };
+    }
+  }
+
+  function logFetchRequest(url, options = {}, requestOptions = {}, attempt = 0) {
+    console.info(FETCH_LOG_PREFIX, {
+      phase: 'request',
+      attempt,
+      endpoint: url,
+      method: String(options.method || 'GET').toUpperCase(),
+      payload: describeRequestPayload(options),
+      requestOptions: redactLogValue('', requestOptions)
+    });
+  }
+
+  async function logFetchResponse(url, options, response) {
+    console.info(FETCH_LOG_PREFIX, {
+      phase: 'response',
+      endpoint: url,
+      method: String(options.method || 'GET').toUpperCase(),
+      status: response.status,
+      ok: response.ok,
+      body: await describeResponseBody(response)
+    });
+  }
+
+  function logFetchError(url, options, error) {
+    console.warn(FETCH_LOG_PREFIX, {
+      phase: 'error',
+      endpoint: url,
+      method: String(options.method || 'GET').toUpperCase(),
+      payload: describeRequestPayload(options),
+      rootCause: error?.stack || error?.message || error
+    });
+  }
 
   function apiUrl(path) {
     if (/^https?:\/\//i.test(path)) return path;
@@ -83,11 +176,14 @@
       const timer = window.setTimeout(() => controller.abort(), timeoutMs);
 
       try {
+        logFetchRequest(url, options, requestOptions, attempt);
         const response = await fetch(url, { ...options, signal: controller.signal });
         window.clearTimeout(timer);
+        await logFetchResponse(url, options, response);
         return response;
       } catch (error) {
         window.clearTimeout(timer);
+        logFetchError(url, options, error);
         const normalizedError = normalizeRequestError(error, url);
         const canRetry = attempt < maxRetries && isNetworkFailure(error);
         if (!canRetry) throw normalizedError;
@@ -1579,15 +1675,16 @@
       });
       const body = await safeJson(res);
       const signedInUser = body?.user || body?.admin || null;
+      const token = body?.token || body?.user?.token || body?.admin?.token || '';
       const role = String(signedInUser?.role || '').toLowerCase();
 
-      if (!res.ok || !body || !body.token || !signedInUser) throw new Error((body && body.message) || 'Login failed');
+      if (!res.ok || !body || !token || !signedInUser) throw new Error((body && body.message) || 'Login failed');
 
-      setToken(body.token);
+      setToken(token);
       setUser(signedInUser);
 
       if (role === 'admin') {
-        setAdminSession(body.token, signedInUser);
+        setAdminSession(token, signedInUser);
         closeAuth();
         showSuccessModal('Redirecting to admin dashboard...', {
           title: 'Admin Login Successful',
@@ -1642,15 +1739,16 @@
       });
       const body = await safeJson(res);
       const signedInUser = body?.user || body?.admin || null;
+      const token = body?.token || body?.user?.token || body?.admin?.token || '';
       const role = String(signedInUser?.role || '').toLowerCase();
 
-      if (!res.ok || !body || !body.token || !signedInUser) throw new Error((body && body.message) || 'Login failed');
+      if (!res.ok || !body || !token || !signedInUser) throw new Error((body && body.message) || 'Login failed');
 
-      setToken(body.token);
+      setToken(token);
       setUser(signedInUser);
 
       if (role === 'admin') {
-        setAdminSession(body.token, signedInUser);
+        setAdminSession(token, signedInUser);
         closeAuth();
         showSuccessModal('Redirecting to admin dashboard...', {
           title: 'Admin Login Successful',

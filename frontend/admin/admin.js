@@ -8,6 +8,97 @@
   const DEFAULT_TIMEOUT_MS = Number(APP_CONFIG.DEFAULT_TIMEOUT_MS || 12000);
   const STORAGE_TOKEN = 'admin_token';
   const STORAGE_ADMIN = 'admin_profile';
+  const FETCH_LOG_PREFIX = '[fetch:admin]';
+
+  function redactLogValue(key, value) {
+    const sensitiveKeys = ['password', 'confirmPassword', 'token', 'authorization', 'secret'];
+    if (sensitiveKeys.includes(String(key || '').toLowerCase())) {
+      return '[redacted]';
+    }
+
+    if (Array.isArray(value)) {
+      return value.map((item) => redactLogValue('', item));
+    }
+
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value).map(([entryKey, entryValue]) => [entryKey, redactLogValue(entryKey, entryValue)]));
+    }
+
+    return value;
+  }
+
+  function describeRequestPayload(options = {}) {
+    const body = options.body;
+    if (body == null) return undefined;
+
+    if (typeof body === 'string') {
+      try {
+        return redactLogValue('', JSON.parse(body));
+      } catch (_) {
+        return body.length > 800 ? `${body.slice(0, 800)}…` : body;
+      }
+    }
+
+    if (body instanceof FormData || body instanceof URLSearchParams) {
+      return redactLogValue('', Object.fromEntries(Array.from(body.entries())));
+    }
+
+    if (typeof body === 'object') {
+      return redactLogValue('', body);
+    }
+
+    return String(body);
+  }
+
+  async function describeResponseBody(response) {
+    if (!response) return undefined;
+    const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+    if (!contentType.includes('json') && !contentType.includes('text') && !contentType.includes('application/problem+json')) {
+      return '[non-text response omitted]';
+    }
+
+    try {
+      const text = await response.clone().text();
+      if (!text) return null;
+      try {
+        return redactLogValue('', JSON.parse(text));
+      } catch (_) {
+        return text.length > 1200 ? `${text.slice(0, 1200)}…` : text;
+      }
+    } catch (error) {
+      return { error: error.message || 'Unable to read response body for logging' };
+    }
+  }
+
+  function logFetchRequest(url, options = {}) {
+    console.info(FETCH_LOG_PREFIX, {
+      phase: 'request',
+      endpoint: url,
+      method: String(options.method || 'GET').toUpperCase(),
+      payload: describeRequestPayload(options)
+    });
+  }
+
+  async function logFetchResponse(url, options, response) {
+    console.info(FETCH_LOG_PREFIX, {
+      phase: 'response',
+      endpoint: url,
+      method: String(options.method || 'GET').toUpperCase(),
+      status: response.status,
+      ok: response.ok,
+      body: await describeResponseBody(response)
+    });
+  }
+
+  function logFetchError(url, options, error) {
+    console.warn(FETCH_LOG_PREFIX, {
+      phase: 'error',
+      endpoint: url,
+      method: String(options.method || 'GET').toUpperCase(),
+      payload: describeRequestPayload(options),
+      rootCause: error?.stack || error?.message || error
+    });
+  }
 
   const el = {
     loginView: document.getElementById('loginView'),
@@ -334,7 +425,9 @@
     let response;
 
     try {
-      response = await fetch(`${API_BASE_URL}${path}`, {
+      const url = `${API_BASE_URL}${path}`;
+      logFetchRequest(url, options);
+      response = await fetch(url, {
         credentials: 'include',
         ...options,
         headers: {
@@ -344,7 +437,9 @@
           ...(state.token ? { Authorization: `Bearer ${state.token}` } : {})
         }
       });
+      await logFetchResponse(url, options, response);
     } catch (error) {
+      logFetchError(`${API_BASE_URL}${path}`, options, error);
       throw normalizeRequestError(error);
     }
 
@@ -2269,13 +2364,16 @@
         });
       } else if (action === 'booking-download-invoice') {
         try {
-          const response = await fetch(`${API_BASE_URL}/api/admin/bookings/${id}/invoice`, {
+          const invoiceUrl = `${API_BASE_URL}/api/admin/bookings/${id}/invoice`;
+          logFetchRequest(invoiceUrl, { method: 'GET' });
+          const response = await fetch(invoiceUrl, {
             credentials: 'include',
             headers: {
               Accept: 'application/pdf',
               ...(state.token ? { Authorization: `Bearer ${state.token}` } : {})
             }
           });
+          await logFetchResponse(invoiceUrl, { method: 'GET' }, response);
 
           if (!response.ok) {
             throw new Error('Invoice download failed');
@@ -2415,7 +2513,8 @@
     try {
       setLoading(true, 'Signing in...');
       const body = await apiFetch('/api/admin/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
-      setSession(body.token, body.admin, remember);
+      const token = body?.token || body?.admin?.token || body?.user?.token || '';
+      setSession(token, body.admin, remember);
       showApp();
       toast('Welcome back', `Signed in as ${body.admin?.name || body.admin?.email || 'admin'}`);
       await bootstrap();
