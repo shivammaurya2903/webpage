@@ -1508,7 +1508,7 @@
             ${statCard('fa-hourglass-half', 'Pending bookings', pendingBookings, `${stats.acceptedRides || 0} active rides`)}
             ${statCard('fa-circle-check', 'Completed rides', stats.completedRides || 0, `${stats.completedPayments || 0} completed payments`)}
             ${statCard('fa-user-shield', 'Total drivers', stats.totalDrivers || 0, `${stats.activeDrivers || 0} active drivers`)}
-            ${statCard('fa-car-side', 'Total vehicles', stats.totalVehicles || 0, `${stats.totalCustomers || 0} customers served`)}
+            ${statCard('fa-car-side', 'Total vehicles', stats.totalVehicles || 0, `${stats.availableVehicles || 0} available vehicles`)}
             ${statCard('fa-indian-rupee-sign', 'Revenue', fmtMoney(stats.revenue || 0), `${stats.paidBookings || 0} paid bookings`)}
             ${statCard('fa-wallet', 'Collections', fmtMoney(stats.collection || 0), `${stats.completedPayments || 0} completed payments`)}
             ${statCard('fa-clipboard-list', 'Pending revenue', fmtMoney(stats.pendingRevenue || 0), `${stats.pendingPayments || 0} pending payments`)}

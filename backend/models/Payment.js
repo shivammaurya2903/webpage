@@ -24,7 +24,7 @@ const paymentSchema = new mongoose.Schema(
       default: 'Pending'
     },
     amount: { type: Number, required: true },
-    currency: { type: String, default: 'inr' },
+    currency: { type: String, default: 'INR' },
     status: { type: String, enum: ['Pending', 'Completed', 'Partially Paid', 'Failed', 'Refunded'], default: 'Pending' },
     paymentDate: { type: Date, default: null },
     transactionId: { type: String, default: '' },

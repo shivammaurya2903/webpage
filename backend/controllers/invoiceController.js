@@ -631,7 +631,7 @@ const markBookingPaid = asyncHandler(async (req, res) => {
         amount: paidAmount,
         paidAmount,
         balanceAmount,
-        currency: 'inr',
+        currency: 'INR',
         status: paymentStatus === 'Paid' ? 'Completed' : (paymentStatus === 'Refunded' ? 'Refunded' : 'Partially Paid'),
         metadata: {
           bookingId: booking.bookingId,

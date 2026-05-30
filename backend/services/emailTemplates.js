@@ -12,6 +12,12 @@ function layout(title, body) {
     </div>`;
 }
 
+const RUPEE_SYMBOL = String.fromCharCode(0x20B9);
+
+function formatCurrency(value) {
+  return `${RUPEE_SYMBOL}${new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(Number(value || 0))}`;
+}
+
 function bookingConfirmation(booking) {
   return layout('Booking Received', `
     <p>Dear ${booking.customerName},</p>
@@ -52,7 +58,7 @@ function invoiceGenerated(invoice, booking) {
   return layout('Invoice Generated', `
     <p>Your invoice for booking <strong>${booking.bookingId}</strong> is ready.</p>
     <p><strong>Invoice ID:</strong> ${invoice.invoiceId}<br/>
-    <strong>Final Amount:</strong> ₹${invoice.totalFare}<br/>
+    <strong>Final Amount:</strong> ${formatCurrency(invoice.totalFare)}<br/>
     <strong>Payment Status:</strong> ${invoice.paymentStatus}</p>
     <p>Your premium PDF invoice is attached. You can also review, print, or download it from your booking details.</p>
   `);
@@ -61,7 +67,7 @@ function invoiceGenerated(invoice, booking) {
 function paymentReceipt(payment, booking) {
   return layout('Payment Receipt', `
     <p>We received your ${payment.paymentMethod || payment.paymentType} payment for booking <strong>${booking.bookingId}</strong>.</p>
-    <p><strong>Amount:</strong> ₹${payment.amount}<br/>
+    <p><strong>Amount:</strong> ${formatCurrency(payment.amount)}<br/>
     <strong>Status:</strong> ${payment.status}<br/>
     <strong>Invoice:</strong> ${booking.invoiceId || 'Pending'}</p>
     <p>Your updated PDF receipt is attached for records and printing.</p>

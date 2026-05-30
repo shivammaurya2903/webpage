@@ -7,11 +7,22 @@ const User = require('../models/User');
 const Contact = require('../models/Contact');
 const Notification = require('../models/Notification');
 
-function buildMonthExpression(fieldName) {
+const BOOKING_STATUS_FIELDS = ['bookingStatus', 'status'];
+
+function buildStatusFieldMatches(statuses) {
+  return BOOKING_STATUS_FIELDS.map((field) => ({ [field]: { $in: statuses } }));
+}
+
+function buildMonthExpression(...fieldNames) {
+  const candidates = [...new Set([...fieldNames.flat().filter(Boolean), 'createdAt'])];
+  const dateExpression = candidates.reduceRight((expression, fieldName) => (
+    expression == null ? `$${fieldName}` : { $ifNull: [`$${fieldName}`, expression] }
+  ), null);
+
   return {
     $dateToString: {
       format: '%Y-%m',
-      date: { $ifNull: [`$${fieldName}`, '$createdAt'] }
+      date: dateExpression
     }
   };
 }
@@ -30,12 +41,11 @@ function buildMonthlyCountPipeline(fieldName) {
 
 function buildMonthlyCollectionPipeline() {
   return [
-    // payments with completed status are considered collected
-    { $match: { status: 'Completed' } },
+    { $match: { paymentStatus: { $in: ['Paid', 'Completed'] } } },
     {
       $group: {
-        _id: buildMonthExpression('paymentDate'),
-        total: { $sum: { $ifNull: ['$amount', 0] } }
+        _id: buildMonthExpression('paymentDate', 'paidAt', 'createdAt'),
+        total: { $sum: { $ifNull: ['$totalFare', { $ifNull: ['$amount', 0] }] } }
       }
     },
     { $sort: { _id: 1 } }
@@ -44,11 +54,9 @@ function buildMonthlyCollectionPipeline() {
 
 function buildMonthlyRevenuePipeline() {
   return [
-    // derive revenue from invoices marked Paid
-    { $match: { paymentStatus: 'Paid' } },
     {
       $group: {
-        _id: buildMonthExpression('paymentDate'),
+        _id: buildMonthExpression('createdAt'),
         total: { $sum: { $ifNull: ['$totalFare', 0] } }
       }
     },
@@ -58,11 +66,11 @@ function buildMonthlyRevenuePipeline() {
 
 function buildCollectionPipeline() {
   return [
-    { $match: { status: 'Completed' } },
+    { $match: { paymentStatus: { $in: ['Paid', 'Completed'] } } },
     {
       $group: {
         _id: null,
-        collection: { $sum: { $ifNull: ['$amount', 0] } }
+        collection: { $sum: { $ifNull: ['$totalFare', { $ifNull: ['$amount', 0] }] } }
       }
     }
   ];
@@ -70,8 +78,6 @@ function buildCollectionPipeline() {
 
 function buildRevenuePipeline() {
   return [
-    // revenue is sum of paid invoices' totalFare
-    { $match: { paymentStatus: 'Paid' } },
     {
       $group: {
         _id: null,
@@ -83,14 +89,27 @@ function buildRevenuePipeline() {
 
 function buildPendingRevenuePipeline() {
   return [
-    { $match: { paymentStatus: { $ne: 'Paid' }, balanceAmount: { $gt: 0 } } },
+    { $match: { paymentStatus: { $nin: ['Paid', 'Completed'] } } },
     {
       $group: {
         _id: null,
-        pendingRevenue: { $sum: { $ifNull: ['$balanceAmount', 0] } }
+        pendingRevenue: { $sum: { $ifNull: ['$balanceAmount', { $ifNull: ['$totalFare', 0] }] } }
       }
     }
   ];
+}
+
+function buildPendingBookingQuery() {
+  return { $or: buildStatusFieldMatches(['Pending']) };
+}
+
+function buildCompletedRideQuery() {
+  return {
+    $or: [
+      { rideCompletedAt: { $ne: null } },
+      ...buildStatusFieldMatches(['Ride Completed', 'Completed', 'Paid', 'Fully Paid'])
+    ]
+  };
 }
 
 async function getDashboardSnapshot() {
@@ -105,6 +124,7 @@ async function getDashboardSnapshot() {
     totalDrivers,
     activeDrivers,
     totalVehicles,
+    availableVehicles,
     totalPayments,
     completedPayments,
     partialPayments,
@@ -123,26 +143,27 @@ async function getDashboardSnapshot() {
     notifications
   ] = await Promise.all([
     Booking.countDocuments(),
-    Booking.countDocuments({ bookingStatus: { $in: ['Pending', 'Accepted', 'Approved', 'Driver Assigned', 'Ride Started', 'Invoice Generated', 'Payment Pending'] } }),
-    Booking.countDocuments({ bookingStatus: { $in: ['Pending', 'Accepted', 'Approved', 'Driver Assigned', 'Ride Started', 'Invoice Generated', 'Payment Pending'] } }),
-    Booking.countDocuments({ bookingStatus: { $in: ['Accepted', 'Approved', 'Driver Assigned', 'Ride Started'] } }),
-    Booking.countDocuments({ $or: [{ rideCompletedAt: { $ne: null } }, { bookingStatus: { $in: ['Ride Completed', 'Paid', 'Fully Paid'] } }] }),
+    Booking.countDocuments(buildPendingBookingQuery()),
+    Booking.countDocuments(buildPendingBookingQuery()),
+    Booking.countDocuments({ $or: buildStatusFieldMatches(['Accepted', 'Approved', 'Driver Assigned', 'Ride Started']) }),
+    Booking.countDocuments(buildCompletedRideQuery()),
     User.countDocuments({ role: 'customer' }),
     User.countDocuments({ role: 'customer', isBlocked: true }),
     Driver.countDocuments(),
     Driver.countDocuments({ availability: true }),
     Car.countDocuments(),
+    Car.countDocuments({ availability: true }),
     Payment.countDocuments(),
     Payment.countDocuments({ status: 'Completed' }),
     Payment.countDocuments({ status: 'Partially Paid' }),
     Payment.countDocuments({ status: 'Pending' }),
     Booking.countDocuments({ paymentStatus: 'Paid' }),
     Invoice.aggregate(buildRevenuePipeline()),
-    Payment.aggregate(buildCollectionPipeline()),
+    Invoice.aggregate(buildCollectionPipeline()),
     Invoice.aggregate(buildPendingRevenuePipeline()),
     Booking.aggregate(buildMonthlyCountPipeline('createdAt')),
     Invoice.aggregate(buildMonthlyRevenuePipeline()),
-    Payment.aggregate(buildMonthlyCollectionPipeline()),
+    Invoice.aggregate(buildMonthlyCollectionPipeline()),
     User.aggregate([
       { $match: { role: 'customer' } },
       ...buildMonthlyCountPipeline('createdAt')
@@ -170,6 +191,7 @@ async function getDashboardSnapshot() {
       totalDrivers,
       activeDrivers,
       totalVehicles,
+      availableVehicles,
       totalPayments,
       completedPayments,
       partialPayments,
@@ -200,5 +222,8 @@ module.exports = {
   buildMonthlyRevenuePipeline,
   buildCollectionPipeline,
   buildRevenuePipeline,
-  buildPendingRevenuePipeline
+  buildPendingRevenuePipeline,
+  buildPendingBookingQuery,
+  buildCompletedRideQuery,
+  buildStatusFieldMatches
 };
