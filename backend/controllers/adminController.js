@@ -51,6 +51,56 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function buildMonthExpression(fieldName) {
+  return {
+    $dateToString: {
+      format: '%Y-%m',
+      date: { $ifNull: [`$${fieldName}`, '$createdAt'] }
+    }
+  };
+}
+
+function buildRevenuePipeline() {
+  return [
+    { $match: { status: { $in: ['Completed', 'Partially Paid'] } } },
+    {
+      $group: {
+        _id: null,
+        revenue: { $sum: '$amount' }
+      }
+    }
+  ];
+}
+
+function buildMonthlyRevenuePipeline() {
+  return [
+    { $match: { status: { $in: ['Completed', 'Partially Paid'] } } },
+    {
+      $group: {
+        _id: buildMonthExpression('paymentDate'),
+        total: { $sum: '$amount' }
+      }
+    },
+    { $sort: { _id: 1 } }
+  ];
+}
+
+function buildMonthlyCountPipeline(modelField) {
+  return [
+    {
+      $group: {
+        _id: buildMonthExpression(modelField),
+        total: { $sum: 1 }
+      }
+    },
+    { $sort: { _id: 1 } }
+  ];
+}
+
+const PENDING_BOOKING_STATUSES = ['Pending', 'Accepted', 'Approved', 'Driver Assigned', 'Ride Started', 'Invoice Generated', 'Payment Pending'];
+const ACCEPTED_BOOKING_STATUSES = ['Accepted', 'Approved', 'Driver Assigned', 'Ride Started'];
+const COMPLETED_BOOKING_STATUSES = ['Ride Completed', 'Invoice Generated', 'Paid', 'Fully Paid'];
+
 function hasOwnValue(target, key) {
   return Object.prototype.hasOwnProperty.call(target || {}, key);
 }
@@ -175,12 +225,17 @@ const logout = asyncHandler(async (req, res) => {
 const getDashboard = asyncHandler(async (req, res) => {
   const [
     totalBookings,
+    pendingBookings,
     pendingRides,
     acceptedRides,
     completedRides,
     totalCustomers,
     blockedCustomers,
+    totalVehicles,
     activeDrivers,
+    totalPayments,
+    completedPayments,
+    partialPayments,
     pendingPayments,
     revenueSummary,
     monthlyBookings,
@@ -192,27 +247,24 @@ const getDashboard = asyncHandler(async (req, res) => {
     notifications
   ] = await Promise.all([
     Booking.countDocuments(),
-    Booking.countDocuments({ bookingStatus: 'Pending' }),
-    Booking.countDocuments({ bookingStatus: { $in: ['Approved', 'Driver Assigned', 'Ride Started'] } }),
-    Booking.countDocuments({ bookingStatus: { $in: ['Ride Completed', 'Invoice Generated', 'Paid', 'Fully Paid'] } }),
+    Booking.countDocuments({ bookingStatus: { $in: PENDING_BOOKING_STATUSES } }),
+    Booking.countDocuments({ bookingStatus: { $in: PENDING_BOOKING_STATUSES } }),
+    Booking.countDocuments({ bookingStatus: { $in: ACCEPTED_BOOKING_STATUSES } }),
+    Booking.countDocuments({ bookingStatus: { $in: COMPLETED_BOOKING_STATUSES } }),
     User.countDocuments({ role: 'customer' }),
     User.countDocuments({ role: 'customer', isBlocked: true }),
+    Car.countDocuments(),
     Driver.countDocuments({ availability: true }),
+    Payment.countDocuments(),
+    Payment.countDocuments({ status: 'Completed' }),
+    Payment.countDocuments({ status: 'Partially Paid' }),
     Payment.countDocuments({ status: 'Pending' }),
-    Payment.aggregate([{ $match: { status: 'Completed' } }, { $group: { _id: null, revenue: { $sum: '$amount' } } }]),
-    Booking.aggregate([
-      { $group: { _id: { $dateToString: { format: '%Y-%m', date: '$createdAt' } }, total: { $sum: 1 } } },
-      { $sort: { _id: 1 } }
-    ]),
-    Payment.aggregate([
-      { $match: { status: 'Completed' } },
-      { $group: { _id: { $dateToString: { format: '%Y-%m', date: '$createdAt' } }, total: { $sum: '$amount' } } },
-      { $sort: { _id: 1 } }
-    ]),
+    Payment.aggregate(buildRevenuePipeline()),
+    Booking.aggregate(buildMonthlyCountPipeline('createdAt')),
+    Payment.aggregate(buildMonthlyRevenuePipeline()),
     User.aggregate([
       { $match: { role: 'customer' } },
-      { $group: { _id: { $dateToString: { format: '%Y-%m', date: '$createdAt' } }, total: { $sum: 1 } } },
-      { $sort: { _id: 1 } }
+      ...buildMonthlyCountPipeline('createdAt')
     ]),
     Booking.find().sort({ createdAt: -1 }).limit(8).populate('assignedDriver').lean(),
     Payment.find().sort({ createdAt: -1 }).limit(6).populate('booking').lean(),
@@ -221,20 +273,28 @@ const getDashboard = asyncHandler(async (req, res) => {
   ]);
 
   const [revenue] = revenueSummary;
+  const collectedRevenue = toNumber(revenue?.revenue, 0);
+  const paymentCompletionRate = totalPayments > 0 ? Math.round(((completedPayments + partialPayments) / totalPayments) * 100) : 0;
 
   res.json({
     success: true,
     dashboard: {
       stats: {
         totalBookings,
+        pendingBookings,
         pendingRides,
         acceptedRides,
         completedRides,
         totalCustomers,
         blockedCustomers,
+        totalVehicles,
         activeDrivers,
+        totalPayments,
+        completedPayments,
+        partialPayments,
         pendingPayments,
-        revenue: revenue?.revenue || 0
+        paymentCompletionRate,
+        revenue: collectedRevenue
       },
       charts: {
         monthlyBookings,

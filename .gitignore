@@ -48,6 +48,7 @@ coverage/
 /backend/uploads/
 /frontend/uploads/
 uploads/
+/backend/test 
 
 # Database
 dump/
@@ -69,3 +70,4 @@ dump/
 
 # Local test files
 test-results.xml
+

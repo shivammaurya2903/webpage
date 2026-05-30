@@ -4,6 +4,10 @@ const PDFDocument = require('pdfkit');
 const { buildBillingLineItems, validateBillingBreakdown } = require('../services/billingService');
 const { roundCurrency, toNumber } = require('./billingMath');
 
+// Unicode helper for Indian Rupee symbol (U+20B9)
+// Ensures proper rendering in PDFs when embedded fonts support Unicode
+const RUPEE_SYMBOL = String.fromCharCode(0x20B9);
+
 function findFontPath(candidates) {
   for (const candidate of candidates) {
     if (candidate && fs.existsSync(candidate)) return candidate;
@@ -12,39 +16,49 @@ function findFontPath(candidates) {
 }
 
 function registerInvoiceFonts(doc) {
+  // Font priority: Unicode-capable fonts first (Segoe UI, DejaVu Sans, Noto Sans)
+  // to ensure Indian Rupee symbol (U+20B9) renders correctly in PDFs
   const fontCandidates = {
     regular: [
+      'C:\\Windows\\Fonts\\segoeui.ttf',
+      'C:\\Windows\\Fonts\\noto-sans-regular.ttf',
+      'C:\\Windows\\Fonts\\DejaVuSans.ttf',
       'C:\\Windows\\Fonts\\Inter-Regular.ttf',
       'C:\\Windows\\Fonts\\Poppins-Regular.ttf',
       'C:\\Windows\\Fonts\\Montserrat-Regular.ttf',
       'C:\\Windows\\Fonts\\SourceSansPro-Regular.ttf',
-      'C:\\Windows\\Fonts\\SourceSans3-Regular.ttf',
-      'C:\\Windows\\Fonts\\segoeui.ttf'
+      'C:\\Windows\\Fonts\\SourceSans3-Regular.ttf'
     ],
     medium: [
+      'C:\\Windows\\Fonts\\segoeui.ttf',
+      'C:\\Windows\\Fonts\\noto-sans-500.ttf',
+      'C:\\Windows\\Fonts\\DejaVuSans.ttf',
       'C:\\Windows\\Fonts\\Inter-Medium.ttf',
       'C:\\Windows\\Fonts\\Poppins-Medium.ttf',
       'C:\\Windows\\Fonts\\Montserrat-Medium.ttf',
       'C:\\Windows\\Fonts\\SourceSansPro-Semibold.ttf',
-      'C:\\Windows\\Fonts\\SourceSans3-Semibold.ttf',
-      'C:\\Windows\\Fonts\\segoeui.ttf'
+      'C:\\Windows\\Fonts\\SourceSans3-Semibold.ttf'
     ],
     semibold: [
+      'C:\\Windows\\Fonts\\segoeuib.ttf',
+      'C:\\Windows\\Fonts\\segoeui.ttf',
+      'C:\\Windows\\Fonts\\noto-sans-600.ttf',
+      'C:\\Windows\\Fonts\\DejaVuSans-Bold.ttf',
       'C:\\Windows\\Fonts\\Inter-SemiBold.ttf',
       'C:\\Windows\\Fonts\\Poppins-SemiBold.ttf',
       'C:\\Windows\\Fonts\\Montserrat-SemiBold.ttf',
       'C:\\Windows\\Fonts\\SourceSansPro-Semibold.ttf',
-      'C:\\Windows\\Fonts\\SourceSans3-Semibold.ttf',
-      'C:\\Windows\\Fonts\\segoeuib.ttf',
-      'C:\\Windows\\Fonts\\segoeui.ttf'
+      'C:\\Windows\\Fonts\\SourceSans3-Semibold.ttf'
     ],
     bold: [
+      'C:\\Windows\\Fonts\\segoeuib.ttf',
+      'C:\\Windows\\Fonts\\noto-sans-700.ttf',
+      'C:\\Windows\\Fonts\\DejaVuSans-Bold.ttf',
       'C:\\Windows\\Fonts\\Inter-Bold.ttf',
       'C:\\Windows\\Fonts\\Poppins-Bold.ttf',
       'C:\\Windows\\Fonts\\Montserrat-Bold.ttf',
       'C:\\Windows\\Fonts\\SourceSansPro-Bold.ttf',
-      'C:\\Windows\\Fonts\\SourceSans3-Bold.ttf',
-      'C:\\Windows\\Fonts\\segoeuib.ttf'
+      'C:\\Windows\\Fonts\\SourceSans3-Bold.ttf'
     ]
   };
 
@@ -71,13 +85,24 @@ function registerInvoiceFonts(doc) {
 
 function formatMoney(value) {
   const amount = Number(value || 0);
-  return `${String.fromCharCode(0x20B9)}${new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(amount)}`;
+  // Use Unicode U+20B9 for Indian Rupee symbol to ensure proper rendering
+  return `${RUPEE_SYMBOL}${new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(amount)}`;
 }
 
 function formatMoneySigned(value) {
   const amount = Number(value || 0);
   if (amount < 0) return `-${formatMoney(Math.abs(amount))}`;
   return formatMoney(amount);
+}
+
+function formatRatePerKm(value) {
+  // Use Unicode U+20B9 for Indian Rupee symbol (consistent with formatMoney)
+  return `${RUPEE_SYMBOL}${new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(Number(value || 0))}/km`;
+}
+
+function formatRatePerDay(value) {
+  // Use Unicode U+20B9 for Indian Rupee symbol (consistent with formatMoney)
+  return `${RUPEE_SYMBOL}${new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(Number(value || 0))}/day`;
 }
 
 function formatDate(value, fallback = 'Unknown') {
@@ -124,15 +149,6 @@ function formatKm(value, suffix = 'km') {
   if (!Number.isFinite(amount)) return `0 ${suffix}`;
   return `${amount.toFixed(amount % 1 === 0 ? 0 : 1)} ${suffix}`;
 }
-
-function formatRatePerKm(value) {
-  return `₹${new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(Number(value || 0))}/km`;
-}
-
-function formatRatePerDay(value) {
-  return `₹${new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(Number(value || 0))}/day`;
-}
-
 function displayText(value, fallback = 'Unknown') {
   const text = String(value ?? '').trim();
   return text || fallback;

@@ -653,10 +653,11 @@ function buildBillingLineItems(breakdown = {}) {
   const extraHours = toNumber(breakdown.extraHours, 0);
   const visibleDistanceAmount = roundCurrency(breakdown.distanceCharge ?? breakdown.distanceFare ?? 0);
   const isPackageTrip = ['local-package', 'half-day-package'].includes(breakdown.tripType);
+  const rupeeSymbol = String.fromCharCode(0x20B9);
     const distanceDetails = visibleDistanceAmount > 0
       ? (isPackageTrip && billableKm > 0 && billableKm < distanceKm
-        ? `${billableKm.toFixed(1)} KM extra @ ₹${formatRate(ratePerKm)}/KM`
-        : `${distanceKm.toFixed(1)} KM @ ₹${formatRate(ratePerKm)}/KM`)
+        ? `${billableKm.toFixed(1)} KM extra @ ${rupeeSymbol}${formatRate(ratePerKm)}/KM`
+        : `${distanceKm.toFixed(1)} KM @ ${rupeeSymbol}${formatRate(ratePerKm)}/KM`)
       : `${distanceKm.toFixed(1)} KM included in package`;
 
   if (breakdown.packageBaseFare > 0) {
@@ -695,7 +696,7 @@ function buildBillingLineItems(breakdown = {}) {
   if (toNumber(breakdown.extraKmCharge, 0) > 0 && roundCurrency(breakdown.extraKmCharge) !== visibleDistanceAmount) {
     rows.push({
       description: 'Extra KM Charge',
-      details: `${billableKm.toFixed(1)} KM @ ₹${formatRate(ratePerKm)}/KM`,
+      details: `${billableKm.toFixed(1)} KM @ ${rupeeSymbol}${formatRate(ratePerKm)}/KM`,
       quantity: 1,
       unitPrice: ratePerKm,
       tax: 0,
@@ -707,7 +708,7 @@ function buildBillingLineItems(breakdown = {}) {
   if (breakdown.extraHourCharge > 0) {
     rows.push({
       description: 'Extra Hour Charge',
-      details: `${extraHours > 0 ? extraHours.toFixed(1) : '1.0'} Hour(s) @ ₹${formatRate(toNumber(breakdown.extraHourRate || breakdown.extraHourCharge, 0))}/Hour`,
+      details: `${extraHours > 0 ? extraHours.toFixed(1) : '1.0'} Hour(s) @ ${rupeeSymbol}${formatRate(toNumber(breakdown.extraHourRate || breakdown.extraHourCharge, 0))}/Hour`,
       quantity: 1,
       unitPrice: breakdown.extraHourCharge,
       tax: 0,
