@@ -483,6 +483,7 @@ body {
     linear-gradient(180deg, #ffffff 0%, #f7f4ff 42%, #ffffff 100%);
   color: var(--text);
   overflow-x: hidden;
+  padding-top: 88px;
 }
 
 html::-webkit-scrollbar,
@@ -725,8 +726,10 @@ img {
    NAVBAR
    ===================================================== */
 .navbar {
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 999;
   background: rgba(255, 255, 255, .78);
   -webkit-backdrop-filter: blur(12px);
@@ -753,6 +756,15 @@ img {
   align-items: center;
   gap: 12px;
   min-width: 0;
+}
+
+.logo-mark {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 18px 50px rgba(106, 27, 154, .25);
+  flex: 0 0 auto;
 }
 
 .logo-circle {
@@ -3803,6 +3815,11 @@ section[id] {
   }
 
   .logo-circle {
+    width: 48px;
+    height: 48px;
+  }
+
+  .logo-mark {
     width: 48px;
     height: 48px;
   }
