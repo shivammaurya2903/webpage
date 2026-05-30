@@ -13,6 +13,8 @@ const { sendEmail } = require('../services/emailService');
 const { invoiceGenerated, paymentReceipt } = require('../services/emailTemplates');
 const { sendWhatsApp } = require('../services/whatsappService');
 
+const mongoose = require('mongoose');
+
 const BUILT_IN_CHARGE_NAMES = new Set([
   'Toll Charges',
   'Parking Charges',
@@ -613,78 +615,103 @@ const markBookingPaid = asyncHandler(async (req, res) => {
   const paymentDate = req.body.paymentDate || new Date();
   const transactionId = String(req.body.transactionId || req.body.reference || req.body.transactionReference || '').trim() || `RCPT-${invoice.invoiceId}`;
 
-  const payment = await Payment.create({
-    booking: booking._id,
-    invoice: invoice._id,
-    user: booking.user,
-    provider: 'manual',
-    paymentType: paymentMethod || 'manual',
-    paymentMethod,
-    paymentStatus,
-    amount: paidAmount,
-    paidAmount,
-    balanceAmount,
-    currency: 'inr',
-    status: paymentStatus === 'Paid' ? 'Completed' : (paymentStatus === 'Refunded' ? 'Refunded' : 'Partially Paid'),
-    metadata: {
-      bookingId: booking.bookingId,
-      invoiceId: invoice.invoiceId
-    },
-    notes: req.body.notes || '',
-    proofUrl: req.body.proofUrl || '',
-    collectedBy: req.user?._id || null,
-    receiptId: transactionId,
-    paymentDate,
-    transactionId,
-    paidAt: paymentDate
-  });
+  // Perform DB writes in a transaction to ensure Booking, Invoice and Payment stay in sync.
+  const session = await mongoose.startSession();
+  let payment;
+  try {
+    await session.withTransaction(async () => {
+      payment = new Payment({
+        booking: booking._id,
+        invoice: invoice._id,
+        user: booking.user,
+        provider: 'manual',
+        paymentType: paymentMethod || 'manual',
+        paymentMethod,
+        paymentStatus,
+        amount: paidAmount,
+        paidAmount,
+        balanceAmount,
+        currency: 'inr',
+        status: paymentStatus === 'Paid' ? 'Completed' : (paymentStatus === 'Refunded' ? 'Refunded' : 'Partially Paid'),
+        metadata: {
+          bookingId: booking.bookingId,
+          invoiceId: invoice.invoiceId
+        },
+        notes: req.body.notes || '',
+        proofUrl: req.body.proofUrl || '',
+        collectedBy: req.user?._id || null,
+        receiptId: transactionId,
+        paymentDate,
+        transactionId,
+        paidAt: paymentDate
+      });
 
-  booking.paymentMethod = paymentMethod;
-  booking.paymentStatus = paymentStatus;
-  booking.bookingStatus = paymentStatus === 'Paid' ? 'Paid' : 'Invoice Generated';
-  booking.paidAt = paymentDate;
-  booking.paymentDate = paymentDate;
-  booking.transactionId = transactionId;
-  booking.paidAmount = paidAmount;
-  booking.balanceAmount = balanceAmount;
-  booking.statusHistory = Array.isArray(booking.statusHistory) ? booking.statusHistory : [];
-  booking.statusHistory.push({
-    status: booking.bookingStatus,
-    at: new Date(),
-    note: paymentStatus === 'Paid' ? 'Payment recorded' : 'Partial payment recorded'
-  });
-  invoice.paymentMethod = paymentMethod;
-  invoice.paymentStatus = booking.paymentStatus;
-  invoice.paidAt = paymentDate;
-  invoice.paymentDate = paymentDate;
-  invoice.amountPaid = paidAmount;
-  invoice.paidAmount = paidAmount;
-  invoice.balanceAmount = balanceAmount;
-  invoice.remainingAmount = balanceAmount;
-  invoice.transactionId = transactionId;
-  invoice.paymentSummary = {
-    ...(invoice.paymentSummary || {}),
-    amountPaid: paidAmount,
-    balanceDue: balanceAmount,
-    paymentDate,
-    paymentMethod,
-    paymentStatus: booking.paymentStatus,
-    transactionId
-  };
-  booking.finalBill = {
-    ...(booking.finalBill || {}),
-    paymentStatus: booking.paymentStatus,
-    paymentMethod,
-    paidAmount,
-    balanceAmount,
-    paidAt: booking.paidAt,
-    paymentDate,
-    transactionId
-  };
+      await payment.save({ session });
 
-  await booking.save();
-  await invoice.save();
+      // update booking
+      booking.paymentMethod = paymentMethod;
+      booking.paymentStatus = paymentStatus;
+      booking.bookingStatus = paymentStatus === 'Paid' ? 'Paid' : 'Invoice Generated';
+      booking.paidAt = paymentDate;
+      booking.paymentDate = paymentDate;
+      booking.transactionId = transactionId;
+      booking.paidAmount = paidAmount;
+      booking.balanceAmount = balanceAmount;
+      booking.statusHistory = Array.isArray(booking.statusHistory) ? booking.statusHistory : [];
+      booking.statusHistory.push({
+        status: booking.bookingStatus,
+        at: new Date(),
+        note: paymentStatus === 'Paid' ? 'Payment recorded' : 'Partial payment recorded'
+      });
 
+      booking.finalBill = {
+        ...(booking.finalBill || {}),
+        paymentStatus: booking.paymentStatus,
+        paymentMethod,
+        paidAmount,
+        balanceAmount,
+        paidAt: booking.paidAt,
+        paymentDate,
+        transactionId
+      };
+
+      await booking.save({ session });
+
+      // update invoice
+      invoice.paymentMethod = paymentMethod;
+      invoice.paymentStatus = booking.paymentStatus;
+      invoice.paidAt = paymentDate;
+      invoice.paymentDate = paymentDate;
+      invoice.amountPaid = paidAmount;
+      invoice.paidAmount = paidAmount;
+      invoice.balanceAmount = balanceAmount;
+      invoice.remainingAmount = balanceAmount;
+      invoice.transactionId = transactionId;
+      invoice.paymentSummary = {
+        ...(invoice.paymentSummary || {}),
+        amountPaid: paidAmount,
+        balanceDue: balanceAmount,
+        paymentDate,
+        paymentMethod,
+        paymentStatus: booking.paymentStatus,
+        transactionId
+      };
+
+      invoice.finalBill = {
+        ...(invoice.finalBill || {}),
+        ...invoice.finalBill,
+        minimumFareAdjustment: invoice.finalBill?.minimumFareAdjustment ?? 0,
+        payableAfterRide: true,
+        paymentStatus: invoice.paymentStatus
+      };
+
+      await invoice.save({ session });
+    });
+  } finally {
+    session.endSession();
+  }
+
+  // Notifications, emails and dispatch of artifacts executed after successful transaction
   await sendEmail({
     to: booking.email,
     subject: `Payment receipt - ${booking.bookingId}`,

@@ -1,5 +1,5 @@
 (() => {
-  const LOCAL_API_URL = 'http://localhost:5000';
+  const LOCAL_API_URL = 'http://localhost:5500' || 'http://localhost:5000';
   const PRODUCTION_API_URL = 'https://webpage-96yf.onrender.com';
   const DEFAULT_TIMEOUT_MS = 12000;
   const DEFAULT_RETRY_DELAY_MS = 500;

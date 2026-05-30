@@ -21,6 +21,7 @@ const { notifyAdmins, notifyBookingStatusChange } = require('../services/notific
 const { sendEmail } = require('../services/emailService');
 const { sendWhatsApp } = require('../services/whatsappService');
 const { bookingAccepted, driverAssigned, rideCompleted } = require('../services/emailTemplates');
+const { getDashboardSnapshot } = require('../utils/dashboardMetrics');
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
@@ -223,90 +224,8 @@ const logout = asyncHandler(async (req, res) => {
 });
 
 const getDashboard = asyncHandler(async (req, res) => {
-  const [
-    totalBookings,
-    pendingBookings,
-    pendingRides,
-    acceptedRides,
-    completedRides,
-    totalCustomers,
-    blockedCustomers,
-    totalVehicles,
-    activeDrivers,
-    totalPayments,
-    completedPayments,
-    partialPayments,
-    pendingPayments,
-    revenueSummary,
-    monthlyBookings,
-    monthlyRevenue,
-    customerGrowth,
-    recentBookings,
-    recentPayments,
-    recentMessages,
-    notifications
-  ] = await Promise.all([
-    Booking.countDocuments(),
-    Booking.countDocuments({ bookingStatus: { $in: PENDING_BOOKING_STATUSES } }),
-    Booking.countDocuments({ bookingStatus: { $in: PENDING_BOOKING_STATUSES } }),
-    Booking.countDocuments({ bookingStatus: { $in: ACCEPTED_BOOKING_STATUSES } }),
-    Booking.countDocuments({ bookingStatus: { $in: COMPLETED_BOOKING_STATUSES } }),
-    User.countDocuments({ role: 'customer' }),
-    User.countDocuments({ role: 'customer', isBlocked: true }),
-    Car.countDocuments(),
-    Driver.countDocuments({ availability: true }),
-    Payment.countDocuments(),
-    Payment.countDocuments({ status: 'Completed' }),
-    Payment.countDocuments({ status: 'Partially Paid' }),
-    Payment.countDocuments({ status: 'Pending' }),
-    Payment.aggregate(buildRevenuePipeline()),
-    Booking.aggregate(buildMonthlyCountPipeline('createdAt')),
-    Payment.aggregate(buildMonthlyRevenuePipeline()),
-    User.aggregate([
-      { $match: { role: 'customer' } },
-      ...buildMonthlyCountPipeline('createdAt')
-    ]),
-    Booking.find().sort({ createdAt: -1 }).limit(8).populate('assignedDriver').lean(),
-    Payment.find().sort({ createdAt: -1 }).limit(6).populate('booking').lean(),
-    Contact.find().sort({ createdAt: -1 }).limit(6).lean(),
-    Notification.find({ recipientRole: 'admin' }).sort({ createdAt: -1 }).limit(10).lean()
-  ]);
-
-  const [revenue] = revenueSummary;
-  const collectedRevenue = toNumber(revenue?.revenue, 0);
-  const paymentCompletionRate = totalPayments > 0 ? Math.round(((completedPayments + partialPayments) / totalPayments) * 100) : 0;
-
-  res.json({
-    success: true,
-    dashboard: {
-      stats: {
-        totalBookings,
-        pendingBookings,
-        pendingRides,
-        acceptedRides,
-        completedRides,
-        totalCustomers,
-        blockedCustomers,
-        totalVehicles,
-        activeDrivers,
-        totalPayments,
-        completedPayments,
-        partialPayments,
-        pendingPayments,
-        paymentCompletionRate,
-        revenue: collectedRevenue
-      },
-      charts: {
-        monthlyBookings,
-        monthlyRevenue,
-        customerGrowth
-      },
-      recentBookings,
-      recentPayments,
-      recentMessages,
-      notifications
-    }
-  });
+  const dashboard = await getDashboardSnapshot();
+  res.json({ success: true, dashboard });
 });
 
 const listBookings = asyncHandler(async (req, res) => {
@@ -513,6 +432,13 @@ const listDrivers = asyncHandler(async (req, res) => {
 
 const createDriver = asyncHandler(async (req, res) => {
   const driver = await Driver.create(req.body);
+  await notifyAdmins('driver:created', {
+    title: 'Driver created',
+    message: `${driver.driverName} added to the fleet`,
+    driverId: driver._id,
+    driverName: driver.driverName,
+    isActive: driver.availability
+  });
   res.status(201).json({ success: true, driver });
 });
 
@@ -521,12 +447,25 @@ const updateDriver = asyncHandler(async (req, res) => {
   if (!driver) throw new ApiError(404, 'Driver not found');
   Object.assign(driver, req.body);
   await driver.save();
+  await notifyAdmins('driver:updated', {
+    title: 'Driver updated',
+    message: `${driver.driverName} details updated`,
+    driverId: driver._id,
+    driverName: driver.driverName,
+    isActive: driver.availability
+  });
   res.json({ success: true, driver });
 });
 
 const deleteDriver = asyncHandler(async (req, res) => {
   const driver = await Driver.findByIdAndDelete(req.params.id);
   if (!driver) throw new ApiError(404, 'Driver not found');
+  await notifyAdmins('driver:deleted', {
+    title: 'Driver removed',
+    message: `${driver.driverName} removed from the fleet`,
+    driverId: driver._id,
+    driverName: driver.driverName
+  });
   res.json({ success: true, message: 'Driver deleted successfully' });
 });
 
@@ -548,6 +487,13 @@ const createCar = asyncHandler(async (req, res) => {
   payload.includedKm = toNumber(payload.includedKm, 0);
   payload.features = parseList(payload.features);
   const car = await Car.create(payload);
+  await notifyAdmins('car:created', {
+    title: 'Vehicle created',
+    message: `${car.carName} added to the fleet`,
+    carId: car._id,
+    vehicleName: car.carName,
+    vehicleType: car.category
+  });
   res.status(201).json({ success: true, car });
 });
 
@@ -569,12 +515,26 @@ const updateCar = asyncHandler(async (req, res) => {
 
   Object.assign(car, payload);
   await car.save();
+  await notifyAdmins('car:updated', {
+    title: 'Vehicle updated',
+    message: `${car.carName} details updated`,
+    carId: car._id,
+    vehicleName: car.carName,
+    vehicleType: car.category
+  });
   res.json({ success: true, car });
 });
 
 const deleteCar = asyncHandler(async (req, res) => {
   const car = await Car.findByIdAndDelete(req.params.id);
   if (!car) throw new ApiError(404, 'Car not found');
+  await notifyAdmins('car:deleted', {
+    title: 'Vehicle removed',
+    message: `${car.carName} removed from the fleet`,
+    carId: car._id,
+    vehicleName: car.carName,
+    vehicleType: car.category
+  });
   res.json({ success: true, message: 'Car deleted successfully' });
 });
 
@@ -920,6 +880,14 @@ const deleteNotification = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Notification deleted successfully' });
 });
 
+const markAllNotificationsRead = asyncHandler(async (req, res) => {
+  const result = await Notification.updateMany(
+    { recipientRole: 'admin', $or: [{ isRead: { $ne: true } }, { readAt: null }] },
+    { $set: { isRead: true, readAt: new Date() } }
+  );
+  res.json({ success: true, modifiedCount: result.modifiedCount || result.nModified || 0 });
+});
+
 module.exports = {
   login,
   me,
@@ -960,4 +928,6 @@ module.exports = {
   listNotifications,
   markNotificationRead,
   deleteNotification
+  ,
+  markAllNotificationsRead
 };

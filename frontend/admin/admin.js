@@ -152,6 +152,7 @@
       toDate: ''
     },
     bookingReloadTimer: null,
+    bookingLoadToken: 0,
     dashboard: null,
     bookings: null,
     drivers: null,
@@ -685,6 +686,123 @@
     `;
   }
 
+  function renderBookingRows(bookings = []) {
+    if (!bookings.length) {
+      return `
+        <tr class="booking-row booking-row--empty">
+          <td colspan="8">
+            <div class="empty-state">No bookings found</div>
+          </td>
+        </tr>
+      `;
+    }
+
+    return bookings.map((booking) => `
+      <tr class="booking-row">
+        <td data-label="Booking">
+          <strong>${escapeHtml(booking.bookingId)}</strong>
+          <div class="helper">${escapeHtml(fmtDateTime(booking.createdAt))}</div>
+        </td>
+        <td data-label="Customer">
+          ${escapeHtml(booking.customerName)}
+          <div class="helper">${escapeHtml(booking.email || '')}<br>${escapeHtml(booking.phone || '')}</div>
+        </td>
+        <td data-label="Route">
+          ${escapeHtml(booking.pickupLocation)} → ${escapeHtml(booking.dropLocation)}
+          <div class="helper">${escapeHtml(booking.pickupDate ? fmtDate(booking.pickupDate) : '')} ${escapeHtml(booking.pickupTime || '')}</div>
+        </td>
+        <td data-label="Vehicle">
+          ${escapeHtml(booking.selectedCar || '')}
+          <div class="helper">${escapeHtml(booking.selectedPackage || '')}</div>
+        </td>
+        <td data-label="Status">
+          ${renderBadge(booking.bookingStatus)}
+          <div class="helper">${renderBadge(booking.paymentStatus)}</div>
+        </td>
+        <td data-label="Payment">
+          ${fmtMoney(booking.totalFare || booking.estimatedFare)}
+          <div class="helper">Invoice: ${escapeHtml(booking.invoiceId || booking.invoice?.invoiceId || '—')}<br>Payment: ${renderBadge(booking.paymentStatus)}</div>
+        </td>
+        <td data-label="Driver">${booking.assignedDriver?.driverName ? escapeHtml(booking.assignedDriver.driverName) : '—'}</td>
+        <td data-label="Actions">
+          <div class="booking-actions-cluster">
+            <div class="booking-actions-primary">
+              <button class="small-btn gold" data-action="booking-status" data-id="${booking._id}" data-status="Approved">Approve</button>
+              <button class="small-btn gold" data-action="booking-assign" data-id="${booking._id}">Assign</button>
+              <button class="small-btn" data-action="booking-status" data-id="${booking._id}" data-status="Ride Started">Start</button>
+              <button class="small-btn" data-action="booking-status" data-id="${booking._id}" data-status="Ride Completed">Complete</button>
+            </div>
+            <details class="booking-more-menu">
+              <summary class="small-btn booking-more-trigger" aria-label="More booking actions">
+                <i class="fa-solid fa-ellipsis-vertical"></i>
+                <span>More</span>
+              </summary>
+              <div class="booking-more-panel">
+                <button class="small-btn primary" data-action="booking-edit-invoice" data-id="${booking._id}">Invoice editor</button>
+                ${booking.invoiceId || booking.invoice?.invoiceId ? `<button class="small-btn" data-action="booking-regenerate-invoice" data-id="${booking._id}">Regenerate</button>` : ''}
+                ${booking.invoiceId || booking.invoice?.invoiceId ? `<button class="small-btn gold" data-action="booking-send-invoice" data-id="${booking._id}">Resend</button>` : ''}
+                <button class="small-btn gold" data-action="booking-mark-paid" data-id="${booking._id}">Mark paid</button>
+                <button class="small-btn danger" data-action="booking-reject" data-id="${booking._id}">Reject</button>
+                ${booking.invoiceId || booking.invoice?.invoiceId ? `<button class="small-btn" data-action="booking-download-invoice" data-id="${booking._id}">Download invoice</button>` : ''}
+                <button class="small-btn danger" data-action="booking-delete" data-id="${booking._id}">Delete</button>
+              </div>
+            </details>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  function syncBookingFilterControls() {
+    const filters = getActiveBookingFilters();
+    el.viewRoot.querySelectorAll('[data-booking-filter-field]').forEach((field) => {
+      const key = field.dataset.bookingFilterField;
+      if (!key || !Object.prototype.hasOwnProperty.call(filters, key)) return;
+      if ('value' in field) field.value = filters[key] || '';
+    });
+  }
+
+  function getBookingScrollState() {
+    const tableWrap = el.viewRoot.querySelector('.booking-table-card .table-wrap');
+    return {
+      x: window.scrollX,
+      y: window.scrollY,
+      tableTop: tableWrap ? tableWrap.scrollTop : null,
+      tableLeft: tableWrap ? tableWrap.scrollLeft : null
+    };
+  }
+
+  function restoreBookingScrollState(scrollState) {
+    if (!scrollState) return;
+    window.scrollTo(scrollState.x, scrollState.y);
+    const tableWrap = el.viewRoot.querySelector('.booking-table-card .table-wrap');
+    if (tableWrap && scrollState.tableTop !== null) {
+      tableWrap.scrollTop = scrollState.tableTop;
+      tableWrap.scrollLeft = scrollState.tableLeft ?? tableWrap.scrollLeft;
+    }
+  }
+
+  function updateBookingsView() {
+    const bookingView = el.viewRoot.querySelector('[data-booking-view]');
+    if (!bookingView) {
+      renderBookingsView();
+      return;
+    }
+
+    const bookings = state.bookings || [];
+    syncBookingFilterControls();
+
+    const countChip = bookingView.querySelector('[data-booking-count-chip]');
+    if (countChip) {
+      countChip.textContent = `${bookings.length} booking${bookings.length === 1 ? '' : 's'}`;
+    }
+
+    const tbody = bookingView.querySelector('[data-booking-table-body]');
+    if (tbody) {
+      tbody.innerHTML = renderBookingRows(bookings);
+    }
+  }
+
   function renderTopbarSurface() {
     syncTopbarSurface();
     renderBookingToolbar();
@@ -733,16 +851,22 @@
     toast('Export started', `${bookings.length} booking${bookings.length === 1 ? '' : 's'} exported`);
   }
 
-  async function reloadBookings({ debounce = false } = {}) {
+  async function reloadBookings({ debounce = false, preserveScroll = true, render = true } = {}) {
     if (state.bookingReloadTimer) {
       window.clearTimeout(state.bookingReloadTimer);
       state.bookingReloadTimer = null;
     }
 
+    const requestToken = ++state.bookingLoadToken;
+
     const run = async () => {
-      state.bookings = null;
+      const scrollState = preserveScroll ? getBookingScrollState() : null;
       await loadBookings(true);
-      if (state.view === 'bookings') renderCurrentView();
+      if (requestToken !== state.bookingLoadToken) return;
+      if (render && state.view === 'bookings') {
+        updateBookingsView();
+        restoreBookingScrollState(scrollState);
+      }
     };
 
     if (debounce) {
@@ -791,11 +915,10 @@
       upsertRealtimeNotification(notification);
     }
 
-    const shouldRefreshBookings = ['booking:new', 'booking:status-updated', 'booking:driver-assigned', 'booking:cancelled', 'invoice:generated', 'invoice:resent', 'invoice:updated', 'payment:completed', 'payment:received', 'payment:updated'].includes(eventName);
-    const shouldRefreshDashboard = shouldRefreshBookings || ['payment:refunded'].includes(eventName);
-
-    if (shouldRefreshBookings) state.bookings = null;
-    if (shouldRefreshDashboard) state.dashboard = null;
+    const bookingRefreshEvents = ['booking:new', 'booking:status-updated', 'booking:driver-assigned', 'booking:cancelled', 'invoice:generated', 'invoice:resent', 'invoice:updated', 'payment:completed', 'payment:received', 'payment:updated'];
+    const dashboardRefreshEvents = [...bookingRefreshEvents, 'payment:refunded', 'driver:created', 'driver:updated', 'driver:deleted', 'car:created', 'car:updated', 'car:deleted'];
+    const shouldRefreshBookings = bookingRefreshEvents.includes(eventName);
+    const shouldRefreshDashboard = dashboardRefreshEvents.includes(eventName);
 
     const title = notification?.title || payload?.title || 'Live update';
     const message = notification?.message || payload?.message || 'Dashboard updated';
@@ -807,17 +930,18 @@
     }
 
     if (state.view === 'bookings' && shouldRefreshBookings) {
-      void refreshView();
+      void reloadBookings({ debounce: true, preserveScroll: true, render: true }).catch(() => undefined);
+      if (shouldRefreshDashboard) void loadDashboard(true).catch(() => undefined);
       return;
     }
 
-    if (state.view === 'dashboard' && shouldRefreshDashboard) {
-      void refreshView();
+    if ((state.view === 'dashboard' || state.view === 'analytics') && shouldRefreshDashboard) {
+      void loadDashboard(true).then(() => renderCurrentView()).catch(() => undefined);
       return;
     }
 
     if (shouldRefreshDashboard) void loadDashboard(true).catch(() => undefined);
-    if (shouldRefreshBookings) void loadBookings(true).catch(() => undefined);
+    if (shouldRefreshBookings) void reloadBookings({ debounce: true, preserveScroll: true, render: false }).catch(() => undefined);
     void loadNotifications(true).catch(() => undefined);
   }
 
@@ -1383,9 +1507,11 @@
             ${statCard('fa-calendar-check', 'Total bookings', stats.totalBookings || 0, `${pendingBookings} pending bookings`)}
             ${statCard('fa-hourglass-half', 'Pending bookings', pendingBookings, `${stats.acceptedRides || 0} active rides`)}
             ${statCard('fa-circle-check', 'Completed rides', stats.completedRides || 0, `${stats.completedPayments || 0} completed payments`)}
-            ${statCard('fa-user-shield', 'Active drivers', stats.activeDrivers || 0, `${stats.totalVehicles || 0} vehicles in fleet`)}
+            ${statCard('fa-user-shield', 'Total drivers', stats.totalDrivers || 0, `${stats.activeDrivers || 0} active drivers`)}
             ${statCard('fa-car-side', 'Total vehicles', stats.totalVehicles || 0, `${stats.totalCustomers || 0} customers served`)}
-            ${statCard('fa-indian-rupee-sign', 'Revenue', fmtMoney(stats.revenue || 0), `${stats.completedPayments || 0} completed, ${stats.partialPayments || 0} partial, ${stats.pendingPayments || 0} pending payments`)}
+            ${statCard('fa-indian-rupee-sign', 'Revenue', fmtMoney(stats.revenue || 0), `${stats.paidBookings || 0} paid bookings`)}
+            ${statCard('fa-wallet', 'Collections', fmtMoney(stats.collection || 0), `${stats.completedPayments || 0} completed payments`)}
+            ${statCard('fa-clipboard-list', 'Pending revenue', fmtMoney(stats.pendingRevenue || 0), `${stats.pendingPayments || 0} pending payments`)}
           </div>
         </section>
 
@@ -1456,10 +1582,11 @@
     });
   }
 
-  async function loadDashboard() {
+  async function loadDashboard(force = false) {
+    if (state.dashboard && !force) return state.dashboard;
     const body = await apiFetch('/api/admin/dashboard');
     state.dashboard = body.dashboard || null;
-    renderDashboard();
+    return state.dashboard;
   }
 
   async function loadBookings(force = false) {
@@ -1547,76 +1674,39 @@
   function renderBookingsView() {
     renderTopbarSurface();
     const bookings = state.bookings || [];
-    const rows = bookings.map((booking) => `
-      <tr class="booking-row">
-        <td data-label="Booking">
-          <strong>${escapeHtml(booking.bookingId)}</strong>
-          <div class="helper">${escapeHtml(fmtDateTime(booking.createdAt))}</div>
-        </td>
-        <td data-label="Customer">
-          ${escapeHtml(booking.customerName)}
-          <div class="helper">${escapeHtml(booking.email || '')}<br>${escapeHtml(booking.phone || '')}</div>
-        </td>
-        <td data-label="Route">
-          ${escapeHtml(booking.pickupLocation)} → ${escapeHtml(booking.dropLocation)}
-          <div class="helper">${escapeHtml(booking.pickupDate ? fmtDate(booking.pickupDate) : '')} ${escapeHtml(booking.pickupTime || '')}</div>
-        </td>
-        <td data-label="Vehicle">
-          ${escapeHtml(booking.selectedCar || '')}
-          <div class="helper">${escapeHtml(booking.selectedPackage || '')}</div>
-        </td>
-        <td data-label="Status">
-          ${renderBadge(booking.bookingStatus)}
-          <div class="helper">${renderBadge(booking.paymentStatus)}</div>
-        </td>
-        <td data-label="Payment">
-          ${fmtMoney(booking.totalFare || booking.estimatedFare)}
-          <div class="helper">Invoice: ${escapeHtml(booking.invoiceId || booking.invoice?.invoiceId || '—')}<br>Payment: ${renderBadge(booking.paymentStatus)}</div>
-        </td>
-        <td data-label="Driver">${booking.assignedDriver?.driverName ? escapeHtml(booking.assignedDriver.driverName) : '—'}</td>
-        <td data-label="Actions">
-          <div class="booking-actions-cluster">
-            <div class="booking-actions-primary">
-              <button class="small-btn gold" data-action="booking-status" data-id="${booking._id}" data-status="Approved">Approve</button>
-              <button class="small-btn gold" data-action="booking-assign" data-id="${booking._id}">Assign</button>
-              <button class="small-btn" data-action="booking-status" data-id="${booking._id}" data-status="Ride Started">Start</button>
-              <button class="small-btn" data-action="booking-status" data-id="${booking._id}" data-status="Ride Completed">Complete</button>
-            </div>
-            <details class="booking-more-menu">
-              <summary class="small-btn booking-more-trigger" aria-label="More booking actions">
-                <i class="fa-solid fa-ellipsis-vertical"></i>
-                <span>More</span>
-              </summary>
-              <div class="booking-more-panel">
-                <button class="small-btn primary" data-action="booking-edit-invoice" data-id="${booking._id}">Invoice editor</button>
-                ${booking.invoiceId || booking.invoice?.invoiceId ? `<button class="small-btn" data-action="booking-regenerate-invoice" data-id="${booking._id}">Regenerate</button>` : ''}
-                ${booking.invoiceId || booking.invoice?.invoiceId ? `<button class="small-btn gold" data-action="booking-send-invoice" data-id="${booking._id}">Resend</button>` : ''}
-                <button class="small-btn gold" data-action="booking-mark-paid" data-id="${booking._id}">Mark paid</button>
-                <button class="small-btn danger" data-action="booking-reject" data-id="${booking._id}">Reject</button>
-                ${booking.invoiceId || booking.invoice?.invoiceId ? `<button class="small-btn" data-action="booking-download-invoice" data-id="${booking._id}">Download invoice</button>` : ''}
-                <button class="small-btn danger" data-action="booking-delete" data-id="${booking._id}">Delete</button>
-              </div>
-            </details>
-          </div>
-        </td>
-      </tr>
-    `).join('');
-
     el.viewRoot.innerHTML = `
-      <div class="view booking-view">
+      <div class="view booking-view" data-booking-view>
         <section class="card booking-toolbar-container">
           <div class="booking-page-head">
             <div>
               <h3>Booking Management</h3>
               <p>Approvals, driver assignment, invoice actions, and ride status in one compact workspace.</p>
             </div>
-            <span class="booking-count-chip">${bookings.length} booking${bookings.length === 1 ? '' : 's'}</span>
+            <span class="booking-count-chip" data-booking-count-chip>${bookings.length} booking${bookings.length === 1 ? '' : 's'}</span>
           </div>
           ${getBookingToolbarMarkup()}
         </section>
 
         <section class="card table-card booking-table-card">
-          ${tableShell(['Booking', 'Customer', 'Route', 'Vehicle', 'Status', 'Payment', 'Driver', 'Actions'], rows, 'No bookings found')}
+          <div class="table-shell">
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Booking</th>
+                    <th>Customer</th>
+                    <th>Route</th>
+                    <th>Vehicle</th>
+                    <th>Status</th>
+                    <th>Payment</th>
+                    <th>Driver</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody data-booking-table-body>${renderBookingRows(bookings)}</tbody>
+              </table>
+            </div>
+          </div>
         </section>
       </div>
     `;
@@ -1991,7 +2081,13 @@
   function renderCurrentView() {
     renderTopbarSurface();
     if (state.view === 'dashboard') renderDashboard();
-    else if (state.view === 'bookings') renderBookingsView();
+    else if (state.view === 'bookings') {
+      // If bookings view is already mounted, update rows in-place to avoid
+      // tearing down the entire view (prevents flicker, preserves scroll/filters).
+      const bookingView = el.viewRoot.querySelector('[data-booking-view]');
+      if (bookingView) updateBookingsView();
+      else renderBookingsView();
+    }
     else if (state.view === 'drivers') renderDriversView();
     else if (state.view === 'cars') renderCarsView();
     else if (state.view === 'packages') renderPackagesView();
@@ -2016,11 +2112,10 @@
   async function refreshView() {
     try {
       if (state.view === 'dashboard' || state.view === 'analytics') {
-        await loadDashboard();
-        if (state.view === 'analytics') renderAnalyticsView();
+        await loadDashboard(true);
+        renderCurrentView();
       } else if (state.view === 'bookings') {
-        await loadBookings(true);
-        renderBookingsView();
+        await reloadBookings({ preserveScroll: true, render: true });
       } else if (state.view === 'drivers') {
         await loadDrivers(true);
         renderDriversView();
@@ -2244,6 +2339,14 @@
         message: `/api/admin/messages/${id}`
       };
       await apiFetch(paths[entity], { method: 'DELETE' });
+      if (entity === 'booking' && state.view === 'bookings') {
+        state.bookings = (state.bookings || []).filter((item) => item._id !== id);
+        await reloadBookings({ preserveScroll: true, render: true });
+        void loadDashboard(true).catch(() => undefined);
+        toast('Deleted', `${entity} removed`);
+        return;
+      }
+
       resetCaches();
       toast('Deleted', `${entity} removed`);
       await refreshView();
@@ -2265,9 +2368,8 @@
         const status = target.dataset.status;
         await apiFetch(`/api/admin/bookings/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
         toast('Booking updated', `Status changed to ${status}`);
-        state.bookings = null;
-        state.dashboard = null;
-        await refreshView();
+        await reloadBookings({ preserveScroll: true, render: true });
+        void loadDashboard(true).catch(() => undefined);
       } else if (action === 'booking-reject') {
         await openWorkflowModal({
           title: 'Reject Booking',
@@ -2289,8 +2391,8 @@
             await apiFetch(`/api/admin/bookings/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'Rejected', rejectionReason: reason }) });
             closeModal();
             toast('Booking rejected', 'Reason recorded');
-            state.bookings = null;
-            await refreshView();
+            await reloadBookings({ preserveScroll: true, render: true });
+            void loadDashboard(true).catch(() => undefined);
           }
         });
       } else if (action === 'booking-assign') {
@@ -2320,8 +2422,8 @@
             await apiFetch(`/api/admin/bookings/${id}/assign-driver`, { method: 'PATCH', body: JSON.stringify({ driverId }) });
             closeModal();
             toast('Driver assigned', 'Driver linked to booking');
-            state.bookings = null;
-            await refreshView();
+            await reloadBookings({ preserveScroll: true, render: true });
+            void loadDashboard(true).catch(() => undefined);
           }
         });
       } else if (action === 'booking-edit-invoice' || action === 'booking-generate-invoice') {
@@ -2329,15 +2431,13 @@
       } else if (action === 'booking-regenerate-invoice') {
         await apiFetch(`/api/admin/bookings/${id}/regenerate-invoice`, { method: 'POST' });
         toast('Invoice regenerated', 'A fresh PDF was created');
-        state.bookings = null;
-        state.dashboard = null;
-        await refreshView();
+        await reloadBookings({ preserveScroll: true, render: true });
+        void loadDashboard(true).catch(() => undefined);
       } else if (action === 'booking-send-invoice') {
         await apiFetch(`/api/admin/bookings/${id}/send-invoice`, { method: 'POST' });
         toast('Invoice resent', 'Customer received the updated invoice');
-        state.bookings = null;
-        state.dashboard = null;
-        await refreshView();
+        await reloadBookings({ preserveScroll: true, render: true });
+        void loadDashboard(true).catch(() => undefined);
       } else if (action === 'booking-mark-paid') {
         await openWorkflowModal({
           title: 'Mark Payment',
@@ -2384,9 +2484,8 @@
             });
             closeModal();
             toast('Payment recorded', 'Payment captured for booking');
-            state.bookings = null;
-            state.dashboard = null;
-            await refreshView();
+            await reloadBookings({ preserveScroll: true, render: true });
+            void loadDashboard(true).catch(() => undefined);
           }
         });
       } else if (action === 'booking-download-invoice') {
@@ -2597,7 +2696,7 @@
     });
     window.addEventListener('resize', syncSidebarMode);
     window.addEventListener('scroll', syncTopbarSurface, { passive: true });
-    document.addEventListener('click', (event) => {
+    document.addEventListener('click', async (event) => {
       const notificationItem = event.target.closest('.notification-item[data-view="notifications"]');
       if (notificationItem) {
         setView('notifications');
@@ -2608,6 +2707,20 @@
         }
         return;
       }
+      const clearNotifications = event.target.closest('[data-shell-action="clear-notifications"]');
+      if (clearNotifications && el.notificationDropdown) {
+        try {
+          await apiFetch('/api/admin/notifications/read-all', { method: 'PATCH' });
+          state.notifications = null;
+          await loadNotifications(true);
+          renderShellNotifications();
+          if (state.view === 'notifications') renderCurrentView();
+          toast('Notifications cleared', 'Updated');
+        } catch (err) {
+          showGlobalNotification(err.message || 'Unable to clear notifications');
+        }
+      }
+
       const closeNotifications = event.target.closest('[data-shell-action="close-notifications"]');
       if (closeNotifications && el.notificationDropdown) {
         el.notificationDropdown.open = false;
@@ -2674,30 +2787,49 @@
       if (openFormButton) {
         openForm(openFormButton.dataset.openForm);
       }
+      const bookingClearFilters = event.target.closest('[data-booking-clear-filters]');
+      if (bookingClearFilters && state.view === 'bookings') {
+        resetBookingFilters();
+        state.search = '';
+        syncBookingFilterControls();
+        await reloadBookings({ preserveScroll: true, render: true });
+        return;
+      }
+      const bookingExport = event.target.closest('[data-booking-export]');
+      if (bookingExport && state.view === 'bookings') {
+        await exportFilteredBookings();
+        return;
+      }
       const filterButton = event.target.closest('[data-filter-status]');
       if (filterButton && state.view === 'bookings') {
         state.search = '';
         const searchInput = document.getElementById('bookingSearchInput');
         if (searchInput) searchInput.value = '';
         const status = filterButton.dataset.filterStatus;
-        const query = new URLSearchParams();
-        if (status) query.set('status', status);
-        const body = await apiFetch(`/api/admin/bookings?${query.toString()}`);
-        state.bookings = body.bookings || [];
-        renderBookingsView();
+        setBookingFilters({ status }, { replace: true });
+        await reloadBookings({ preserveScroll: true, render: true });
       }
       const saveContentBtn = event.target.closest('#saveContentBtn');
       if (saveContentBtn) await saveContent();
     });
-    el.viewRoot.addEventListener('input', async (event) => {
-      const search = event.target.closest('#bookingSearchInput');
-      if (search) {
-        state.search = search.value.trim();
-        const body = await apiFetch(`/api/admin/bookings?search=${encodeURIComponent(state.search)}`);
-        state.bookings = body.bookings || [];
-        renderBookingsView();
-        return;
+    const handleBookingFilterUpdate = async (event, debounce = false) => {
+      const field = event.target.closest('[data-booking-filter-field]');
+      if (!field || state.view !== 'bookings') return false;
+
+      const filterName = field.dataset.bookingFilterField;
+      const value = field.value.trim();
+      setBookingFilters({ [filterName]: value });
+      if (filterName === 'search') state.search = value;
+      if (filterName === 'search' && debounce) {
+        await reloadBookings({ debounce: true, preserveScroll: true, render: true });
+      } else {
+        await reloadBookings({ preserveScroll: true, render: true });
       }
+      return true;
+    };
+
+    el.viewRoot.addEventListener('input', async (event) => {
+      if (await handleBookingFilterUpdate(event, true)) return;
 
       const imageInput = event.target.closest('[data-image-preview]');
       if (imageInput) {
@@ -2705,6 +2837,9 @@
         const status = document.getElementById(imageInput.dataset.imageStatus);
         updatePreviewImage(preview, imageInput.value, status, imageInput.dataset.imageAlt);
       }
+    });
+    el.viewRoot.addEventListener('change', async (event) => {
+      if (await handleBookingFilterUpdate(event, false)) return;
     });
     // Use delegated handlers for global search so listeners remain effective
     document.addEventListener('input', (event) => {
@@ -2720,9 +2855,8 @@
       if (!target || target.id !== 'globalSearch') return;
       if (state.view === 'bookings') {
         try {
-          const body = await apiFetch(`/api/admin/bookings?search=${encodeURIComponent(state.search)}`);
-          state.bookings = body.bookings || [];
-          renderBookingsView();
+          setBookingFilters({ search: state.search });
+          await reloadBookings({ preserveScroll: true, render: true });
         } catch (error) {
           toast('Search failed', error.message, 'error');
         }

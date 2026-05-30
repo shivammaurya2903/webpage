@@ -85,6 +85,7 @@ router.put('/settings', [body('bannerImage').optional({ checkFalsy: true }).cust
 
 router.get('/notifications', adminController.listNotifications);
 router.patch('/notifications/:id/read', adminController.markNotificationRead);
+router.patch('/notifications/read-all', adminController.markAllNotificationsRead);
 router.delete('/notifications/:id', adminController.deleteNotification);
 
 module.exports = router;
